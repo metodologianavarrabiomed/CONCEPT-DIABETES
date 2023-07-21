@@ -53,7 +53,7 @@ CONCEPT-DIABETES is a project that focuses on assessing the effectiveness of a s
 │   ├── trace_6.png
 │   └── trace_9.png
 ├── petri_net.png
-└── README.Rmd
+└── README.md
 
 
 ```
