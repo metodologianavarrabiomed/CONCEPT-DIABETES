@@ -90,7 +90,7 @@ Version of [Quarto](https://quarto.org/) used: **1.3.361**
 
 
 ## Python dependencies
-Version of Python used: **3.8**
+Version of Python used: **3.9**
 | library  |  version  | link |
 |---|---|---|
 | pm4py  | 2.7.4  | https://pm4py.fit.fraunhofer.de/  |
