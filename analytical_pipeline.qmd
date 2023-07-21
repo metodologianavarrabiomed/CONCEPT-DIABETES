@@ -1,0 +1,1436 @@
+---
+title: "CONCEPT DIABETES: Analytical pipeline"
+author: Ina Oscoz
+editor: visual
+crossref:
+  lof-title: "List of Figures"
+  fig-labels: arabic    # (default is arabic)
+  tbl-labels: arabic    # (default is arabic)
+  subref-labels: alpha a # (default is alpha a)
+#date: 
+# bibliography: 
+format: 
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 4
+    highlight-style: pygments
+    code-fold: true
+    html-math-method: katex
+execute: 
+  warning: false
+  cache: false
+---
+
+```{css, echo = FALSE}
+.justify {
+  text-align: justify !important
+}
+```
+
+## Introduction
+
+### CONCEPT-DIABETES
+
+CONCEPT-DIABETES is part of CONCEPT, a coordinated research project initiative under the umbrella of REDISSEC, the Spanish Research Network on Health Services Research and Chronic Conditions\] \[www.redissec.com\], that aims at analyzing chronic care effectiveness and efficiency in a number of cohorts built on real world data (RWD). In the specific case of CONCEPT-DIABETES, the focus will be on assessing the effectiveness of a set of clinical practice actions and quality improvement strategies at different levels (patient-level, health-care provider level and health system level) on the management and health results of patients with type 2 diabetes (T2D) using process mining methodology.
+
+It is a population-based retrospective observational study centered on all T2D patients diagnosed in four Regional Health Services within the Spanish National Health Service, that includes information from all their contacts with the health services using the electronic medical record systems including Primary Care data, Specialist Care data, Hospitalizations, Urgent Care data, Pharmacy Claims, and also other registers such as the mortality and the population register. We will assess to what extent recommended interventions from evidence-based guidelines are implemented in real life and which are their effects on health outcomes. Process mining methods will be used to analyze the data, and comparison with standard methods will be also conducted.
+
+### Cohort
+
+The cohort is defined as patients with type 2 diabetes:
+
+-   Inclusion criteria: Patients that, at 2017-01-01 or during the follow-up from 2017-01-01 to 2022-12-31, had active health card (active TIA - tarjeta sanitaria activa) and one of the inclusion codes given in the 'inclusion code list ('T90' if CIAP-2, '250' if 'CIE-9CM' or 'E11' if CIE-10-ES) and none of the exclusion codes given in the exclusion codes list ('T89' if CIAP-2, '250.01' if CIE-9CM, '250.03' if CIE-9CM, '250.11' if CIE-9CM, '250.13' if CIE-9CM, '250.21' if CIE-9CM, '250.23' if CIE-9CM, '250.31' if CIE-9CM, '250.33' if CIE-9CM, '250.41' if CIE-9CM, '250.43' if CIE-9CM, '250.51' if CIE-9CM, '250.53' if CIE-9CM, '250.61' if CIE-9CM, '250.63' if CIE-9CM, '250.71' if CIE-9CM, '250.73' if CIE-9CM, '250.81' if CIE-9CM, '250.83' if CIE-9CM, '250.91' if CIE-9CM, '250.93' if CIE-9CM or 'E10' if CIE-10-ES) in the clinical records of primary care.
+
+-   Exclusion criteria: Patients that had one the codes in exclusion code lists ('T90' if CIAP-2, '250' if 'CIE-9CM' or 'E11' if CIE-10-ES) and none of the exclusion codes given in the exclusion codes list ('T89' if CIAP-2, '250.01' if CIE-9CM, '250.03' if CIE-9CM, '250.11' if CIE-9CM, '250.13' if CIE-9CM, '250.21' if CIE-9CM, '250.23' if CIE-9CM, '250.31' if CIE-9CM, '250.33' if CIE-9CM, '250.41' if CIE-9CM, '250.43' if CIE-9CM, '250.51' if CIE-9CM, '250.53' if CIE-9CM, '250.61' if CIE-9CM, '250.63' if CIE-9CM, '250.71' if CIE-9CM, '250.73' if CIE-9CM, '250.81' if CIE-9CM, '250.83' if CIE-9CM, '250.91' if CIE-9CM, '250.93' if CIE-9CM or 'E10' if CIE-10-ES) during their follow-up or patients with no contact with the health system from 2017-01-01 to 2022-12-31.
+
+-   Study period: 2017-01-01 until 2022-12-31.
+
+### Treatment guidelines
+
+One of the main intermediate outcome indicators to which clinical guidelines pay special attention is a good glycaemic control, since its absence is clearly related to micro and macrovascular complications. In clinical practice, suboptimal glycaemic control can be mainly attributed to two main reasons: the patients' non-adherence to prescribed treatment; and the healthcare providers' clinical or therapeutic guidelines' non-adherence.
+
+Treatment decisions are based on glycated hemoglobin measurements. In this context the redGDPS foundation provides DM2 treatment algorithm, a diagram that aims to help professionals to quickly and easily choose the most appropriate treatment for people with diabetes.
+
+<object data="Algoritmo_DM2_ENG_2023.pdf" type="application/pdf" width="800px" height="400px">
+
+<embed src="Algoritmo_DM2_ENG_2023.pdf">
+
+<p>This browser does.</p>
+
+</embed>
+
+</object>
+
+## Running code
+
+The python libraries used are:
+
+```{python, warning: FALSE}
+#| label: Load python packages
+#| warning: FALSE
+import sys
+import pm4py, datetime, subprocess
+import pandas as pd
+import numpy as np
+import itertools
+import matplotlib.pyplot as plt
+import textdistance
+import gensim.corpora as corpora
+from tqdm import trange, tqdm
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import fcluster, linkage, dendrogram
+from sklearn.cluster import AgglomerativeClustering 
+from sklearn.feature_extraction.text import TfidfVectorizer
+from yellowbrick.cluster import KElbowVisualizer
+from pm4py.objects.petri_net.obj import PetriNet, Marking
+from pm4py.visualization.decisiontree import visualizer as tree_visualizer
+from pm4py.algo.decision_mining import algorithm as decision_mining
+from pm4py.visualization.petri_net import visualizer
+from gensim.models import LdaModel
+from datetime import  datetime
+from datetime import timedelta
+
+```
+The R libraries used are:
+
+```{r}
+#| label: Load r libraries
+#| warning: FALSE
+
+pacman::p_load(tidyverse,
+              lubridate,
+              mongolite,
+              jsonlite,
+              ggplot2,
+              bupaR,
+              processmapR,
+              dplyr,
+              DiagrammeR,
+              DiagrammeRsvg,
+              rsvg,
+              here)
+
+```
+### Data preprocessing and event log creation
+
+For using process mining an event log is needed. The sort of functions below take data model's treatment and parameter tables to create an event log of glycated hemoglobin measures and treatment of patients. Glycated hemoglobin measurement events are divided into two different states, those that have a value inferior that 7.5 and the others. Since they are measurements their events do not have duration. In the case of treatments on the other hand a duration period exists. For treatments events definition it is based on drugs dispensing and a fixed time period after the dispensing date, so that the treatment is defined from dispensing date until the fixed period of time after. Functions below make an event log taking some assumptions such as that each dispensation should last 30 days. 
+
+```{python, warning: FALSE}
+#| label: Preprocessing functions
+#| warning: FALSE
+
+def evlog_creation(treat_df, param_df, code2drug):
+  '''Eventlog creation from datamodel's tables.
+    
+    Args:
+      treat_df (dataframe): datamodel's treatment table
+      param_df (dataframe): datamodel's parameter table
+      code2drug (dataframe): ATC codes traslation to names
+      
+    Returns:
+      df (dataframe): event log
+    
+
+  ADNI: ANTIDIABETICOS NO INSULINICOS
+  The treatment of type 2 diabetes mellitus with ADNI includes a wide range of 
+  drugs which, depending on their drugs which, according to their mechanisms of 
+  action, can be grouped as follows: 
+   Increased endogenous insulin sensitivity:
+      o Biguanides: metformin (MET).
+      o Thiazolidinediones: pioglitazone (PIO).
+   Increased endogenous insulin secretion/release:
+      o Sulfonylureas (SU).
+      o Meglitinides: repaglinide (REP)
+   Reduction of digestive glucose absorption:
+      o Alpha-glucosidase inhibitors.
+      o Vegetable fiber and derivatives.
+   Incretin effect enhancers.
+      o Inhibitors of DPP-4 (iDPP-4).
+      o GLP-1 analogues (aGLP-1).
+   Inhibitors of renal glucose reuptake
+      o SGLT-2 inhibitors (iSGLP-2)
+
+  '''
+  # definir los tipos de medicamentos a analizar
+  col_atc = 'atc_code'
+  col_id = 'patient_id'
+  col_date = 'dispensing_date'
+  col_event = 'Event'
+  treat_df = treat_df.sort_values(by = [col_id,col_date ],
+                    ascending = [True, True])
+  treat_df.index = range(len(treat_df))
+  treat_df[col_event] = [code2drug.get(treat_df[col_atc][c],{'class' : 'ERROR'}
+                        ).get( 'class','ERROR2').replace('+','&') 
+                        if treat_df[col_atc][c].startswith(
+                        'A') else None for c in range(len(treat_df[col_atc])) ]
+  treat_df = treat_df.drop(labels=[i for i in range(len(treat_df)) if
+                           treat_df[col_event][i] in [None,'ERROR','ERROR2']],
+             axis=0)
+  treat_df.index = range(len(treat_df))
+  
+  
+  treat_df = treat_df[[col_id,col_date,col_atc,col_event]]
+  treat_df = treat_df.sort_values(by = [col_id,col_date ],
+                    ascending = [True, True])
+  treat_df.rename(columns = {col_date:'date'}, inplace = True)
+  treat_df = treat_df[[col_id,'date',col_event]]
+  ######################
+  
+  col_param = 'param_name'
+  col_value = 'param_value'
+  col_date = 'param_date'
+  param_df = param_df.sort_values(by = [col_id,col_date ],
+                    ascending = [True, True])
+  param_df.index = range(len(param_df))
+  param_df = param_df.drop(labels=[i for i in range(len(param_df)) if 
+                                   param_df[col_param][i]!='hba1c'],axis=0)
+  param_df[col_value] = ['HBA<75' if i<7.5  else 'HBA>75' 
+                          for i in list(param_df[col_value])]
+  param_df.rename(columns = {col_value: col_event,col_date:'date'},
+                             inplace = True)
+  param_df = param_df[[col_id,'date',col_event]]
+  df = pd.concat([param_df,treat_df])
+  
+  df = df.sort_values(by = [col_id, 'date'], ascending = [True, True])
+  df.index = range(len(df))
+  df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d')
+  df['cycle'] = 'start'
+  df['actins'] = list(df.index)
+  patient_list = sorted(set(df[col_id]))
+  df['nid'] = [patient_list.index(df[col_id][n]) for n in range(len(df))]
+  
+  df_ = df.copy()
+  df_['cycle'] = 'end'
+  for n in range(len(df_)):
+      if 'HBA' in df_[col_event][n]:
+          continue
+      df_['date'][n] += timedelta(days=30)
+  
+  df = pd.concat([df,df_])
+  df = df.sort_values(by = [col_id, 'actins','cycle'],
+                      ascending = [True, True, False])
+  return df
+
+def evlog_transformation(df):
+  ''' eventlog's transformation into a more useful format
+  
+  Args:
+    df (dataframe): raw event log
+    
+  Returns:
+    evlog (dataframe): transformed event log
+  '''
+  evlog = pd.DataFrame()
+  id_list = list(set(df['patient_id']))
+  for id in tqdm(id_list):
+      # id = 'AA0225JC'
+      nid = list(df['nid'][df['patient_id']==id])[0]
+      date_min = min(set(df['date'][df['patient_id']==id]))
+      date_max = max(set(df['date'][df['patient_id']==id]))
+      dd = [date_min + timedelta(days=x) 
+            for x in range((date_max-date_min).days + 1)]
+      
+      
+      ev_list = ['_']*len(dd)    
+      for act in set(df['actins'][df['patient_id']==id]):
+          ini = list(df['date'][np.logical_and(df['actins']==act,
+                                                   df['cycle']=='start')])[0]
+          fin = list(df['date'][np.logical_and(df['actins']==act,
+                                                   df['cycle']=='end')])[0]
+          ev =  list(df['Event'][np.logical_and(df['actins']==act,
+                                                    df['cycle']=='start')])[0]
+          ev_list[dd.index(ini):dd.index(fin)+1] = [ev_list[n]+'+'+ev 
+                                                    for n in range(dd.index(ini),
+                                                                   dd.index(fin)+1)]
+              
+      for n in range(len(ev_list)):
+          ev_list[n] = ev_list[n].replace('_+','')
+          if 'HBA<75' in ev_list[n]:
+              ev_list[n] = 'HBA<75'
+          elif 'HBA>75' in ev_list[n]:
+              ev_list[n] = 'HBA>75'
+          
+          ev_list[n] = '+'.join(sorted(set(
+                                ev_list[n].replace('&','+').split('+'))))
+         
+      dic_log = {'patient_id': [id],
+                 'date': [dd[0]],
+                 'Event': [ev_list[0]],
+                 'nid': [nid]}
+      for n in range(1,len(ev_list)):
+          if ev_list[n]!=ev_list[n-1]:
+              dic_log['patient_id'].append(id)
+              dic_log['date'].append(dd[n-1])
+              dic_log['Event'].append(ev_list[n-1])
+              dic_log['nid'].append(nid)
+                  
+              dic_log['patient_id'].append(id)
+              dic_log['date'].append(dd[n])
+              dic_log['Event'].append(ev_list[n])
+              dic_log['nid'].append(nid)
+          
+      dic_log['patient_id'].append(id)
+      dic_log['date'].append(dd[-1])
+      dic_log['Event'].append(ev_list[-1])
+      dic_log['nid'].append(nid)
+      
+      evlog_ = pd.DataFrame.from_dict(dic_log)
+      evlog_ = evlog_.drop(
+                 evlog_[np.logical_and(evlog_.duplicated(keep=False),
+                                       np.logical_and(evlog_['Event']!='HBA<75',
+                                                      evlog_['Event']!='HBA>75')
+                                                       )].index)
+      evlog = pd.concat([evlog,evlog_]) 
+      
+  evlog = evlog.sort_values(['patient_id','date'])
+  evlog.index = range(len(evlog))
+  evlog['cycle'] = ['start','end']*int(0.5*len(evlog))
+  evlog['actins'] = [n//2 for n in range(len(evlog))]
+  return evlog
+
+def evlog_correction(df):
+  ''' eventlog's correction to avoid some errors
+  
+  Args:
+    df (dataframe):  event log
+    
+  Returns:
+    df (dataframe): corrected event log
+  '''
+
+  #corrección para eliminar eventos despues de medición de hemoglobina que 
+  #son la continuación del tratamiento anterior y no el nuevo tratamiento
+  t_dif = timedelta(days=14)
+  for t in range(3):
+      df_ = df[df['cycle']=='start']
+      for id in set(df_['patient_id']):
+          trace = list(df_['Event'][df_['patient_id'] == id])
+          trace_t = list(df_['date'][df_['patient_id'] == id])
+          if 'HBA>75' in trace or 'HBA<75' in trace:
+              ind = [i for i in range(len(trace)) if trace[i] =='HBA>75' 
+                     or trace[i] == 'HBA<75']
+              for i in ind:
+                  try:
+                      if (np.in1d(trace[i-1].split('+'),
+                                  trace[i+1].split('+')).all()) and (
+                          np.in1d(trace[i+1].split('+'),
+                                  trace[i+2].split('+')).all()) and (
+                          # trace[i-1]!=trace[i+2]) and (
+                          trace_t[i+2]-trace_t[i+1]<t_dif):
+                               
+                          actin = int(df_['actins'][np.logical_and(df_['patient_id']==id,
+                                              df_['date']==trace_t[i+1])])
+                          df = df.drop(list(df[df['actins']==actin].index))
+  
+  
+                          trace_ = trace
+                          for n_e in range(i,len(trace_)):
+                              if trace_[n_e]!=list(df['Event'][df['patient_id'] == id][
+                                  df['cycle']=='start'])[n_e]:
+                                  break
+                          trace_[n_e] = '*('+trace_[n_e]+')*'
+                      elif (np.in1d(trace[i-1].split('+'),
+                                    trace[i+1].split('+')).all()) and (
+                            np.in1d(trace[i+2].split('+'),
+                                    trace[i+1].split('+')).all())  and (
+                            trace[i-1]!=trace[i+2]) and (
+                          trace_t[i+2]-trace_t[i+1]<t_dif):
+                               
+                          actin = int(df_['actins'][np.logical_and(df_['patient_id']==id,
+                                              df_['date']==trace_t[i+1])])
+                          df = df.drop(list(df[df['actins']==actin].index))
+                          
+                          
+                          trace_ = trace
+                          for n_e in range(i,len(trace_)):
+                              if trace_[n_e]!=list(df['Event'][df['patient_id'] == id][
+                                  df['cycle']=='start'])[n_e]:
+                                  break
+                          trace_[n_e] = '*('+trace_[n_e]+')*'
+
+                  except:
+                      continue
+  
+  
+  #corrección para transiciones de eventos A+B >A+B+C >A+C ==> A+B>A+C
+  for id in set(df['patient_id']):
+      status = True
+      while status:
+          trace = list(df['Event'][np.logical_and(df['patient_id'] == id,
+                                                  df['cycle'] == 'start')])
+          trace_t = list(df['date'][df['patient_id'] == id])
+          if len(trace)<=2:
+              status = False
+  
+          for i in range(len(trace)-2):
+              if (np.in1d(trace[i].split('+'),
+                          trace[i+1].split('+')).all()) and (
+                      np.in1d(trace[i+2].split('+'),
+                              trace[i+1].split('+')).all()) and ( 
+                      trace[i+2]!=trace[i]) and (
+                      trace_t[2*i+4]-trace_t[2*i+2]<t_dif):
+                       
+                      df['date'][np.logical_and(df['patient_id']==id,
+                                                df['date']==trace_t[2*i+4])
+                                                 ] = trace_t[2*i+2]
+                      actin = int(df['actins'][np.logical_and(df['patient_id']==id,
+                                          df['date']==trace_t[2*i+3])])
+                      df = df.drop(list(df[df['actins']==actin].index))
+                      
+  
+  
+                      trace_ = trace
+                      for n_e in range(len(trace_)):
+                          try:
+                              if trace_[n_e]!=list(df['Event'][df['patient_id'] == id][
+                                  df['cycle']=='start'])[n_e]:
+                                  break
+                          except:
+                              break
+                      trace_[n_e] = '*('+trace_[n_e]+')*'
+                      break
+              if i==len(trace)-3:
+                  status = False
+                  break
+  
+  
+  
+  #compactación de eventos
+  for id in set(df['patient_id']):
+      status = True
+      while status:
+          trace = list(df['Event'][np.logical_and(df['patient_id'] == id,
+                                                  df['cycle'] == 'start')])
+          trace_t = list(df['date'][df['patient_id'] == id])
+          if len(trace)==1:
+              status = False
+          for i in range(len(trace)-1):
+              if (trace[i]==trace[i+1]) and (trace_t[2*i+2]-trace_t[2*i+1]<t_dif) :
+                  df['date'][np.logical_and(df['patient_id']==id,
+                                            df['date']==trace_t[2*i+1])
+                             ] = trace_t[2*i+3]
+                               
+                  actin = int(df['actins'][
+                      np.logical_and(df['patient_id']==id,df['date']== trace_t[2*i+2])])
+                  df = df.drop(list(df[df['actins']==actin].index))
+  
+  
+                  trace_ = trace
+                  for n_e in range(i,len(trace_)):
+                      try:
+                          if trace_[n_e]!=list(df['Event'][df['patient_id'] == id][
+                              df['cycle']=='start'])[n_e]:
+                              break
+                      except:
+                          break
+                  trace_[n_e] = '*('+trace_[n_e]+')*'
+                  break
+              if i==len(trace)-2:
+                  status = False
+                  break
+  
+  
+  df.index = range(len(df))  
+  return df
+
+def preprocessing(treat_df_path='./inputs/dm_treat_df.csv',
+                  param_df_path='./inputs/dm_param_df.csv',
+                  code2drug_path='./inputs/diabetes_drugs.csv',
+                  output_file='./outputs/eventlog_raw.csv'):
+  '''Preprocessing and event log obtention
+  
+  Args:
+    treat_df_path (str): datamodel's treatment table's path
+    param_df_path (str): datamodel's parameter table's path
+    code2drug_path (str): drugs' and their codes' info's table's path
+  '''    
+  treat_df = pd.read_csv(treat_df_path)
+  param_df = pd.read_csv(param_df_path)
+  code2drug = pd.read_csv(code2drug_path,index_col=0).to_dict()
+  evlog_0 = evlog_creation(treat_df, param_df, code2drug)
+  evlog_1 = evlog_transformation(evlog_0)
+  evlog_2 = evlog_correction(evlog_1)
+  evlog_2.rename(columns = {'patient_id':'ID'}, inplace = True)
+  evlog_2.to_csv(output_file)
+```
+
+
+
+
+### Distances
+
+One of the most important aim of process mining is to show and explain the processes. However, the great variety of traces does not allow us to draw any clear conclusions and it is often necessary to simplify our data. Another option that we can do before simplifying, to avoid the excessive losing of information and give another perspective to the analysis, is to cluster the traces and to analyze them by cluster. Doe to do that we have to measure somehow the differences between the traces, the distance between them. This is not evident if we take into account that traces are categorical sequences of different lengths. Nevertheless, there are some distances that we can use to this task: edit distances, vector term similarity, LDA based distances, dynamic time warping, embedding based distances... Some of them are shown below as functions to calculate the distance matrix of traces:
+
+```{python}
+#| label: Distance matrix functions
+
+#######   EDIT DISTANCE   ####### 
+def calculate_dm_ED(traces,measure):
+    '''Calculate distance matrix with some edit distance.
+    
+    Args:
+      traces (list): patients' traces
+      measure: some edit distance function
+      
+    Returns:
+      dm: distance matrix
+    '''
+    id2word = corpora.Dictionary(traces)
+
+    traces_e = [[id2word.token2id[t[n]] for n in range(len(t))] for t in traces]
+    len_t = len(traces_e)
+    dm = np.zeros((len_t,len_t), dtype = float)
+    same = measure(traces_e[0],traces_e[0])
+    for i in trange(len_t):
+        dm[i][i] = same
+        for j in range(i+1,len_t):
+            d_ij = measure(traces_e[i],traces_e[j])
+            dm[i][j] = d_ij
+            dm[j][i] = d_ij
+    if same == 1:
+        dm = 1 - dm  
+    
+    return dm
+
+#######   TERM VECTOR SIMILARITY   #######      
+def calculate_dm_TV(traces):
+    '''Calculate distance matrix with term vector similarity.
+    
+    Args:
+      traces (list): list of traces
+      
+    Returns:
+      dm (array): distance matrix
+      vectorizer: TfidfVectorizer
+      X: traces vectorized with TfidVectorizer
+        
+    '''
+    corpus = [' '.join(t) for t in traces]
+    vectorizer = TfidfVectorizer(tokenizer=str.split)
+    X = vectorizer.fit_transform(corpus)
+    print('calculatin dm ...')
+    dm = np.asarray(np.matmul(X.todense(),X.todense().T))
+    dm = 1 - dm.round(decimals=4)           
+    return dm, vectorizer, X
+
+#######   LDA BASED DISTANCE   #######      
+def calculate_dm_LDA(traces,T=10):
+    '''Calculate distance matrix with LDA model.
+    
+    Args:
+      traces (list): list of traces
+      T (int): number of topics of LDA model
+    Returns:
+      dm (array): distance matrix
+      lda_model: LdaModel
+      id2word (dict): tokenized events as keys and events by values
+        
+    '''
+
+    # Create Dictionary
+    id2word = corpora.Dictionary(traces)
+    
+    # Term Document Frequency
+    corpus = [id2word.doc2bow(text) for text in traces]
+    # Make LDA model
+    lda_model = LdaModel(corpus=corpus,
+                         id2word=id2word,
+                         num_topics=T,
+                         alpha = 1,
+                         eta = 'auto',
+                         random_state = 123)
+    get_c_topic = np.array(
+        lda_model.get_document_topics(corpus,minimum_probability = -0.1))
+    sigma = np.asarray([[get_c_topic[i][j][1] 
+              for j in range(T)] for i in range(len(corpus))])
+
+    sigma2 = np.asarray(np.matmul(sigma,sigma.T))
+    len_t = len(traces)
+    dm = np.zeros((len_t,len_t), dtype = float)
+    
+    same = sigma2[0][0]/np.sqrt(sigma2[0][0]*sigma2[0][0])
+    for i in trange(len_t):
+        dm[i][i] = same
+        for j in range(i+1,len_t):
+            d_ij = sigma2[i][j]/np.sqrt(sigma2[i][i]*sigma2[j][j])
+            dm[i][j] = d_ij
+            dm[j][i] = d_ij
+    
+            
+
+    dm = 1-dm
+    return dm, lda_model, id2word
+
+```
+
+### Clustering
+
+Once the distance matrix is obtained, now we can proceed with the clustering. Each clustering method has its characteristics and its peculiarities, so we cannot choose whatever method we want. For example, we have to consider that our distances do not comply with the triangle inequality so they cannot be considered metrics. Another consideration is that we have a distance matrix and not a data frame in which we apply directly the method. A hierarchical clustering algorithm seems to be a good choice in our case because in addition to the above it allows to choose the optimal number of clusters.
+
+The next box contains two different functions to choose the optimal number of clusters:
+
+```{python}
+#| label: Functions to choose optimal number of clusters
+def dendogram(dm,output_png='./outputs/dendogram.png'):
+  '''Plot and save dendogram.
+    
+    Args:
+      dm (array): distance matrix
+      output_png (str): saved dendogram's path
+
+  '''
+
+  dm_condensed = squareform(dm)
+  
+  matrix = linkage(
+      dm_condensed,
+      method='average'
+      )
+  sys.setrecursionlimit(10000)
+  dn = dendrogram(matrix)
+  sys.setrecursionlimit(1000)
+  plt.title('Dendrogram')
+  plt.ylabel('Distance')
+  plt.xlabel('Patients traces')
+  plt.savefig(output_png)
+  plt.clf()
+
+def kelbow(dm,elbow_metric='distortion',locate_elbow=False,
+           output_path='./outputs/'):
+  
+  '''Plots to choose optimal clusters.
+    
+    Args:
+      dm (array): distance matrix
+      elbow_metric (str): name of the method
+      locate_elbow (boolean): True if want to return optimal number of clusters
+    Returns:
+      k_opt (int)(optional): optimal number of clusters according to method
+  '''
+
+  model = AgglomerativeClustering(metric = "precomputed",
+                                  linkage = 'average')
+  # k is range of number of clusters.
+  visualizer_ = KElbowVisualizer(model,
+                                k=(2,50),
+                                timings=False,
+                                xlabel = 'cluster numbers',
+                                metric=elbow_metric,
+                                locate_elbow=locate_elbow)
+  # Fit data to visualizer
+  output_file = output_path+elbow_metric+'.png'
+  visualizer_.fit(dm)
+  # Finalize and render figure
+  visualizer_.show(output_path=output_file,clear_figure=True)
+  k_opt=None
+  if locate_elbow:
+    k_opt = visualizer_.elbow_value_ 
+    return k_opt
+```
+
+Depending on the results of the clustering we may need to focus our analysis in the biggest clusters and forget those clusters that contains too less traces. The next function is made for that:
+
+```{python}
+#| label: small cluster filter
+def small_cluster_filter(log,min_traces=30,col_id='ID',col_clust='cluster'):
+  '''Filter smallest clusters' traces.
+    
+    Args:
+      log (dataframe): event log 
+      min_traces (int): minimum number of traces in the resulted clusters 
+      col_id (str): patients id column's name in df_
+      col_clust (str): clusters column's name in df_
+    Returns:
+      filtered_log (dataframe): event log without clusters with les than 
+                                min_traces number of traces
+  '''
+
+  drop_clust = [i for i in set(log[col_clust]) if 
+                len(set(log[col_id][log[col_clust]==i]))<min_traces]
+  filtered_log = log.drop(log[log[col_clust].isin(drop_clust) == True].index)
+  filtered_log.index = range(len(filtered_log))
+  return filtered_log
+  
+
+```
+
+The function to clust is shown in the code below:
+
+```{python}
+def clust(clust_n,dist_matrix,df_,id2trace,patients,id_col='ID',
+          ev_col='Event',date_col='date',output_xes='./outputs/eventlog.xes',
+          output_csv='./outputs/eventlog.csv'):
+  '''clusterize distance matrix.
+    
+    Args:
+      clust_n (int): number of clusters obtained
+      dist_matrix (array): distance matrix
+      df_ (dataframe): event log
+      id2trace (dict): patient ids as keys and their traces as values
+      patients (list): patients' ids in same order as in dm
+      id_col (str): patients id column's name in df_
+      ev_col (str): events column's name in df_
+      date_col (str): events dates column's name in df_
+  '''
+
+  model = AgglomerativeClustering(n_clusters=clust_n,
+                                  metric = "precomputed",
+                                  linkage = 'average')
+  model.fit(dist_matrix)
+  labels = model.labels_
+
+  cluster_list ={id: labels[traces.index(id2trace[id])
+                            ] for id in patients}
+
+  df_['cluster'] = [cluster_list[df_[id_col][i]] for i in range(len(df_))]
+  df_.to_csv(output_csv)
+  df_filtered = small_cluster_filter(df_)
+  df_filtered.to_csv(output_csv.replace('.csv','_filtered.csv'))
+  
+  df_xes = pm4py.format_dataframe(df_,
+                                  case_id=id_col,
+                                  activity_key=ev_col,
+                                  timestamp_key=date_col)
+  event_log = pm4py.convert_to_event_log(df_xes)
+  pm4py.write_xes(event_log, output_xes)
+  
+  df_filtered_xes = pm4py.format_dataframe(df_filtered,
+                                  case_id=id_col,
+                                  activity_key=ev_col,
+                                  timestamp_key=date_col)
+  event_log_filtered = pm4py.convert_to_event_log(df_filtered_xes)
+  pm4py.write_xes(event_log_filtered,output_xes.replace('.xes','_filtered.xes'))
+
+```
+
+### Descriptive analysis
+
+The implementation below is made to show the most frequent traces in each cluster:
+
+```{python}
+#| label: Clusters visualization functions
+
+def make_data_dict(log,top_k,col_id):
+  '''Obtain most frequent traces and their statistics
+    
+    Args:
+      log (dataframe): event log 
+      top_k (int): number of traces want to show
+      col_id (str): patients id column's name in df_
+    Returns:
+      data_dict (dict): traces as keys and ther statistics as values   
+  '''
+
+  len_id = len(set(log[col_id]))
+  log_freq = pm4py.stats.get_variants(log)
+  freq_list = [(t,log_freq[t],len(t)) for t in set(log_freq.keys())]
+  trace = [list(t[0]) for t in sorted(freq_list, key=lambda x: 
+                                              (len_id-x[1],x[2]))[:top_k]]
+  cases = [t[1] for t in sorted(freq_list, key=lambda x: 
+                                              (len_id-x[1],x[2]))[:top_k]]
+  top_k = min(top_k,len(cases))
+  percentage = [100*cases[c]/len_id for c in range(top_k)]
+  cum_percentage = [sum(percentage[:p+1]) for p in range(top_k)]
+  data_dict = {"Trace": trace,
+               "Percentage": percentage,
+               "Cases": cases,
+               "Cumulative Percentage": cum_percentage}
+  return data_dict
+  
+  
+def update_color_dict(color_dict,data_dict):
+  '''update of the color dict to include new events
+    
+    Args:
+      color_dict (dict): events as keys and colors as values 
+      data_dict (dict):  traces as keys and ther statistics as values
+    Returns:
+      color_dict (dict): events as keys and colors as values    
+  '''
+  cmap = plt.cm.get_cmap('tab20')
+  for event in set(itertools.chain.from_iterable(data_dict['Trace'])):
+      if event not in color_dict and len(color_dict)==20:
+         cmap = plt.cm.get_cmap('tab20b')
+      if event not in color_dict:    
+        try:
+          color_dict.update({event:cmap(len(color_dict))})
+        except:
+          color_dict.update({event:cmap(2*(len(color_dict)-20))})
+  return color_dict 
+
+
+def trace_plotter(data_dict,color_dict,acronym, output_file, font_size=10,
+                  percentage_box_width=0.8,size=(15,9)):
+  '''configuration of the trace_explorer plot
+    
+    Args:
+      color_dict (dict): events as keys and colors as values 
+      data_dict (dict):  traces as keys and their statistics as values
+      acronym (dict): events as keys and their acronyms as values
+      output_file (str): figure's path
+      font_size (int): font size
+      percentage_box_width (float): event boxes' width
+      size (tuple): figure's size
+  '''
+
+  fig, ax = plt.subplots(figsize=size)
+  percentage_position = max(len(t) for t in data_dict["Trace"]
+                            ) + percentage_box_width*3 +0.5
+  for row, (trace, percentage,cases,cum_percentage
+            ) in enumerate(zip(data_dict["Trace"],
+                               data_dict["Percentage"],
+                               data_dict["Cases"],
+                               data_dict["Cumulative Percentage"]),
+                               start=1):
+    for col, acr in enumerate(trace, start=1):
+        ax.add_patch(plt.Rectangle((col - 0.5, row - 0.45), 1, 0.9,
+                                    facecolor=color_dict[acr],
+                                    edgecolor='white'))
+        ax.text(col, row, acr, ha='center', va='center', color='white',
+                fontsize = font_size, fontweight='bold')
+        ax.add_patch(plt.Rectangle((percentage_position -percentage_box_width*2.5,
+                                    row - 0.45), percentage_box_width, 0.9,
+                                    facecolor='grey', edgecolor='white'))
+        ax.text(percentage_position-percentage_box_width*2,
+                row,
+                f'{percentage:.2f}%',
+                ha='center',
+                va='center',
+                color='white',
+                fontsize = font_size)
+        ax.add_patch(plt.Rectangle((percentage_position - percentage_box_width*1.5,
+                                    row - 0.45), percentage_box_width, 0.9,
+                                    facecolor='grey', edgecolor='white'))
+        ax.text(percentage_position-percentage_box_width,
+                row,
+                f'{cases}',
+                ha='center',
+                va='center',
+                color='white',
+                fontsize = font_size)
+        ax.add_patch(plt.Rectangle((percentage_position - percentage_box_width*0.5, 
+                                    row - 0.45), percentage_box_width, 0.9,
+                                    facecolor='grey', edgecolor='white'))
+        ax.text(percentage_position,
+                row,
+                f'{cum_percentage:.2f}%', 
+                ha='center',
+                va='center',
+                color='white',
+                fontsize = font_size)
+      
+  ax.set_xlim(0.5, percentage_position+0.5)
+  ax.set_xticks(range(1, int(percentage_position-1)))
+  ax.set_ylabel('Traces',fontsize = font_size)
+  ax.set_ylim(len(data_dict["Trace"]) + 0.45, 0.55) # y-axis is reversed
+  ax.set_yticks([])
+  ax.set_xlabel('Activities',fontsize = font_size)
+  
+  handles = [plt.Rectangle((0, 0), 0, 0, facecolor=color_dict[acr],
+                            edgecolor='black', label=acronym[acr])
+              for acr in acronym if acr in set(
+                itertools.chain.from_iterable(data_dict['Trace']))]
+  ax.legend(handles=handles, bbox_to_anchor=[1.02, 1.02], loc='upper left',
+            fontsize = font_size+2)
+  for dir in ['left', 'right', 'top']:
+      ax.spines[dir].set_visible(False)
+  plt.tight_layout()
+  plt.savefig(output_file)
+  plt.close()
+
+
+def trace_explorer(evlog_file='./outputs/eventlog.xes',top_k=5, id_col='ID',
+                   ev_col='Event',date_col='date',clust_col='cluster',
+                   color_dict={}):
+  '''Plot each clusters most frequent traces
+    
+    Args:
+      evlog_file (str): events as keys and colors as values 
+      top_k (int):  traces as keys and their statistics as values
+      id_col (str): patients id column's name in evlog_file
+      ev_col (str): events column's name in evlog_file
+      date_col (str): events dates column's name in evlog_file
+      clust_col (str): cluster column's name in evlog_file
+      color_dict (dict): events as keys and colors as values  
+  '''
+                     
+  log_ = pm4py.read_xes(evlog_file)
+  log_ = log_.sort_values([id_col,date_col])
+  log_ = log_[log_['cycle']=='start'] 
+  for clust in set(log_[clust_col]):
+      log = log_[log_[clust_col]==clust]
+      len_id = len(set(log[id_col]))
+      acronym = {t:t for t in sorted(set(log[ev_col]))}
+      data_dict = make_data_dict(log,top_k,id_col)
+      color_dict = update_color_dict(color_dict, data_dict)
+      trace_plotter(data_dict,color_dict,acronym,
+                    './outputs/trace_%i.png' % clust)
+
+```
+
+To get the process maps of each cluster next R functions can be used:
+
+```{r}
+#| label: Process maps in R
+
+load_csv_log <- function(evlog_csv,case_id="ID",activity_id="Event", 
+                         lifecycle_id="cycle", activity_instance_id="actins",
+                         timestamp="date"){
+  eventlog = read.csv(evlog_csv, header=TRUE, sep = ",")
+  
+  eventlog = eventlog[order(eventlog$ID),]
+  #Para transformar fecha a un formato con el que podemos trabajar
+  eventlog$date = as.POSIXct(eventlog$date, tz = "", format="%Y-%m-%d" ,
+                                   tryFormats = c("%Y/%m/%d",
+                                                  "%Y/%m/%d"),
+                                   optional = FALSE) 
+  
+  
+  
+  evLog = eventlog %>%
+    mutate(resource = NA) %>%
+    mutate(cycle = fct_recode(cycle,  "start" = "start","complete" = "end")) %>%
+    eventlog(
+      case_id = case_id,
+      activity_id = activity_id, 
+      lifecycle_id = lifecycle_id, 
+      activity_instance_id = activity_instance_id, 
+      timestamp = timestamp, 
+      resource_id = 'resource'
+    )
+  return(evLog)
+}
+make_process_map <- function(log,t_freq,output_file){
+  log %>%
+    filter_activity_frequency(percentage = 1) %>% # show only most frequent
+    filter_trace_frequency(percentage = t_freq) %>%
+    process_map(type_nodes = performance(mean,units='days'),
+                type_edges = frequency('relative_case'),
+                sec_edges = performance(mean,units='days'),
+                render = T) %>% 
+    export_svg %>% 
+    charToRaw %>%
+    rsvg_png (output_file,width=5000)
+}
+
+process_map_by_cluster <- function(evLog,t_freq){
+  for (clust in unique(evLog$cluster)) {
+    log <- evLog %>% 
+      filter(cluster == clust)
+    make_process_map(log,t_freq,here("outputs",sprintf(
+      "evlog_pm_cluster_%d.png", clust)))
+  }
+}
+```
+
+### Conformance checking
+
+Conformance checking is a technique used to check process compliance by comparing event logs for a discovered process with the existing reference model (target model) of the same process. Basing on the DM2 treatment algorithm previous shown we created the next Petri Net that is going to be useful as treatment guidelines in reference to glycated hemoglobin measures.
+
+![DM2 Treatment Algorithm's interpretation to patients with frailty in Petri Net format](petri_net.png){#fig-petrinet fig-align="center" style="width:800px;height:350px"}
+
+Fitness is the metric that measures how much a trace is distanced from a given process model, or from the guidelines in this case. There are different methods to calculate this metric but in the code below is used the aligned fitness. Since in this metric the initial marking and the final marking have to be fixed we included the events 'INI' and 'FIN' in the Petri Net and in each trace. Adding this artificial events allows us to compare all traces fitness in the same conditions.
+
+```{python}
+#| label: Fitness  calculation
+def id2fitness(log ,net, initial_marking, final_marking, clust_col='cluster',
+               date_col='date',ev_col='Event'):
+  '''Obtain traces fitness
+    
+    Args:
+      log (dataframe): event log 
+      net: petri net
+      initial_marking: initial place in the petri net
+      final_marking: final place in the petri net
+      clust_col (str): cluster column's name in log
+      date_col (str): events dates column's name in log
+      ev_col (str): events column's name in log
+    Returns:
+      df (dataframe): traces, their clusters and their fitnesses  
+  '''
+  at_l = []
+  rt_l = []
+  name_l = []
+  clust_l = []
+  for name in set(log['case:concept:name']):
+      log2 = log.drop(log.index[log['case:concept:name'] !=name])
+      ini = log2.iloc[0,:]
+      ini[date_col] =  ini['time:timestamp'] = ini[date_col
+                                                    ]-timedelta(days=1)
+      ini[ev_col] = ini['concept:name'] = 'INI'
+      ini['@@index'] = ini['@@index']-1
+      ini['actins'] = ini['actins']-1
+  
+      fin = log2.iloc[-1,:]
+      fin[date_col] =  fin['time:timestamp'] = fin[date_col
+                                                    ]+timedelta(days=1)
+      fin[ev_col] = fin['concept:name'] = 'FIN'
+      fin['@@index'] = fin['@@index']+1
+      fin['actins'] = fin['actins']+1
+  
+      log2 = log2.append(ini)
+      log2 = log2.append(fin )
+      log2 = log2.sort_values(date_col)
+      log2.index = range(len(log2))
+      
+      #alignment
+      aligned_traces = pm4py.conformance_diagnostics_alignments(
+                                      log2, net, initial_marking, final_marking)
+      
+      name_l.append(name)
+      at_l.append(aligned_traces[0]['fitness'])
+      clust_l.append(int(list(log2[clust_col])[0]))
+    
+  df =  pd.DataFrame()
+  df['ID'] = name_l
+  df['aligned_fitness'] = at_l
+  df[clust_col] = clust_l
+  return df
+```
+
+In the next function is shown a boxplot function to show clusters' fitness distribution.
+
+```{python}
+#| label: Fitness boxplot
+def conformance(xes_file,pn_file,ini_place='place11',fin_place='place10',
+                date_col='date',ev_col='Event',clust_col='cluster',
+                output_png='./outputs/fitness_by_cluster.png',
+                output_csv='./outputs/fitness_by_cluster.csv'):
+  '''Barplot of the fitness of each cluster
+    
+    Args:
+      xes_file (dataframe): event log's path
+      pn_file: petri net's path
+      ini_marking: initial place in the petri net
+      fin_marking: final place in the petri net
+      date_col (str): events dates column's name in log
+      clust_col (str): cluster column's name in log
+      ev_col (str): events column's name in log
+      output_png (str): created figure's path
+      output_csv (str): created csv's path
+  '''
+  
+  log = pd.DataFrame(pm4py.read_xes(xes_file))
+  log = log[log['cycle']=='start']    
+  log = log.sort_values(date_col)
+  log.index = range(len(log))
+  net, initial_marking, final_marking = pm4py.read_pnml(pn_file)
+  initial_marking = Marking()
+  initial_marking[list(net.places)[[str(p) for p in net.places].index(ini_place)]] = 1
+  final_marking = Marking()
+  final_marking[list(net.places)[[str(p) for p in net.places].index(fin_place)]] = 1
+
+  df = id2fitness(log,net,initial_marking,final_marking,clust_col,date_col,ev_col)
+  df.to_csv(output_csv)
+  data = [list(df['aligned_fitness'][df[clust_col]==i])
+          for i in sorted(set(df[clust_col]))]
+   
+  fig = plt.figure(figsize =(10, 7))
+  # Creating axes instance
+  ax = fig.add_axes([0, 0, 1, 1])
+  # Creating plot
+  bp = ax.boxplot(data,labels=[i for i in sorted(set(df[clust_col]))])
+  plt.xlabel("Clusters")
+  plt.ylabel("Aligned Fitness")
+  # show plot
+  plt.savefig(output_png,bbox_inches='tight')
+  
+
+```
+
+### Decision mining
+
+Decision mining allows to analyze the event transitions in different part of processes. With another words, we can measure patients' characteristics or their relevance in a specific place of the passed petri net. The next function makes a decision tree explaining how patients characteristics are taking into account and a boxplot to show the relevance of each feature in the decision tree.
+
+```{python}
+#| label: Decision mining
+def decision_tree_pn_place(patients_df,
+                           col_id = 'patient_id',
+                           features_list = ['age','sex'],
+                           event_log_file="./outputs/eventlog.xes",
+                           pn_file="./inputs/FRAG_HBA.pnml",
+                           place2analyze='place9',
+                           ini_place='place11',
+                           fin_place='place10'):
+  '''Decision tree and features importances in selected place of PN
+    
+    Args:
+      patients_df (dataframe): patients data wanted to analyze
+      col_id (str): patients id column's name in df
+      features_list (list): features wanted to analyze
+      event_log_file (str): event log's path
+      pn_file (str): petri net's path
+      place2analyze (str): place wanted to analyze in petri net
+      ini_place (str): initial place in the petri net
+      fin_place (str): final place in the petri net
+  '''                           
+  log = pm4py.read_xes(event_log_file)    
+  log = log[log['cycle']=='start']    
+  log.index = range(len(log))
+  log = log[['concept:name','time:timestamp','case:concept:name']]
+  for name in set(log['case:concept:name']):
+      log2 = log.drop(log.index[log['case:concept:name'] !=name])
+      log2 = log2.sort_values(by = ['case:concept:name','time:timestamp' ],
+                              ascending = [True, True])
+      ini = log2.iloc[0,:]
+      ini['time:timestamp'] = ini['time:timestamp']-timedelta(days=1)
+      ini['concept:name'] = 'INI'
+  
+      fin = log2.iloc[-1,:]
+      fin['time:timestamp'] = fin['time:timestamp']+timedelta(days=1)
+      fin['concept:name'] = 'FIN'
+  
+      log = log.append(ini)
+      log = log.append(fin )
+      
+  log = log.sort_values(['case:concept:name','time:timestamp'])
+
+  features_list += [col_id]
+  patients_df = patients_df[features_list]
+  log_patients = log.merge(patients_df,left_on='case:concept:name',
+                           right_on=col_id,how='left')
+  
+  net, initial_marking, final_marking = pm4py.read_pnml(pn_file)
+  
+  initial_marking = Marking()
+  initial_marking[list(net.places)[[str(p
+  ) for p in net.places].index(ini_place)]] = 1
+  final_marking = Marking()
+  final_marking[list(net.places)[[str(p
+  ) for p in net.places].index(fin_place)]] = 1
+  
+  X, y, class_names = decision_mining.apply(log_patients,
+                                            net,
+                                            initial_marking,
+                                            final_marking,
+                                            decision_point=place2analyze)
+  clf, feature_names, classes = decision_mining.get_decision_tree(log_patients,
+                                                                  net,
+                                                                  initial_marking,
+                                                                  final_marking, 
+                                                                  decision_point=place2analyze)
+  gviz = tree_visualizer.apply(clf, feature_names, classes)
+  gviz.save(filename='decision_tree',
+            directory='outputs')              
+  visualizer.view(gviz)
+  
+  importances = clf.feature_importances_
+  tree_importances = pd.Series(importances, index=feature_names)
+
+  fig, ax = plt.subplots()
+  tree_importances.plot.bar(ax=ax)
+  ax.set_title("Feature importances using MDI")
+  ax.set_ylabel("Mean decrease in impurity")
+  fig.tight_layout()
+  fig.savefig('./outputs/barplot_features_importance.png')
+```
+
+### Multivariate logistic regression model
+
+The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. Logistic regression models can be used to predict different outcomes such as probability of hospitalization, treatment complication probability or probability of death, while as the same time a treatment adherence is analyzed. For that a variable that measures treatment adherence is needed for example fitness of patients' traces.
+
+## Results
+### Event log's creation and description
+
+```{python}
+#| label: Preprocessing of raw event log
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+preprocessing()
+                  
+```
+
+
+```{python}
+#| label: event log
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+df_ = pd.read_csv('./outputs/eventlog_raw.csv', 
+                  index_col=0)[['ID','date','cycle','nid','actins','Event']]
+
+def df2dict(df_,ev_col='Event',id_col ='ID'):
+  '''Filtering length=2 traces and obtain id2trace dict
+    
+    Args:
+      df_ (dataframe): event log 
+      id_col (str): patients' id column's name in log
+      ev_col (str): events column's name in log
+    Returns:
+      df (dataframe): filtered event log (without cycle sense)
+      df_ (dataframe): filtered event log
+      id2trace_ (dict): patients' ids as keys and their traces (list) as values
+  '''
+  df = df_[df_['cycle']=='start']
+  df.index = range(len(df))
+  id2trace_ = dict()            
+  for id in set(df[id_col]):       
+      id2trace_[id] = list(df[ev_col][df[id_col] == id])
+ 
+  #drop len<=2 traces
+  del_list = []
+  for i in range(len(df)):
+      if  len(id2trace_[df[id_col][i]])<=2 :
+          del_list.append(i)
+  for i in del_list:
+      try:
+          del id2trace_[df[id_col][i]]
+      except:
+          continue
+  df = df.drop(del_list, axis=0)
+  df.index = range(len(df))
+
+  del_list2 = []
+  for id in set(df_[id_col]):
+      if id not in id2trace_:
+          del_list2+= list(df_[df_[id_col]==id].index)
+  df_ = df_.drop(del_list2, axis=0)
+  df_.index = range(len(df_))
+  
+  return df,df_,id2trace_
+
+df,df_, id2trace = df2dict(df_)
+df_.to_csv("./outputs/eventlog.csv")
+patients = sorted(id2trace.keys())
+traces = list(id2trace[id] for id in patients)     
+
+```
+
+```{r}
+#| label: Loading event log in R
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+evLog <- load_csv_log(here("outputs","eventlog.csv"))
+```
+
+These results have been carried out with a set of synthetic data previously generated according to data model. After some preprocessing we obtain an event log that can be reproduced in the below process map @fig-pm1. There is shown how the events are connected, the mean number of days patients spent in each event (or treatment), percentage of patients who made each transition and the mean number of days it took to make the transition. However, a spaghetti map is obtained and nothing can be concluded. Therefore, we have to simplify the process map and for example only show the most frequent traces covering 20% of the event log as in @fig-pm06. Moreover, in @fig-activity_presence we show percentage of patients' traces each activity is present.
+
+```{r}
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+make_process_map(evLog,1,here("outputs","evlog_pm_1.png"))
+```
+
+![Event log's process maps with all traces](./outputs/evlog_pm_1.png){#fig-pm1 fig-align="center" width="80%"}
+
+```{r}
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+make_process_map(evLog,0.2,here("outputs","evlog_pm_02.png"))
+```
+
+![Event log's process maps with most frequent traces covering 20%](./outputs/evlog_pm_02.png){#fig-pm06 fig-align="center" width="80%"}
+
+```{r}
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+png(filename=here("outputs","activity_presence.png"),
+    width = 600, height = 750, units = "px")
+plot(evLog %>% activity_presence()  )
+dev.off()
+```
+
+![Percentage of patients' traces an activity is present](./outputs/activity_presence.png){#fig-activity_presence fig-align="center" width="80%"}
+
+### Clustering traces
+
+Once the set of traces to analyze are selected, there is a need to choose a distance measure to clustering. In this example Jaccard similarity is chosen to calculate the distance matrix.
+
+```{python}
+#| label: dm calculation
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+measure = textdistance.jaccard
+dm = calculate_dm_ED(traces,measure)
+```
+
+When distance matrix is acquired, we are able to cluster. However, the number of clusters have to be fixed before. With these figures we are able to conclude what could be the optimal number of clusters.
+
+```{python}
+#| label: dendograms
+#| eval: TRUE
+#| echo: FALSE
+
+dendogram(dm)
+kelbow(dm,elbow_metric='distortion',locate_elbow=False)
+kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
+```
+![Distance matrix's dendogram](./outputs/dendogram.png){#fig-dendogram fig-align="center" width="80%"}
+
+```{python}
+#| label: clustering
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+clust(18,dm,df_,id2trace,patients)
+```
+
+Choosing 18 as the optimal number of clusters, too small clusters appear. Excluding those clusters of less than 30 traces, to avoid having clusters of low representation, process maps and the most frequent traces of the clusters that remain are the followings.
+
+```{python}
+#| label: trace explorer
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+trace_explorer(evlog_file='./outputs/eventlog_filtered.xes')
+```
+
+```{r}
+#| label: process explorer
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+process_map_by_cluster(load_csv_log(here("outputs","eventlog_filtered.csv")),
+                       0.25)
+```
+
+::: {#fig-cluster0 layout-ncol="2"}
+![5 most frequent traces](./outputs/trace_0.png){#fig-traceexplorer0}
+
+![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_0.png){#fig-processmap0}
+
+Cluster 0
+:::
+
+::: {#fig-cluster2 layout-ncol="2"}
+![5 most frequent traces](./outputs/trace_2.png){#fig-traceexplorer2}
+
+![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_2.png){#fig-processmap2}
+
+Cluster 2
+:::
+
+::: {#fig-cluster3 layout-ncol="2"}
+![5 most frequent traces](./outputs/trace_3.png){#fig-traceexplorer3}
+
+![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_3.png){#fig-processmap3}
+
+Cluster 3
+:::
+
+
+::: {#fig-cluster4 layout-ncol="2"}
+![5 most frequent traces](./outputs/trace_4.png){#fig-traceexplorer4}
+
+![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_4.png){#fig-processmap4}
+
+Cluster 4
+:::
+
+::: {#fig-cluster6 layout-ncol="2"}
+![5 most frequent traces](./outputs/trace_6.png){#fig-traceexplorer6}
+
+![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_6.png){#fig-processmap6}
+
+Cluster 6
+:::
+
+
+::: {#fig-cluster9 layout-ncol="2"}
+![5 most frequent traces](./outputs/trace_9.png){#fig-traceexplorer9}
+
+![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_9.png){#fig-processmap9}
+
+Cluster 9
+:::
+
+::: {#fig-cluster10 layout-ncol="2"}
+![5 most frequent traces](./outputs/trace_10.png){#fig-traceexplorer10}
+
+![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_10.png){#fig-processmap10}
+
+Cluster 10
+:::
+
+
+::: {#fig-cluster12 layout-ncol="2"}
+![5 most frequent traces](./outputs/trace_12.png){#fig-traceexplorer12}
+
+![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_12.png){#fig-processmap12}
+
+Cluster 12
+:::
+
+### Conformache checking
+
+Once traces are clusterized, with a boxplot is easy to show that each cluster's behavior with respect to the treatment guides is different. Comparing traces with @fig-petrinet, calculating the fitness of each trace and grouping by cluster results in @fig-fitness_by_cluster.
+
+```{python}
+#| label: fitness boxplot
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+conformance(xes_file='./outputs/eventlog_filtered.xes',
+            pn_file='./inputs/FRAG_HBA.pnml',
+            output_png='./outputs/fitness_by_cluster.png')
+```
+
+![Traces fitness distribution by cluster](./outputs/fitness_by_cluster.png){#fig-fitness_by_cluster fig-align="center" width="80%"}
+
+### Decision mining
+
+In @fig-decision_tree is shown how patients' age and sex would influence in prescribing three drugs based treatment. More features could have been added but for simplicity we included those two.
+
+```{python}
+#| label: create decision tree
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+
+patients_df = pd.read_csv('./inputs/dm_patients_df.csv')
+baseline = datetime.strptime('2012-01-01', "%Y-%m-%d")
+patients_df['age'] = [(baseline-
+                       datetime.strptime(
+                       patients_df['month_nac'][n],"%Y-%m")
+                        ).days//365  for n in  range(len(patients_df))]
+decision_tree_pn_place(patients_df)
+```
+
+![Decision tree of place9 (triple treatment prescription step)](./outputs/decision_tree.png){#fig-decision_tree fig-align="center" width="80%"}
+
+![Features importance in place9 (triple treatment prescription step)](./outputs/barplot_features_importance.png){#fig-features_relevance fig-align="center" width="80%"}
+
+### Multivariate logistic regression model with fitness
+
+Using fitness as treatment adherence measuring and some static characteristics we made a multivariate logistic regression model to predict some interesting outcome. In the next example, for simplicity, we choose fiteness, age, sex and copayment to try to predict mortality, and the summary of it is:
+
+```{r}
+#| label: Logistic regression model
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+
+df_fitness <- read.csv(here("outputs","fitness_by_cluster.csv"))
+df_patient <- read.csv(here("inputs","dm_patients_df.csv"))
+df_patient$month_nac <- ymd(paste0(df_patient$month_nac, "-01"))
+df_patient$age <- interval(df_patient$month_nac, '2012-01-01') %/% years(1)
+df <- merge(x=df_patient[c('patient_id','age','sex','copayment','death')],
+            y=df_fitness[c('ID','aligned_fitness','cluster')],  
+            by.x=c("patient_id"), 
+            by.y=c("ID"),
+            all.x=TRUE)
+model <- glm(death ~ age + sex + copayment + aligned_fitness,
+             data = df, family = binomial)
+summary(model)
+```
+
