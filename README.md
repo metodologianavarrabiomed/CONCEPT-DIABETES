@@ -1,8 +1,5 @@
 ![Logo of the project](https://cienciadedatosysalud.org/wp-content/uploads/CONCEPT-h-color.png)
 
-
-![Logo of the project](https://cienciadedatosysalud.org/wp-content/uploads/CONCEPT-h-color.png)
-
 # CONCEPT-DIABETES 
 CONCEPT-DIABETES is a project that focuses on assessing the effectiveness of a set of clinical practice actions and quality improvement strategies at different levels (patient-level, health-care provider level and health system level) on the management and health results of patients with type 2 diabetes (T2D) using Real World Data (RWD) routinely collected by five Spanish Regional Health Systems.
 
