@@ -14,6 +14,7 @@ CONCEPT-DIABETES is a project that focuses on assessing the effectiveness of a s
 .
 ├── Algoritmo_DM2_ENG_2023.pdf
 ├── analytical_pipeline.qmd
+├── analytical_pipeline.html
 ├── inputs
 │   ├── diabetes_drugs.csv
 │   ├── dm_cmbd_df.csv
@@ -21,9 +22,9 @@ CONCEPT-DIABETES is a project that focuses on assessing the effectiveness of a s
 │   ├── dm_patients_df.csv
 │   ├── dm_treat_df.csv
 │   └── FRAG_HBA.pnml
+├── LICENSE
 ├── outputs
 │   ├── activity_presence.png
-│   ├── analytical_pipeline.html
 │   ├── barplot_features_importance.png
 │   ├── decision_tree.png
 │   ├── dendogram.png
