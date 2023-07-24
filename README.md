@@ -4,7 +4,7 @@
 CONCEPT-DIABETES is a project that focuses on assessing the effectiveness of a set of clinical practice actions and quality improvement strategies at different levels (patient-level, health-care provider level and health system level) on the management and health results of patients with type 2 diabetes (T2D) using Real World Data (RWD) routinely collected by five Spanish Regional Health Systems.
 
 ### CONCEPT Project Coordinator
-**[Berta Ibáñez Beroiz MD PhD](https://orcid.org/0000-0002-7797-4845)**
+**[Berta Ibáñez Beroiz PhD](https://orcid.org/0000-0002-7797-4845)**
 
 
 ## Analytical pipeline
