@@ -567,7 +567,7 @@ def calculate_dm_LDA(traces,T=10):
 
 Once the distance matrix is obtained, we can proceed with the clustering. Each clustering method has its characteristics and its peculiarities, so we cannot choose whatever method we want. For example, we have to consider that our distances do not comply with the triangle inequality so they cannot be considered metrics. Another consideration is that we have a distance matrix and not a data frame in which we apply directly the method. A hierarchical clustering algorithm seems to be a good choice in our case because in addition to the above it allows to choose the optimal number of clusters.
 
-The next box contains two different functions to choose the optimal number of clusters:
+The next code box contains two different functions to choose the optimal number of clusters:
 
 ```{python}
 #| label: Functions to choose optimal number of clusters
