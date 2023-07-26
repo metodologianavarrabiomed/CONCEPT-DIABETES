@@ -92,6 +92,7 @@ from datetime import  datetime
 from datetime import timedelta
 
 ```
+
 The R libraries used are:
 
 ```{r}
@@ -112,9 +113,10 @@ pacman::p_load(tidyverse,
               here)
 
 ```
+
 ### Data preprocessing and event log creation
 
-For using process mining an event log is needed. The sort of functions below take data model's treatment and parameter tables to create an event log of glycated hemoglobin measures and treatment of patients. Glycated hemoglobin measurement events are divided into two different states, those that have a value inferior that 7.5 and the others. Since they are measurements their events do not have duration. In the case of treatments on the other hand a duration period exists. For treatments events definition it is based on drugs dispensing and a fixed time period after the dispensing date, so that the treatment is defined from dispensing date until the fixed period of time after. Functions below make an event log taking some assumptions such as that each dispensation should last 30 days. 
+For using process mining an event log is needed. The sort of functions below take data model's treatment and parameter tables to create an event log of glycated hemoglobin measures and treatment of patients. Glycated hemoglobin measurement events are divided into two different states, those that have a value inferior that 7.5 and the others. Therefore, these events do not have any duration. In the case of treatments on the other hand a duration period exists. For treatments events definition it is based on drugs dispensing and a fixed time period after the dispensing date of the last dispensing date of the same drug if the dispensing is regularly produced . Functions below make an event log taking some assumptions such as that each dispensation should last 30 days.
 
 ```{python, warning: FALSE}
 #| label: Preprocessing functions
@@ -455,12 +457,9 @@ def preprocessing(treat_df_path='./inputs/dm_treat_df.csv',
   evlog_2.to_csv(output_file)
 ```
 
-
-
-
 ### Distances
 
-One of the most important aim of process mining is to show and explain the processes. However, the great variety of traces does not allow us to draw any clear conclusions and it is often necessary to simplify our data. Another option that we can do before simplifying, to avoid the excessive losing of information and give another perspective to the analysis, is to cluster the traces and to analyze them by cluster. Doe to do that we have to measure somehow the differences between the traces, the distance between them. This is not evident if we take into account that traces are categorical sequences of different lengths. Nevertheless, there are some distances that we can use to this task: edit distances, vector term similarity, LDA based distances, dynamic time warping, embedding based distances... Some of them are shown below as functions to calculate the distance matrix of traces:
+One of the most important aim of process mining is to show and explain the processes. However, the great variety of traces does not allow us to draw any clear conclusions and it is often necessary to simplify our data. Another option that we can do before simplifying, to avoid the excessive losing of information and give another perspective to the analysis, is to cluster the traces and to analyze them by cluster. To do that we have to measure somehow the differences between the traces, the distance between them. This is not evident if we take into account that traces are categorical sequences of different lengths. Nevertheless, there are some distances that we can use to this task: edit distances, vector term similarity, LDA based distances, dynamic time warping, embedding based distances... Some of them are shown below as functions to calculate the distance matrix of traces:
 
 ```{python}
 #| label: Distance matrix functions
@@ -566,7 +565,7 @@ def calculate_dm_LDA(traces,T=10):
 
 ### Clustering
 
-Once the distance matrix is obtained, now we can proceed with the clustering. Each clustering method has its characteristics and its peculiarities, so we cannot choose whatever method we want. For example, we have to consider that our distances do not comply with the triangle inequality so they cannot be considered metrics. Another consideration is that we have a distance matrix and not a data frame in which we apply directly the method. A hierarchical clustering algorithm seems to be a good choice in our case because in addition to the above it allows to choose the optimal number of clusters.
+Once the distance matrix is obtained, we can proceed with the clustering. Each clustering method has its characteristics and its peculiarities, so we cannot choose whatever method we want. For example, we have to consider that our distances do not comply with the triangle inequality so they cannot be considered metrics. Another consideration is that we have a distance matrix and not a data frame in which we apply directly the method. A hierarchical clustering algorithm seems to be a good choice in our case because in addition to the above it allows to choose the optimal number of clusters.
 
 The next box contains two different functions to choose the optimal number of clusters:
 
@@ -866,6 +865,7 @@ def trace_explorer(evlog_file='./outputs/eventlog.xes',top_k=5, id_col='ID',
       color_dict = update_color_dict(color_dict, data_dict)
       trace_plotter(data_dict,color_dict,acronym,
                     './outputs/trace_%i.png' % clust)
+  return color_dict
 
 ```
 
@@ -911,7 +911,7 @@ make_process_map <- function(log,t_freq,output_file){
                 render = T) %>% 
     export_svg %>% 
     charToRaw %>%
-    rsvg_png (output_file,width=5000)
+    rsvg_png (output_file,width=2000)
 }
 
 process_map_by_cluster <- function(evLog,t_freq){
@@ -926,7 +926,7 @@ process_map_by_cluster <- function(evLog,t_freq){
 
 ### Conformance checking
 
-Conformance checking is a technique used to check process compliance by comparing event logs for a discovered process with the existing reference model (target model) of the same process. Basing on the DM2 treatment algorithm previous shown we created the next Petri Net that is going to be useful as treatment guidelines in reference to glycated hemoglobin measures.
+Conformance checking is a technique used to check process compliance by comparing event logs for a discovered process with the existing reference model (target model) of the same process. Basing on the DM2 treatment algorithm previous shown we created the next Petri Net that is going to be useful as treatment guidelines in reference to glycated hemoglobin measures to patients with frailty.
 
 ![DM2 Treatment Algorithm's interpretation to patients with frailty in Petri Net format](petri_net.png){#fig-petrinet fig-align="center" style="width:800px;height:350px"}
 
@@ -955,14 +955,14 @@ def id2fitness(log ,net, initial_marking, final_marking, clust_col='cluster',
   clust_l = []
   for name in set(log['case:concept:name']):
       log2 = log.drop(log.index[log['case:concept:name'] !=name])
-      ini = log2.iloc[0,:]
+      ini = log2.iloc[0,:].copy()
       ini[date_col] =  ini['time:timestamp'] = ini[date_col
                                                     ]-timedelta(days=1)
       ini[ev_col] = ini['concept:name'] = 'INI'
       ini['@@index'] = ini['@@index']-1
       ini['actins'] = ini['actins']-1
   
-      fin = log2.iloc[-1,:]
+      fin = log2.iloc[-1,:].copy()
       fin[date_col] =  fin['time:timestamp'] = fin[date_col
                                                     ]+timedelta(days=1)
       fin[ev_col] = fin['concept:name'] = 'FIN'
@@ -1067,17 +1067,17 @@ def decision_tree_pn_place(patients_df,
   '''                           
   log = pm4py.read_xes(event_log_file)    
   log = log[log['cycle']=='start']    
-  log.index = range(len(log))
   log = log[['concept:name','time:timestamp','case:concept:name']]
+  log = log.sort_values(by = ['case:concept:name','time:timestamp' ],
+                              ascending = [True, True])
+  log.index = range(len(log))
   for name in set(log['case:concept:name']):
       log2 = log.drop(log.index[log['case:concept:name'] !=name])
-      log2 = log2.sort_values(by = ['case:concept:name','time:timestamp' ],
-                              ascending = [True, True])
-      ini = log2.iloc[0,:]
+      ini = log2.iloc[0,:].copy()
       ini['time:timestamp'] = ini['time:timestamp']-timedelta(days=1)
       ini['concept:name'] = 'INI'
   
-      fin = log2.iloc[-1,:]
+      fin = log2.iloc[-1,:].copy()
       fin['time:timestamp'] = fin['time:timestamp']+timedelta(days=1)
       fin['concept:name'] = 'FIN'
   
@@ -1085,6 +1085,7 @@ def decision_tree_pn_place(patients_df,
       log = log.append(fin )
       
   log = log.sort_values(['case:concept:name','time:timestamp'])
+  log.index = range(len(log))
 
   features_list += [col_id]
   patients_df = patients_df[features_list]
@@ -1094,11 +1095,11 @@ def decision_tree_pn_place(patients_df,
   net, initial_marking, final_marking = pm4py.read_pnml(pn_file)
   
   initial_marking = Marking()
-  initial_marking[list(net.places)[[str(p
-  ) for p in net.places].index(ini_place)]] = 1
+  initial_marking[list(net.places)[[str(p) 
+                  for p in net.places].index(ini_place)]] = 1
   final_marking = Marking()
-  final_marking[list(net.places)[[str(p
-  ) for p in net.places].index(fin_place)]] = 1
+  final_marking[list(net.places)[[str(p) 
+                for p in net.places].index(fin_place)]] = 1
   
   X, y, class_names = decision_mining.apply(log_patients,
                                             net,
@@ -1131,6 +1132,7 @@ def decision_tree_pn_place(patients_df,
 The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. Logistic regression models can be used to predict different outcomes such as probability of hospitalization, treatment complication probability or probability of death, while as the same time a treatment adherence is analyzed. For that a variable that measures treatment adherence is needed for example fitness of patients' traces.
 
 ## Results
+
 ### Event log's creation and description
 
 ```{python}
@@ -1142,7 +1144,6 @@ The link between guideline adherence, in terms of performed process measures, an
 preprocessing()
                   
 ```
-
 
 ```{python}
 #| label: event log
@@ -1269,6 +1270,7 @@ dendogram(dm)
 kelbow(dm,elbow_metric='distortion',locate_elbow=False)
 kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
 ```
+
 ![Distance matrix's dendogram](./outputs/dendogram.png){#fig-dendogram fig-align="center" width="80%"}
 
 ```{python}
@@ -1288,7 +1290,7 @@ Choosing 18 as the optimal number of clusters, too small clusters appear. Exclud
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-trace_explorer(evlog_file='./outputs/eventlog_filtered.xes')
+col_dic = trace_explorer(evlog_file='./outputs/eventlog_filtered.xes')
 ```
 
 ```{r}
@@ -1325,7 +1327,6 @@ Cluster 2
 Cluster 3
 :::
 
-
 ::: {#fig-cluster4 layout-ncol="2"}
 ![5 most frequent traces](./outputs/trace_4.png){#fig-traceexplorer4}
 
@@ -1342,7 +1343,6 @@ Cluster 4
 Cluster 6
 :::
 
-
 ::: {#fig-cluster9 layout-ncol="2"}
 ![5 most frequent traces](./outputs/trace_9.png){#fig-traceexplorer9}
 
@@ -1358,7 +1358,6 @@ Cluster 9
 
 Cluster 10
 :::
-
 
 ::: {#fig-cluster12 layout-ncol="2"}
 ![5 most frequent traces](./outputs/trace_12.png){#fig-traceexplorer12}
@@ -1433,4 +1432,3 @@ model <- glm(death ~ age + sex + copayment + aligned_fitness,
              data = df, family = binomial)
 summary(model)
 ```
-
