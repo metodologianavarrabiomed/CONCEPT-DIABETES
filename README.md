@@ -67,7 +67,7 @@ CONCEPT-DIABETES is a project that focuses on assessing the effectiveness of a s
 - **dm_param_df.csv**: Synthetic data of parameters table compliant with the Common Data Model.
 - **dm_patients_df.csv**: Synthetic data of patients compliant with the Common Data Model.
 - **dm_treat_df.csv**: Synthetic data of treatments compliant with the Common Data Model.
-- **FRAG_HBA.pnml**: DM2 Treatment Algorithm's interpretation to patients with frailty in Petri Net format.
+- **FRAG_HBA.pnml**: DM2 Treatment Algorithm's interpretation to patients with frailty in Petri net format.
 
 ## R dependencies
 Version of Rbase used: **4.2.3**
