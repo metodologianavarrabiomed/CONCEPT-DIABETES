@@ -127,8 +127,8 @@ quarto analytical_pipeline.qmd
 
 ## How to contribute
 
-- Issue tracker: https://github.com/cienciadedatosysalud/CONCEPT-STROKE/issues
-- Repository: https://github.com/cienciadedatosysalud/CONCEPT-STROKE
+- Issue tracker: https://github.com/metodologianavarrabiomed/CONCEPT-DIABETES/issues
+- Repository: https://github.com/metodologianavarrabiomed/CONCEPT-DIABETES
 
  
 <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" ><img src="https://img.shields.io/badge/license-CC--BY%204.0-lightgrey" alt="License: CC-BY 4.0"></a>
