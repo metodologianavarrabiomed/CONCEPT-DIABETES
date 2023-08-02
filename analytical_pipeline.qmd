@@ -1,6 +1,6 @@
 ---
 title: "CONCEPT DIABETES: Analytical pipeline"
-author: Ina Oscoz
+author: Ignacio Oscoz Villanueva
 editor: visual
 crossref:
   lof-title: "List of Figures"
@@ -65,10 +65,41 @@ Treatment decisions are based on glycated hemoglobin measurements. In this conte
 ## Running code
 
 The python libraries used are:
-
-```{python, warning: FALSE}
-#| label: Load python packages
+```{python}
+#| label: Load python packages (to show)
+#| eval: FALSE
+#| echo: TRUE
 #| warning: FALSE
+#| output: FALSE
+import sys
+import pm4py, datetime, subprocess
+import pandas as pd
+import numpy as np
+import itertools
+import matplotlib.pyplot as plt
+import textdistance
+import gensim.corpora as corpora
+from tqdm import trange, tqdm
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import fcluster, linkage, dendrogram
+from sklearn.cluster import AgglomerativeClustering 
+from sklearn.feature_extraction.text import TfidfVectorizer
+from yellowbrick.cluster import KElbowVisualizer
+from pm4py.objects.petri_net.obj import PetriNet, Marking
+from pm4py.visualization.decisiontree import visualizer as tree_visualizer
+from pm4py.algo.decision_mining import algorithm as decision_mining
+from pm4py.visualization.petri_net import visualizer
+from gensim.models import LdaModel
+from datetime import  datetime
+from datetime import timedelta
+
+```
+```{python}
+#| label: Load python packages
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
 import sys
 import pm4py, datetime, subprocess
 import pandas as pd
@@ -226,7 +257,6 @@ def evlog_transformation(df):
   evlog = pd.DataFrame()
   id_list = list(set(df['patient_id']))
   for id in tqdm(id_list):
-      # id = 'AA0225JC'
       nid = list(df['nid'][df['patient_id']==id])[0]
       date_min = min(set(df['date'][df['patient_id']==id]))
       date_max = max(set(df['date'][df['patient_id']==id]))
@@ -301,8 +331,14 @@ def evlog_correction(df):
     df (dataframe): corrected event log
   '''
 
-  #corrección para eliminar eventos despues de medición de hemoglobina que 
-  #son la continuación del tratamiento anterior y no el nuevo tratamiento
+  #correction to eliminate events after hemoglobin measurement that are
+  #the continuation of the previous treatment and not the new treatment.
+  #Example: If a patient has 'A' treatment and because of hemoglobin's
+  #         measure they change their treatment to 'B', originally their
+  #         trace could appear as A>measure>A+B>B, but the true trace
+  #         should be A>measure>B. Therefore, in a fixed period time 
+  #         after each measurement, if we detect that mistake we delete
+  #         it.
   t_dif = timedelta(days=14)
   for t in range(3):
       df_ = df[df['cycle']=='start']
@@ -321,9 +357,11 @@ def evlog_correction(df):
                           # trace[i-1]!=trace[i+2]) and (
                           trace_t[i+2]-trace_t[i+1]<t_dif):
                                
-                          actin = int(df_['actins'][np.logical_and(df_['patient_id']==id,
-                                              df_['date']==trace_t[i+1])])
-                          df = df.drop(list(df[df['actins']==actin].index))
+                          actin = int(df_['actins'][
+                            np.logical_and(df_['patient_id']==id,
+                                           df_['date']==trace_t[i+1])])
+                          df = df.drop(
+                            list(df[df['actins']==actin].index))
   
   
                           trace_ = trace
@@ -355,7 +393,12 @@ def evlog_correction(df):
                       continue
   
   
-  #corrección para transiciones de eventos A+B >A+B+C >A+C ==> A+B>A+C
+  #correction to delete transition treatments.
+  #Example: If a patient has 'A' treatment and because of a unknown 
+  #         reason they change their treatment to 'B', originally their
+  #         trace could appear as A>A+B>B, but the true trace should be
+  #         A>B. Therefore, if that sequence occurs in a fixed period
+  #         of time, we delete the transition treatment.
   for id in set(df['patient_id']):
       status = True
       while status:
@@ -398,7 +441,15 @@ def evlog_correction(df):
   
   
   
-  #compactación de eventos
+  #event compaction.
+  #Example: If a patient has 'A' treatment and they are dispensing 'A'
+  #         drug multiple times, their trace could appear as A>A>A>A, 
+  #         but the true trace should appear as 'A' treatment lasting
+  #         its corresponding time. Therefore, if the difference between
+  #         the last day and the first day of two consecutive same
+  #         treatments is less than a fixed period of time, two events
+  #         are jointed in one with the first day of the first event as 
+  #         initial date and last day of the last event as the end date.
   for id in set(df['patient_id']):
       status = True
       while status:
@@ -465,7 +516,7 @@ One of the most important aim of process mining is to show and explain the proce
 #| label: Distance matrix functions
 
 #######   EDIT DISTANCE   ####### 
-def calculate_dm_ED(traces,measure):
+def calculate_dm_ED(traces,measure_f):
     '''Calculate distance matrix with some edit distance.
     
     Args:
@@ -480,11 +531,11 @@ def calculate_dm_ED(traces,measure):
     traces_e = [[id2word.token2id[t[n]] for n in range(len(t))] for t in traces]
     len_t = len(traces_e)
     dm = np.zeros((len_t,len_t), dtype = float)
-    same = measure(traces_e[0],traces_e[0])
+    same = measure_f(traces_e[0],traces_e[0])
     for i in trange(len_t):
         dm[i][i] = same
         for j in range(i+1,len_t):
-            d_ij = measure(traces_e[i],traces_e[j])
+            d_ij = measure_f(traces_e[i],traces_e[j])
             dm[i][j] = d_ij
             dm[j][i] = d_ij
     if same == 1:
@@ -786,28 +837,36 @@ def trace_plotter(data_dict,color_dict,acronym, output_file, font_size=10,
         ax.add_patch(plt.Rectangle((col - 0.5, row - 0.45), 1, 0.9,
                                     facecolor=color_dict[acr],
                                     edgecolor='white'))
-        ax.text(col, row, acr, ha='center', va='center', color='white',
-                fontsize = font_size, fontweight='bold')
-        ax.add_patch(plt.Rectangle((percentage_position -percentage_box_width*2.5,
-                                    row - 0.45), percentage_box_width, 0.9,
-                                    facecolor='grey', edgecolor='white'))
+        ax.text(col, 
+                row, 
+                acr, 
+                ha='center', 
+                va='center', 
+                color='white',
+                fontsize = font_size, 
+                fontweight='bold')
+        ax.add_patch(plt.Rectangle((
+          percentage_position -percentage_box_width*2.5,
+          row - 0.45), percentage_box_width, 0.9,
+          facecolor='grey', edgecolor='white'))
         ax.text(percentage_position-percentage_box_width*2,
                 row,
                 f'{percentage:.2f}%',
                 ha='center',
                 va='center',
                 color='white',
-                fontsize = font_size)
-        ax.add_patch(plt.Rectangle((percentage_position - percentage_box_width*1.5,
-                                    row - 0.45), percentage_box_width, 0.9,
-                                    facecolor='grey', edgecolor='white'))
+                fontsize = font_size+2)
+        ax.add_patch(plt.Rectangle((
+          percentage_position - percentage_box_width*1.5,
+          row - 0.45), percentage_box_width, 0.9,
+          facecolor='grey', edgecolor='white'))
         ax.text(percentage_position-percentage_box_width,
                 row,
                 f'{cases}',
                 ha='center',
                 va='center',
                 color='white',
-                fontsize = font_size)
+                fontsize = font_size+4)
         ax.add_patch(plt.Rectangle((percentage_position - percentage_box_width*0.5, 
                                     row - 0.45), percentage_box_width, 0.9,
                                     facecolor='grey', edgecolor='white'))
@@ -817,21 +876,23 @@ def trace_plotter(data_dict,color_dict,acronym, output_file, font_size=10,
                 ha='center',
                 va='center',
                 color='white',
-                fontsize = font_size)
+                fontsize = font_size+2)
       
   ax.set_xlim(0.5, percentage_position+0.5)
   ax.set_xticks(range(1, int(percentage_position-1)))
-  ax.set_ylabel('Traces',fontsize = font_size)
+  ax.set_ylabel('Traces',fontsize = font_size+3)
   ax.set_ylim(len(data_dict["Trace"]) + 0.45, 0.55) # y-axis is reversed
   ax.set_yticks([])
-  ax.set_xlabel('Activities',fontsize = font_size)
+  ax.set_xlabel('Activities',fontsize = font_size+3)
   
   handles = [plt.Rectangle((0, 0), 0, 0, facecolor=color_dict[acr],
                             edgecolor='black', label=acronym[acr])
               for acr in acronym if acr in set(
                 itertools.chain.from_iterable(data_dict['Trace']))]
-  ax.legend(handles=handles, bbox_to_anchor=[1.02, 1.02], loc='upper left',
-            fontsize = font_size+2)
+  ax.legend(handles=handles, 
+            bbox_to_anchor=[1.02, 1.02],
+            loc='upper left',
+            fontsize = font_size+6)
   for dir in ['left', 'right', 'top']:
       ax.spines[dir].set_visible(False)
   plt.tight_layout()
@@ -926,7 +987,7 @@ process_map_by_cluster <- function(evLog,t_freq){
 
 ### Conformance checking
 
-Conformance checking is a technique used to check process compliance by comparing event logs for a discovered process with the existing reference model (target model) of the same process. Basing on the DM2 treatment algorithm previous shown we created the next Petri Net that is going to be useful as treatment guidelines in reference to glycated hemoglobin measures to patients with frailty.
+Conformance checking is 'A' technique used to check process compliance by comparing event logs for a discovered process with the existing reference model (target model) of the same process. Basing on the DM2 treatment algorithm previous shown, with a software called Carassius , we created the next Petri Net that is going to be useful as treatment guidelines in reference to glycated hemoglobin measures to patients with frailty.
 
 ![DM2 Treatment Algorithm's interpretation to patients with frailty in Petri Net format](petri_net.png){#fig-petrinet fig-align="center" style="width:800px;height:350px"}
 
@@ -1041,7 +1102,7 @@ def conformance(xes_file,pn_file,ini_place='place11',fin_place='place10',
 
 ### Decision mining
 
-Decision mining allows to analyze the event transitions in different part of processes. With another words, we can measure patients' characteristics or their relevance in a specific place of the passed petri net. The next function makes a decision tree explaining how patients characteristics are taking into account and a boxplot to show the relevance of each feature in the decision tree.
+Decision mining allows to analyze the event transitions in different part of processes. With another words, we can measure patients' characteristics or their relevance in a specific place of the passed petri net. The next function makes a decision tree explaining how patients characteristics are taking into account. Moreover it shows a boxplot of the relevance of each feature in the decision tree obtained with mean decrease impurity which calculates each feature importance as the sum over the number of splits (across all tress) that include the feature, proportionally to the number of samples it splits.
 
 ```{python}
 #| label: Decision mining
@@ -1282,7 +1343,7 @@ kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
 clust(18,dm,df_,id2trace,patients)
 ```
 
-Choosing 18 as the optimal number of clusters, too small clusters appear. Excluding those clusters of less than 30 traces, to avoid having clusters of low representation, process maps and the most frequent traces of the clusters that remain are the followings.
+Choosing 18 as the optimal number of clusters, too small clusters appear. Excluding those clusters of less than 30 traces, to avoid having clusters of low representation, process maps and the most frequent traces of the eight clusters that remain are the followings.
 
 ```{python}
 #| label: trace explorer
@@ -1303,73 +1364,73 @@ process_map_by_cluster(load_csv_log(here("outputs","eventlog_filtered.csv")),
                        0.25)
 ```
 
-::: {#fig-cluster0 layout-ncol="2"}
+::: {#fig-cluster0 layout-ncol="2" .column-page}
 ![5 most frequent traces](./outputs/trace_0.png){#fig-traceexplorer0}
 
-![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_0.png){#fig-processmap0}
+![Process map covering 25% most frequent traces](./outputs/evlog_pm_cluster_0.png){#fig-processmap0}
 
 Cluster 0
 :::
 
-::: {#fig-cluster2 layout-ncol="2"}
+::: {#fig-cluster2 layout-ncol="2" .column-page}
 ![5 most frequent traces](./outputs/trace_2.png){#fig-traceexplorer2}
 
-![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_2.png){#fig-processmap2}
+![Process map covering 25% most frequent traces](./outputs/evlog_pm_cluster_2.png){#fig-processmap2}
 
 Cluster 2
 :::
 
-::: {#fig-cluster3 layout-ncol="2"}
+::: {#fig-cluster3 layout-ncol="2" .column-page}
 ![5 most frequent traces](./outputs/trace_3.png){#fig-traceexplorer3}
 
-![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_3.png){#fig-processmap3}
+![Process map covering 25% most frequent traces](./outputs/evlog_pm_cluster_3.png){#fig-processmap3}
 
 Cluster 3
 :::
 
-::: {#fig-cluster4 layout-ncol="2"}
+::: {#fig-cluster4 layout-ncol="2" .column-page}
 ![5 most frequent traces](./outputs/trace_4.png){#fig-traceexplorer4}
 
-![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_4.png){#fig-processmap4}
+![Process map covering 25% most frequent traces](./outputs/evlog_pm_cluster_4.png){#fig-processmap4}
 
 Cluster 4
 :::
 
-::: {#fig-cluster6 layout-ncol="2"}
+::: {#fig-cluster6 layout-ncol="2" .column-page}
 ![5 most frequent traces](./outputs/trace_6.png){#fig-traceexplorer6}
 
-![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_6.png){#fig-processmap6}
+![Process map covering 25% most frequent traces](./outputs/evlog_pm_cluster_6.png){#fig-processmap6}
 
 Cluster 6
 :::
 
-::: {#fig-cluster9 layout-ncol="2"}
+::: {#fig-cluster9 layout-ncol="2" .column-page}
 ![5 most frequent traces](./outputs/trace_9.png){#fig-traceexplorer9}
 
-![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_9.png){#fig-processmap9}
+![Process map covering 25% most frequent traces](./outputs/evlog_pm_cluster_9.png){#fig-processmap9}
 
 Cluster 9
 :::
 
-::: {#fig-cluster10 layout-ncol="2"}
+::: {#fig-cluster10 layout-ncol="2" .column-page}
 ![5 most frequent traces](./outputs/trace_10.png){#fig-traceexplorer10}
 
-![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_10.png){#fig-processmap10}
+![Process map covering 25% most frequent traces](./outputs/evlog_pm_cluster_10.png){#fig-processmap10}
 
 Cluster 10
 :::
 
-::: {#fig-cluster12 layout-ncol="2"}
+::: {#fig-cluster12 layout-ncol="2" .column-page}
 ![5 most frequent traces](./outputs/trace_12.png){#fig-traceexplorer12}
 
-![Process map covering 0.25 most frequent traces](./outputs/evlog_pm_cluster_12.png){#fig-processmap12}
+![Process map covering 25% most frequent traces](./outputs/evlog_pm_cluster_12.png){#fig-processmap12}
 
 Cluster 12
 :::
 
-### Conformache checking
+### Conformace checking
 
-Once traces are clusterized, with a boxplot is easy to show that each cluster's behavior with respect to the treatment guides is different. Comparing traces with @fig-petrinet, calculating the fitness of each trace and grouping by cluster results in @fig-fitness_by_cluster.
+Once traces are clusterized, with a boxplot is easy to show that each cluster's behavior with respect to the treatment guides is different. Comparing traces with @fig-petrinet, calculating the fitness (1 being perfect match with the petri net and 0 being the lowest possible fitness) of each trace and grouping by cluster results in @fig-fitness_by_cluster.
 
 ```{python}
 #| label: fitness boxplot
@@ -1386,7 +1447,7 @@ conformance(xes_file='./outputs/eventlog_filtered.xes',
 
 ### Decision mining
 
-In @fig-decision_tree is shown how patients' age and sex would influence in prescribing three drugs based treatment. More features could have been added but for simplicity we included those two.
+In @fig-decision_tree is shown how patients' age and sex (being 0 females' value and 1 males' one) would influence in prescribing three drugs based treatment. More features could have been added but for simplicity we included those two.
 
 ```{python}
 #| label: create decision tree
@@ -1405,6 +1466,8 @@ decision_tree_pn_place(patients_df)
 ```
 
 ![Decision tree of place9 (triple treatment prescription step)](./outputs/decision_tree.png){#fig-decision_tree fig-align="center" width="80%"}
+
+Variables relevance in the previous decision tree is indicated in @fig-features_relevance. As we can see, categorical variables are divided into as many parts as the number of categories there are and variables' total relevance is the sum of its categories' values.
 
 ![Features importance in place9 (triple treatment prescription step)](./outputs/barplot_features_importance.png){#fig-features_relevance fig-align="center" width="80%"}
 
