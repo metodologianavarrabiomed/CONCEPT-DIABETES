@@ -16,8 +16,11 @@ CONCEPT-DIABETES is a project that focuses on assessing the effectiveness of a s
 ├── analytical_pipeline.qmd
 ├── analytical_pipeline.html
 ├── inputs
+│   ├── CIE9.csv
+│   ├── CIE10.csv
 │   ├── diabetes_drugs.csv
 │   ├── dm_cmbd_df.csv
+│   ├── dm_comorb.csv
 │   ├── dm_param_df.csv
 │   ├── dm_patients_df.csv
 │   ├── dm_treat_df.csv
@@ -28,6 +31,11 @@ CONCEPT-DIABETES is a project that focuses on assessing the effectiveness of a s
 │   ├── barplot_features_importance.png
 │   ├── decision_tree.png
 │   ├── dendogram.png
+│   ├── dm_cmbd_df.csv
+│   ├── dm_comorb.csv
+│   ├── dm_param_df.csv
+│   ├── dm_patients_df.csv
+│   ├── dm_treat_df.csv
 │   ├── eventlog.csv
 │   ├── eventlog.xes
 │   ├── eventlog_filtered.csv
@@ -36,23 +44,25 @@ CONCEPT-DIABETES is a project that focuses on assessing the effectiveness of a s
 │   ├── evlog_pm_02.png
 │   ├── evlog_pm_1.png
 │   ├── evlog_pm_cluster_0.png
-│   ├── evlog_pm_cluster_10.png
-│   ├── evlog_pm_cluster_12.png
+│   ├── evlog_pm_cluster_1.png
 │   ├── evlog_pm_cluster_2.png
+│   ├── evlog_pm_cluster_5.png
 │   ├── evlog_pm_cluster_3.png
-│   ├── evlog_pm_cluster_4.png
-│   ├── evlog_pm_cluster_6.png
+│   ├── evlog_pm_cluster_7.png
+│   ├── evlog_pm_cluster_8.png
 │   ├── evlog_pm_cluster_9.png
+│   ├── evlog_pm_cluster_11.png
 │   ├── fitness_by_cluster.csv
 │   ├── fitness_by_cluster.png
 │   ├── trace_0.png
-│   ├── trace_10.png
-│   ├── trace_12.png
+│   ├── trace_1.png
 │   ├── trace_2.png
-│   ├── trace_3.png
-│   ├── trace_4.png
+│   ├── trace_5.png
+│   ├── trace_7.png
+│   ├── trace_8.png
 │   ├── trace_6.png
 │   └── trace_9.png
+│   └── trace_11.png
 ├── petri_net.png
 └── README.md
 
@@ -63,7 +73,10 @@ CONCEPT-DIABETES is a project that focuses on assessing the effectiveness of a s
 - **analytical_pipeline.qmd**: Quarto document containing the entire analytical pipeline (code, results and information on the analysis methodology followed).
 - **analytical_pipeline.html**: Output self-contained HTML file containing the analysis results and additional project information.
 - **diabetes_drugs.csv**: Table with diabetes drugs' information.
-- **dm_cmbd_df.csv**: Synthetic data of comorbidities table compliant with the Common Data Model.
+- **CIE9.csv**: Table with from CIE9 to CIAP2 translation information.
+- **CIE10.csv**: Table with from CIE10 to CIAP2 translation information.
+- **dm_cmbd_df.csv**: Synthetic data of hospitalizations table compliant with the Common Data Model.
+- **dm_comorb_df.csv**: Synthetic data of comorbidities table compliant with the Common Data Model.
 - **dm_param_df.csv**: Synthetic data of parameters table compliant with the Common Data Model.
 - **dm_patients_df.csv**: Synthetic data of patients compliant with the Common Data Model.
 - **dm_treat_df.csv**: Synthetic data of treatments compliant with the Common Data Model.
