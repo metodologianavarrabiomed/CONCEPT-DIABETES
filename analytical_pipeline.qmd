@@ -512,13 +512,27 @@ def calculate_dm_ED(traces,measure_f):
     id2word = corpora.Dictionary(traces)
 
     traces_e = [[id2word.token2id[t[n]] for n in range(len(t))] for t in traces]
+    traces_e_str = list(set([str(traces_e[i]
+                                 ) for i in range(len(traces_e))]))    
+    len_t_r = len(traces_e_str)
     len_t = len(traces_e)
-    dm = np.zeros((len_t,len_t), dtype = float)
+    dm = np.zeros((len_t,len_t), dtype = np.float32)
     same = measure_f(traces_e[0],traces_e[0])
-    for i in trange(len_t):
+    d_dic = {str(t):dict() for t in traces_e_str}
+    for i in range(len_t_r):
+        d_dic[traces_e_str[i]][traces_e_str[i]] = same
+        for j in range(i+1,len_t_r):
+            d_ij = measure_f(eval(traces_e_str[i]),
+                             eval(traces_e_str[j]))
+            d_dic[traces_e_str[i]][traces_e_str[j]] = d_ij
+            d_dic[traces_e_str[j]][traces_e_str[i]] = d_ij
+
+    for i in range(len_t):
         dm[i][i] = same
         for j in range(i+1,len_t):
-            d_ij = measure_f(traces_e[i],traces_e[j])
+            t_i = str(traces_e[i])
+            t_j = str(traces_e[j])            
+            d_ij = d_dic[t_i][t_j]
             dm[i][j] = d_ij
             dm[j][i] = d_ij
     if same == 1:
@@ -580,7 +594,7 @@ def calculate_dm_LDA(traces,T=10):
 
     sigma2 = np.asarray(np.matmul(sigma,sigma.T))
     len_t = len(traces)
-    dm = np.zeros((len_t,len_t), dtype = float)
+    dm = np.zeros((len_t,len_t), dtype = np.float32)
     
     same = sigma2[0][0]/np.sqrt(sigma2[0][0]*sigma2[0][0])
     for i in trange(len_t):
@@ -620,7 +634,7 @@ def dendogram(dm,output_png='./outputs/dendogram.png'):
       dm_condensed,
       method='average'
       )
-  sys.setrecursionlimit(10000)
+  sys.setrecursionlimit(100000)
   dn = dendrogram(matrix)
   sys.setrecursionlimit(1000)
   plt.title('Dendrogram')
@@ -1116,21 +1130,13 @@ def decision_tree_pn_place(patients_df,
   log = pm4py.read_xes(event_log_file)    
   log = log[log['cycle']=='start']    
   log = log[['concept:name','time:timestamp','case:concept:name']]
-  log = log.sort_values(by = ['case:concept:name','time:timestamp' ],
-                              ascending = [True, True])
-  log.index = range(len(log))
-  for name in set(log['case:concept:name']):
-      log2 = log.drop(log.index[log['case:concept:name'] !=name])
-      ini = log2.iloc[0,:].copy()
-      ini['time:timestamp'] = ini['time:timestamp']-timedelta(days=1)
-      ini['concept:name'] = 'INI'
-  
-      fin = log2.iloc[-1,:].copy()
-      fin['time:timestamp'] = fin['time:timestamp']+timedelta(days=1)
-      fin['concept:name'] = 'FIN'
-  
-      log = log.append(ini)
-      log = log.append(fin )
+  ini = min(list(log['time:timestamp']))-timedelta(days=1)
+  fin = max(list(log['time:timestamp']))+timedelta(days=1)
+  patients = list(set(log['case:concept:name']))
+  add_ini_fin = {'case:concept:name' : patients*2,
+                 'time:timestamp':[ini]*len(patients)+[fin]*len(patients),
+                 'concept:name':['INI']*len(patients)+['FIN']*len(patients)}
+  log = pd.concat([log,pd.DataFrame(add_ini_fin)])
       
   log = log.sort_values(['case:concept:name','time:timestamp'])
   log.index = range(len(log))
@@ -1303,8 +1309,8 @@ Once the set of traces to analyze are selected, there is a need to choose a dist
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-measure = textdistance.jaccard
-dm = calculate_dm_ED(traces,measure)
+measure_f = textdistance.jaccard
+dm = calculate_dm_ED(traces,measure_f)
 ```
 
 When distance matrix is acquired, we are able to cluster. However, the number of clusters have to be fixed before. With these figures we are able to conclude what could be the optimal number of clusters.
