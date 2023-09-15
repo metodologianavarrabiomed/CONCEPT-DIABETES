@@ -1,0 +1,10 @@
+test_name,description,other_specifications
+self_care_training,If the patient has attended a training on self_care or assume self care (autocuidados),recomended
+ocular_exam_PC,If the patient has had an ocular examination (ocular fundus) or retinography in Primary Care (fondo de ojo) ,required
+ocular_exam_ophthalmologist,If the patient has had an ocular examination by the ophthalmologist (retinography or ophthalmoscopy),required
+foot_exam,If the patient has had a physical examination for foot deformity or ulcer (pie diabético),required
+pedal_pulse,If the patient has had a screen for Peripheral arterial disease (PAD) with pedal pulses measures (pulso pedio-tibial),recomended
+left_ankle_brachial_index,If the patient has had mesured the ankle-brachial (ABI) pressure index (índice tobillo brazo izquierdos),recomended
+right_ankle_brachial_index,If the patient has had mesured the ankle-brachial (ABI) pressure index (índice tobillo brazo derechos),recomended
+monofilament_sensibility,If the patient has had the sensibility monofilament test (prueba de sensibilidad del pie diabético),recomended
+mood_disorder,"If the patient has been screened for depression, anxiety or eating disorder",recomended

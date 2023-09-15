@@ -1,0 +1,15 @@
+param_name,description,requirement_level
+sbp,systolic blood pressure (mm Hg),required
+dbp,diastolic blood pressure (mm Hg),required
+hba1c,HbA1c (% units),required
+hdl,High-Density Lipoprotein(mg/dL),required
+ldl,Low-Density Lipoprotein (mg/dL),required
+col,Total Cholesterol(mg/dL),recommended
+trgl,Triglicerides (mg/dL),required
+creat,"Creatinine (mg/dL). If  µmol/L, convert",required
+alb,"Albumina mg/dL. If different, convert",recommended
+indalbcr,Albumin to creatinine ratio mg/g crea,required
+filtglom,mL/min/1.73 m2,recommended
+height,m,required
+weight,kg,required
+bmi,kg/m2,recommended

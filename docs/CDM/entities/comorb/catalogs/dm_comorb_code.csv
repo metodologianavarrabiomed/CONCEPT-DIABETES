@@ -1,0 +1,637 @@
+comorb_code,comorb_codif,disease_short_name,disease_family
+042,ICD9,aids,AIDS/HIV
+043,ICD9,aids,AIDS/HIV
+044,ICD9,aids,AIDS/HIV
+070,ICD9,mld,Mild liver disease
+093,ICD9,pvd,Peripheral vascular disease
+140,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+141,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+142,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+143,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+144,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+145,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+146,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+147,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+148,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+149,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+150,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+151,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+152,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+153,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+154,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+155,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+156,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+157,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+158,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+159,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+160,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+161,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+162,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+163,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+164,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+165,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+166,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+167,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+168,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+169,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+170,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+171,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+172,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+174,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+175,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+176,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+177,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+178,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+179,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+180,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+181,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+182,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+183,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+184,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+185,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+186,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+187,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+188,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+189,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+190,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+191,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+192,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+193,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+194,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+195,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+196,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+197,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+198,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+199,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+200,ICD9,lymph,Lymphoma
+201,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+202,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+203,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+204,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+205,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+207,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+208,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+238,ICD9,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+240,ICD9,hypothy,Hypothyroidism
+243,ICD9,hypothy,Hypothyroidism
+244,ICD9,hypothy,Hypothyroidism
+246,ICD9,hypothy,Hypothyroidism
+250,ICD9,diabwoc,Diabetes without chronic complication
+251,ICD9,otherdiab,Other diabetes signs
+253,ICD9,fed,Fluid and electrolyte disorders
+260,ICD9,Weight loss,wloss
+261,ICD9,wloss,Weight loss
+262,ICD9,wloss,Weight loss
+263,ICD9,wloss,Weight loss
+265,ICD9,alcohol,Alcohol abuse
+276,ICD9,fed,Fluid and electrolyte disorders
+278,ICD9,obes,Obesity
+280,ICD9,blane,Blood loss anemia
+281,ICD9,dane,Deficiency anemia
+286,ICD9,coag,Coagulopathy
+287,ICD9,coag,Coagulopathy
+290,ICD9,dementia,Dementia
+291,ICD9,alcohol,Alcohol abuse
+292,ICD9,drug,Drug abuse
+293,ICD9,psycho,Psychoses
+294,ICD9,dementia,Dementia
+295,ICD9,psycho,Psychoses
+296,ICD9,psycho,Psychoses
+297,ICD9,psycho,Psychoses
+298,ICD9,psycho,Psychoses
+300,ICD9,depre,Depression
+303,ICD9,alcohol,Alcohol abuse
+304,ICD9,drug,Drug abuse
+305,ICD9,alcohol,Alcohol abuse
+309,ICD9,depre,Depression
+311,ICD9,depre,Depression
+331,ICD9,dementia,Dementia
+332,ICD9,ond,Other neurological disorders
+333,ICD9,ond,Other neurological disorders
+334,ICD9,ond,Other neurological disorders
+335,ICD9,ond,Other neurological disorders
+336,ICD9,ond,Other neurological disorders
+340,ICD9,ond,Other neurological disorders
+341,ICD9,ond,Other neurological disorders
+342,ICD9,hp,Hemiplegia or paraplegia
+343,ICD9,hp,Hemiplegia or paraplegia
+344,ICD9,hp,Hemiplegia or paraplegia
+345,ICD9,ond,Other neurological disorders
+348,ICD9,ond,Other neurological disorders
+357,ICD9,alcohol,Alcohol abuse
+362,ICD9,retin,Retinopathy or blindness
+369,ICD9,retin,Retinopathy or blindness
+391,ICD9,cardsign,Other cardiovascular signs
+394,ICD9,valv,Valvular disease
+395,ICD9,valv,Valvular disease
+396,ICD9,valv,Valvular disease
+397,ICD9,valv,Valvular disease
+398,ICD9,chf,Congestive heart failure
+401,ICD9,hypunc,"Hypertension, uncomplicated"
+402,ICD9,hypc,"Hypertension, complicated"
+403,ICD9,hypc,"Hypertension, complicated"
+404,ICD9,hypc,"Hypertension, complicated"
+405,ICD9,hypc,"Hypertension, complicated"
+410,ICD9,ami,Myocardial infarction
+411,ICD9,cardsign,Other cardiovascular signs
+412,ICD9,ami,Myocardial infarction
+414,ICD9,cardsign,Other cardiovascular signs
+415,ICD9,pcd,Pulmonary circulation disorders
+416,ICD9,pcd,Pulmonary circulation disorders
+417,ICD9,pcd,Pulmonary circulation disorders
+421,ICD9,cardsign,Other cardiovascular signs
+423,ICD9,cardsign,Other cardiovascular signs
+424,ICD9,valv/cardsign,Valvular disease/Other cardiovascular signs
+425,ICD9,chf,Congestive heart failure
+426,ICD9,cardsign/carit,Other cardiovascular signs/Cardiac arrhythmias
+427,ICD9,carit,Cardiac arrhythmias
+428,ICD9,chf,Congestive heart failure
+430,ICD9,cevd,Cerebrovascular disease
+431,ICD9,cevd,Cerebrovascular disease
+432,ICD9,cevd,Cerebrovascular disease
+433,ICD9,cevd,Cerebrovascular disease
+434,ICD9,cevd,Cerebrovascular disease
+435,ICD9,cevd,Cerebrovascular disease
+436,ICD9,cevd,Cerebrovascular disease
+437,ICD9,cevd,Cerebrovascular disease
+438,ICD9,cevd,Cerebrovascular disease
+440,ICD9,pvd,Peripheral vascular disease
+441,ICD9,pvd,Peripheral vascular disease
+443,ICD9,pvd,Peripheral vascular disease
+446,ICD9,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+447,ICD9,pvd,Peripheral vascular disease
+456,ICD9,msld,Moderate or severe liver disease
+490,ICD9,copd,Chronic pulmonary disease
+491,ICD9,copd,Chronic pulmonary disease
+492,ICD9,copd,Chronic pulmonary disease
+493,ICD9,copd,Chronic pulmonary disease
+494,ICD9,copd,Chronic pulmonary disease
+495,ICD9,copd,Chronic pulmonary disease
+496,ICD9,copd,Chronic pulmonary disease
+497,ICD9,copd,Chronic pulmonary disease
+498,ICD9,copd,Chronic pulmonary disease
+499,ICD9,copd,Chronic pulmonary disease
+500,ICD9,copd,Chronic pulmonary disease
+501,ICD9,copd,Chronic pulmonary disease
+502,ICD9,copd,Chronic pulmonary disease
+503,ICD9,copd,Chronic pulmonary disease
+504,ICD9,copd,Chronic pulmonary disease
+505,ICD9,copd,Chronic pulmonary disease
+506,ICD9,copd,Chronic pulmonary disease
+508,ICD9,copd,Chronic pulmonary disease
+531,ICD9,pud_ch,Peptic ulcer disease
+532,ICD9,pud_ch,Peptic ulcer disease
+533,ICD9,pud_ch,Peptic ulcer disease
+534,ICD9,pud_ch,Peptic ulcer disease
+535,ICD9,alcohol,Alcohol abuse
+557,ICD9,pvd,Peripheral vascular disease
+570,ICD9,mld,Mild liver disease
+571,ICD9,mld,Mild liver disease
+572,ICD9,mld,Mild liver disease
+573,ICD9,mld,Mild liver disease
+582,ICD9,rend,Renal disease
+583,ICD9,rend,Renal disease
+585,ICD9,rend,Renal disease
+586,ICD9,rend,Renal disease
+588,ICD9,rend,Renal disease
+701,ICD9,otherdiab,Other diabetes signs
+710,ICD9,rheumd_ch,Rheumatic disease
+711,ICD9,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+714,ICD9,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+719,ICD9,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+720,ICD9,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+725,ICD9,rheumd_ch,Rheumatic disease
+728,ICD9,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+729,ICD9,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+746,ICD9,valv,Valvular disease
+780,ICD9,ond,Other neurological disorders
+783,ICD9,wloss,Weight loss
+784,ICD9,ond,Other neurological disorders
+785,ICD9,carit,Cardiac arrhythmias
+788,ICD9,nephsign,Other renal signs
+791,ICD9,nonspec,Other Nonspecific signs
+796,ICD9,otherhypunc,Other signs of hypertension
+799,ICD9,wloss,Weight loss
+932,ICD9,valv,Valvular disease
+980,ICD9,alcohol,Alcohol abuse
+996,ICD9,carit,Cardiac arrhythmias
+A39,ICD10,cardsign,Other cardiovascular signs
+A52,ICD10,valv,Valvular disease
+A79,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+A86,CIAP2,alcohol,Alcohol abuse
+B18,ICD10,mld,Mild liver disease
+B20,ICD10,aids,AIDS/HIV
+B21,ICD10,aids,AIDS/HIV
+B22,ICD10,aids,AIDS/HIV
+B24,ICD10,aids,AIDS/HIV
+B33,ICD10,cardsign,Other cardiovascular signs
+B37,ICD10,cardsign,Other cardiovascular signs
+B72,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+B73,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+B74,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+B80,CIAP2,blane,Blood loss anemia
+B81,CIAP2,dane,Deficiency anemia
+B83,CIAP2,coag,Coagulopathy
+B90,CIAP2,aids,AIDS/HIV
+C00,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C01,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C02,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C03,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C04,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C05,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C06,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C07,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C08,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C09,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C10,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C11,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C12,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C13,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C14,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C15,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C16,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C17,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C18,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C19,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C20,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C21,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C22,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C23,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C24,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C25,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C26,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C30,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C31,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C32,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C33,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C34,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C37,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C38,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C39,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C40,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C41,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C43,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C45,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C46,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C47,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C48,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C49,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C50,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C51,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C52,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C53,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C54,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C55,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C56,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C57,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C58,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C60,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C61,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C62,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C63,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C64,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C65,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C66,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C67,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C68,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C69,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C70,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C71,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C72,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C73,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C74,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C75,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C76,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C77,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C78,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C79,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C80,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C81,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C82,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C83,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C84,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C85,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C88,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C90,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C91,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C92,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C93,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C94,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C95,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C96,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+C97,ICD10,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+D50,ICD10,blane,Blood loss anemia
+D51,ICD10,dane,Deficiency anemia
+D52,ICD10,dane,Deficiency anemia
+D53,ICD10,dane,Deficiency anemia
+D65,ICD10,coag,Coagulopathy
+D66,ICD10,coag,Coagulopathy
+D67,ICD10,coag,Coagulopathy
+D68,ICD10,coag,Coagulopathy
+D69,ICD10,coag,Coagulopathy
+D72,CIAP2,mld,Mild liver disease
+D74,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+D75,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+D76,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+D77,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+D85,CIAP2,pud_ch,Peptic ulcer disease
+D86,CIAP2,pud_ch,Peptic ulcer disease
+D87,CIAP2,alcohol,Alcohol abuse
+D97,CIAP2,mld,Mild liver disease
+E00,ICD10,hypothy,Hypothyroidism
+E01,ICD10,hypothy,Hypothyroidism
+E02,ICD10,hypothy,Hypothyroidism
+E03,ICD10,hypothy,Hypothyroidism
+E10,ICD10,diabwoc,Diabetes without chronic complication
+E11,ICD10,diabwoc,Diabetes without chronic complication
+E12,ICD10,diabwoc,Diabetes without chronic complication
+E13,ICD10,diabwoc,Diabetes without chronic complication
+E14,ICD10,diabwoc,Diabetes without chronic complication
+E15,ICD10,otherdiab,Other diabetes signs
+E16,ICD10,otherdiab,Other diabetes signs
+E22,ICD10,fed,Fluid and electrolyte disorders
+E40,ICD10,wloss,Weight loss
+E41,ICD10,wloss,Weight loss
+E42,ICD10,wloss,Weight loss
+E43,ICD10,wloss,Weight loss
+E44,ICD10,wloss,Weight loss
+E45,ICD10,wloss,Weight loss
+E46,ICD10,wloss,Weight loss
+E52,ICD10,alcohol,Alcohol abuse
+E66,ICD10,obes,Obesity
+E86,ICD10,fed,Fluid and electrolyte disorders
+E87,ICD10,fed,Fluid and electrolyte disorders
+E89,ICD10,hypothy,Hypothyroidism
+F00,ICD10,dementia,Dementia
+F01,ICD10,dementia,Dementia
+F02,ICD10,dementia,Dementia
+F03,ICD10,dementia,Dementia
+F05,ICD10,dementia,Dementia
+F10,ICD10,alcohol,Alcohol abuse
+F11,ICD10,drug,Drug abuse
+F12,ICD10,drug,Drug abuse
+F13,ICD10,drug,Drug abuse
+F14,ICD10,drug,Drug abuse
+F15,ICD10,drug,Drug abuse
+F16,ICD10,drug,Drug abuse
+F18,ICD10,drug,Drug abuse
+F19,ICD10,drug,Drug abuse
+F20,ICD10,psycho,Psychoses
+F22,ICD10,psycho,Psychoses
+F23,ICD10,psycho,Psychoses
+F24,ICD10,psycho,Psychoses
+F25,ICD10,psycho,Psychoses
+F28,ICD10,psycho,Psychoses
+F29,ICD10,psycho,Psychoses
+F30,ICD10,psycho,Psychoses
+F31,ICD10,psycho,Psychoses
+F32,ICD10,depre,Depression
+F33,ICD10,depre,Depression
+F34,ICD10,depre,Depression
+F41,ICD10,depre,Depression
+F43,ICD10,depre,Depression
+F74,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+F83,CIAP2,retin,Retinopathy or blindness
+F94,CIAP2,retin,Retinopathy or blindness
+G04,ICD10,hp,Hemiplegia or paraplegia
+G10,ICD10,ond,Other neurological disorders
+G11,ICD10,ond,Other neurological disorders
+G12,ICD10,ond,Other neurological disorders
+G13,ICD10,ond,Other neurological disorders
+G20,ICD10,ond,Other neurological disorders
+G21,ICD10,ond,Other neurological disorders
+G22,ICD10,ond,Other neurological disorders
+G25,ICD10,ond,Other neurological disorders
+G30,ICD10,dementia,Dementia
+G31,ICD10,dementia,Dementia
+G32,ICD10,ond,Other neurological disorders
+G35,ICD10,ond,Other neurological disorders
+G36,ICD10,ond,Other neurological disorders
+G37,ICD10,ond,Other neurological disorders
+G40,ICD10,ond,Other neurological disorders
+G41,ICD10,ond,Other neurological disorders
+G45,ICD10,cevd,Cerebrovascular disease
+G46,ICD10,cevd,Cerebrovascular disease
+G62,ICD10,alcohol,Alcohol abuse
+G80,ICD10,hp,Hemiplegia or paraplegia
+G81,ICD10,hp,Hemiplegia or paraplegia
+G82,ICD10,hp,Hemiplegia or paraplegia
+G83,ICD10,hp,Hemiplegia or paraplegia
+G93,ICD10,ond,Other neurological disorders
+H34,ICD10,cevd,Cerebrovascular disease
+H54,ICD10,retin,Retinopathy or blindness
+I00,ICD10,cardsign,Other cardiovascular signs
+I01,ICD10,cardsign,Other cardiovascular signs
+I02,ICD10,cardsign,Other cardiovascular signs
+I05,ICD10,valv,Valvular disease
+I06,ICD10,valv,Valvular disease
+I07,ICD10,valv,Valvular disease
+I08,ICD10,valv,Valvular disease
+I09,ICD10,valv,Valvular disease
+I10,ICD10,hypunc,"Hypertension, uncomplicated"
+I11,ICD10,hypc,"Hypertension, complicated"
+I12,ICD10,hypc,"Hypertension, complicated"
+I13,ICD10,hypc,"Hypertension, complicated"
+I20,ICD10,cardsign,Other cardiovascular signs
+I21,ICD10,ami,Myocardial infarction
+I22,ICD10,ami,Myocardial infarction
+I24,ICD10,cardsign,Other cardiovascular signs
+I25,ICD10,ami,Myocardial infarction
+I26,ICD10,pcd,Pulmonary circulation disorders
+I27,ICD10,pcd,Pulmonary circulation disorders
+I28,ICD10,pcd,Pulmonary circulation disorders
+I30,ICD10,cardsign,Other cardiovascular signs
+I31,ICD10,cardsign,Other cardiovascular signs
+I32,ICD10,cardsign,Other cardiovascular signs
+I33,ICD10,cardsign,Other cardiovascular signs
+I34,ICD10,valv,Valvular disease
+I35,ICD10,valv,Valvular disease
+I36,ICD10,valv,Valvular disease
+I37,ICD10,valv,Valvular disease
+I38,ICD10,valv,Valvular disease
+I39,ICD10,valv,Valvular disease
+I40,ICD10,cardsign,Other cardiovascular signs
+I41,ICD10,cardsign,Other cardiovascular signs
+I42,ICD10,cardsign,Other cardiovascular signs
+I42,ICD10,chf,Congestive heart failure
+I43,ICD10,chf,Congestive heart failure
+I44,ICD10,carit,Cardiac arrhythmias
+I45,ICD10,carit,Cardiac arrhythmias
+I46,ICD10,cardsign,Other cardiovascular signs
+I47,ICD10,carit,Cardiac arrhythmias
+I48,ICD10,carit,Cardiac arrhythmias
+I49,ICD10,carit,Cardiac arrhythmias
+I50,ICD10,chf,Congestive heart failure
+I51,ICD10,cardsign,Other cardiovascular signs
+I52,ICD10,cardsign,Other cardiovascular signs
+I60,ICD10,cevd,Cerebrovascular disease
+I61,ICD10,cevd,Cerebrovascular disease
+I62,ICD10,cevd,Cerebrovascular disease
+I63,ICD10,cevd,Cerebrovascular disease
+I64,ICD10,cevd,Cerebrovascular disease
+I65,ICD10,cevd,Cerebrovascular disease
+I66,ICD10,cevd,Cerebrovascular disease
+I67,ICD10,cevd,Cerebrovascular disease
+I68,ICD10,cevd,Cerebrovascular disease
+I69,ICD10,cevd,Cerebrovascular disease
+I70,ICD10,pvd,Peripheral vascular disease
+I71,ICD10,pvd,Peripheral vascular disease
+I73,ICD10,pvd,Peripheral vascular disease
+I77,ICD10,pvd,Peripheral vascular disease
+I79,ICD10,pvd,Peripheral vascular disease
+I85,ICD10,ld,Liver disease
+I86,ICD10,msld,Moderate or severe liver disease
+I98,ICD10,msld,Moderate or severe liver disease
+J40,ICD10,copd,Chronic pulmonary disease
+J41,ICD10,copd,Chronic pulmonary disease
+J42,ICD10,copd,Chronic pulmonary disease
+J43,ICD10,copd,Chronic pulmonary disease
+J44,ICD10,copd,Chronic pulmonary disease
+J45,ICD10,copd,Chronic pulmonary disease
+J46,ICD10,copd,Chronic pulmonary disease
+J47,ICD10,copd,Chronic pulmonary disease
+J60,ICD10,copd,Chronic pulmonary disease
+J61,ICD10,copd,Chronic pulmonary disease
+J62,ICD10,copd,Chronic pulmonary disease
+J63,ICD10,copd,Chronic pulmonary disease
+J64,ICD10,copd,Chronic pulmonary disease
+J65,ICD10,copd,Chronic pulmonary disease
+J66,ICD10,copd,Chronic pulmonary disease
+J67,ICD10,copd,Chronic pulmonary disease
+J68,ICD10,copd,Chronic pulmonary disease
+J70,ICD10,copd,Chronic pulmonary disease
+K04,CIAP2,carit,Cardiac arrhythmias
+K05,CIAP2,carit,Cardiac arrhythmias
+K25,ICD10,pud_ch,Peptic ulcer disease
+K26,ICD10,pud_ch,Peptic ulcer disease
+K27,ICD10,pud_ch,Peptic ulcer disease
+K28,ICD10,pud_ch,Peptic ulcer disease
+K28,CIAP2,cardsign,Other cardiovascular signs
+K29,CIAP2,cardsign,Other cardiovascular signs
+K29,ICD10,alcohol,Alcohol abuse
+K55,ICD10,pvd,Peripheral vascular disease
+K70,ICD10,ld,Liver disease
+K70,CIAP2,cardsign,Other cardiovascular signs
+K71,CIAP2,cardsign,Other cardiovascular signs
+K71,ICD10,msld,Moderate or severe liver disease
+K72,ICD10,ld,Liver disease
+K73,CIAP2,valv,Valvular disease
+K74,ICD10,mld,Mild liver disease
+K74,CIAP2,cardsign,Other cardiovascular signs
+K75,CIAP2,ami,Myocardial infarction
+K76,CIAP2,ami,Myocardial infarction
+K77,CIAP2,chf,Congestive heart failure
+K78,CIAP2,carit,Cardiac arrhythmias
+K79,CIAP2,carit,Cardiac arrhythmias
+K80,CIAP2,carit,Cardiac arrhythmias
+K82,CIAP2,pcd,Pulmonary circulation disorders
+K83,CIAP2,valv,Valvular disease
+K84,CIAP2,cardsign,Other cardiovascular signs
+K85,CIAP2,otherhypunc,Other signs of hypertension
+K86,CIAP2,hypunc,"Hypertension, uncomplicated"
+K87,CIAP2,rend,Renal disease
+K89,CIAP2,cevd,Cerebrovascular disease
+K90,CIAP2,cevd,Cerebrovascular disease
+K91,CIAP2,cevd,Cerebrovascular disease
+K92,CIAP2,pvd,Peripheral vascular disease
+K93,CIAP2,pcd,Pulmonary circulation disorders
+K99,CIAP2,pvd,Peripheral vascular disease
+L71,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+L84,CIAP2,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+L88,CIAP2,rheumd_ch,Rheumatic disease
+L94,ICD10,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+M05,ICD10,rheumd_ch,Rheumatic disease
+M06,ICD10,rheumd_ch,Rheumatic disease
+M08,ICD10,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+M12,ICD10,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+M30,ICD10,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+M31,ICD10,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+M32,ICD10,rheumd_ch,Rheumatic disease
+M33,ICD10,rheumd_ch,Rheumatic disease
+M34,ICD10,rheumd_ch,Rheumatic disease
+M35,ICD10,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+M36,ICD10,rheumd_ch,Rheumatic disease
+M45,ICD10,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+M46,ICD10,rheumd_hx,Rheumatoid arthritis/collagen vascular diseases
+N03,ICD10,rend,Renal disease
+N05,ICD10,rend,Renal disease
+N07,CIAP2,ond,Other neurological disorders
+N08,CIAP2,ond,Other neurological disorders
+N18,CIAP2,hp,Hemiplegia or paraplegia
+N19,CIAP2,ond,Other neurological disorders
+N25,ICD10,rend,Renal disease
+N39,ICD10,nephsign,Other renal signs
+N74,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+N86,CIAP2,ond,Other neurological disorders
+N87,CIAP2,ond,Other neurological disorders
+N88,CIAP2,ond,Other neurological disorders
+N99,CIAP2,ond,Other neurological disorders
+O90,ICD10,cardsign,Other cardiovascular signs
+P02,CIAP2,depre,Depression
+P15,CIAP2,alcohol,Alcohol abuse
+P18,CIAP2,drug,Drug abuse
+P19,CIAP2,drug,Drug abuse
+P29,ICD10,chf,Congestive heart failure
+P70,CIAP2,dementia,Dementia
+P72,CIAP2,psycho,Psychoses
+P73,CIAP2,psycho,Psychoses
+P76,CIAP2,depre,Depression
+P82,CIAP2,depre,Depression
+P98,CIAP2,psycho,Psychoses
+Q23,ICD10,valv,Valvular disease
+R00,ICD10,carit,Cardiac arrhythmias
+R03,ICD10,cardsign,Other cardiovascular signs
+R09,ICD10,cardsign,Other cardiovascular signs
+R47,ICD10,ond,Other neurological disorders
+R56,ICD10,ond,Other neurological disorders
+R63,ICD10,wloss,Weight loss
+R64,ICD10,wloss,Weight loss
+R80,ICD10,nonspec,Other Nonspecific signs
+R81,ICD10,nonspec,Other Nonspecific signs
+R82,ICD10,nonspec,Other Nonspecific signs
+R84,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+R85,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+R95,CIAP2,copd,Chronic pulmonary disease
+S77,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+T08,CIAP2,wloss,Weight loss
+T51,ICD10,alcohol,Alcohol abuse
+T71,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+T73,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+T80,CIAP2,hypothy,Hypothyroidism
+T82,CIAP2,obes,Obesity
+T83,CIAP2,obes,Obesity
+T86,CIAP2,hypothy,Hypothyroidism
+T87,CIAP2,otherdiab,Other diabetes signs
+T89,CIAP2,diabwoc,Diabetes without chronic complication
+T90,CIAP2,diabwoc,Diabetes without chronic complication
+T91,CIAP2,wloss,Weight loss
+T99,CIAP2,fed,Fluid and electrolyte disorders
+U75,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+U76,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+U77,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+U88,CIAP2,rend,Renal disease
+U90,CIAP2,nephsign,Other renal signs
+U98,CIAP2,nonspec,Other Nonspecific signs
+U99,CIAP2,rend,Renal disease
+V11,ICD10,alcohol,Alcohol abuse
+V42,ICD10,rend,Renal disease
+V43,ICD10,valv,Valvular disease
+V45,ICD10,carit,Cardiac arrhythmias
+V53,ICD10,carit,Cardiac arrhythmias
+V56,ICD10,rend,Renal disease
+V65,ICD10,drug,Drug abuse
+W72,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+X75,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+X76,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+X77,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+Y77,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+Y78,CIAP2,canc,"Any malignancy, including lymphoma and leukemia, except malignant neoplasm of skin"
+Z45,ICD10,carit,Cardiac arrhythmias
+Z49,ICD10,rend,Renal disease
+Z50,ICD10,alcohol,Alcohol abuse
+Z71,ICD10,alcohol,Alcohol abuse
+Z72,ICD10,alcohol,Alcohol abuse
+Z73,ICD10,cardsign,Other cardiovascular signs
+Z94,ICD10,rend,Renal disease
+Z95,ICD10,carit,Cardiac arrhythmias
+Z99,ICD10,rend,Renal disease

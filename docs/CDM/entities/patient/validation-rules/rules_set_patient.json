@@ -1,0 +1,55 @@
+{
+    "description": "The expressions of the different rules follow the syntax of the SQL OLAP database \n        management system called DuckDB. For more information, visit https://duckdb.org/docs/sql/introduction. \n        Keep in mind that you only have to declare as a rule the statement that would follow a WHERE clause. \n        e.g.,  Select * from people WHERE {expression}\n        expression = age >= 18\n        ",
+    "rules": [
+        {
+            "expression": "sex IN ('0', '1')",
+            "name": "sex",
+            "description": "Rule for column sex"
+        },
+        {
+            "expression": "avg_income > 0",
+            "name": "avg_income",
+            "description": "Rule for column avg_income"
+        },
+        {
+            "expression": "education IN ('0', '1', '2', '3')",
+            "name": "education",
+            "description": "Rule for column education"
+        },
+        {
+            "expression": "copayment IN ('0', '1')",
+            "name": "copayment",
+            "description": "Rule for column copayment"
+        },
+        {
+            "expression": "dx_date > month_nac",
+            "name": "dx_date",
+            "description": "Rule for column dx_date"
+        },
+        {
+            "expression": "month_nac < '1955-01-01'",
+            "name": "month_nac",
+            "description": "Rule for column month_nac"
+        },
+        {
+            "expression": "deregistration IN ('1', '2', '3')",
+            "name": "deregistration",
+            "description": "Rule for column deregistration"
+        },
+        {
+            "expression": "nursing_home IN ('0', '1')",
+            "name": "nursing_home",
+            "description": "Rule for column nursing_home"
+        },
+        {
+            "expression": "(nursing_home_date > month_nac) and (nursing_home_date <= '2022-12-31')",
+            "name": "Composed rule",
+            "description": "Complex rule"
+        },
+        {
+            "expression": "death IN ('0', '1')",
+            "name": "death",
+            "description": "Rule for column death"
+        }
+    ]
+}

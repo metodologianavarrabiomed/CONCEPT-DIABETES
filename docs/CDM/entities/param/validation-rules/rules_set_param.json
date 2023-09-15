@@ -1,0 +1,20 @@
+{
+    "description": "The expressions of the different rules follow the syntax of the SQL OLAP database \n        management system called DuckDB. For more information, visit https://duckdb.org/docs/sql/introduction. \n        Keep in mind that you only have to declare as a rule the statement that would follow a WHERE clause. \n        e.g.,  Select * from people WHERE {expression}\n        expression = age >= 18\n        ",
+    "rules": [
+        {
+            "expression": "param_date <= '2022-12-31'",
+            "name": "param_date",
+            "description": "Rule for column param_date"
+        },
+        {
+            "expression": "param_value BETWEEN 5 AND 10",
+            "name": "param_value",
+            "description": "Rule for column param_value"
+        },
+        {
+            "expression": "param_name IN ('bmi', 'hba1c')",
+            "name": "param_name",
+            "description": "Rule for column param_name"
+        }
+    ]
+}

@@ -1,0 +1,29 @@
+name: aspire
+channels:
+ - conda-forge
+dependencies:
+ - more-itertools=8.12.0
+ - pip=23.0.1 
+ - pip:
+    - datetime==5.1
+    - dtaidistance==2.3.10
+    - duckdb==0.8.1
+    - gensim==4.3.1
+    - matplotlib==3.7.1
+    - numpy==1.23.5
+    - pm4py==2.7.4
+    - scikit-learn==1.2.2
+    - scipy==1.10.1
+    - tqdm==4.65.0
+    - yellowbrick==1.5
+    - pandas==1.4.4
+ - r-tidyverse=2.0.0	
+ - r-lubridate=1.9.2
+ - r-mongolite=2.7.2	
+ - r-jsonlite=1.8.4	
+ - r-ggplot2=3.4.2	
+ - r-dplyr=1.1.2	
+ - r-DiagrammeR=1.0.10	
+ - r-DiagrammeRsvg=0.1	
+ - r-rsvg=2.4.0
+ - r-here=1.0.1

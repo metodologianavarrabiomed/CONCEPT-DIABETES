@@ -1,0 +1,1484 @@
+{
+    "created_dt": "20230912071534_cdmb",
+    "uuid": "64cbc17b-2392-407f-90b5-43b9702728e5",
+    "metadata": {
+        "uuid": "873cbe1a-f4cf-4867-804c-ac9082a59d2e",
+        "project": "CONCEPT PI19/00154",
+        "funder": "This project has received funding from the Instituto de Salud Carlos III under grant agreement (PI19/00154; PI19/00306; PI19/00381; PI19/00056; PI 20/00783). The project also received a research grant from Instituto de Salud Carlos III, Ministry of Science and Innovation (Spain), awarded on thecall for the creation of Health Outcomes-Oriented Cooperative Research Networks (RICORS), with reference RD21/0016/0016, co-funded with European Union – NextGenerationEU funds.",
+        "url_project": "",
+        "work_package": "CONCEPT- DM2",
+        "use_case": "CONCEPT-Diabetes",
+        "document": "",
+        "version_sem": "1.0.0",
+        "authors": [
+            {
+                "name": "Berta Ibáñez-Beroiz",
+                "affiliation": "Navarrabiomed, IdISNA and RICAPPS",
+                "id": "0000-0002-7797-4845"
+            },
+            {
+                "name": "Asier Ballesteros",
+                "affiliation": "Navarrabiomed, IdISNA and RICAPPS",
+                "id": "0000-0002-2195-4669"
+            },
+            {
+                "name": "Ignacio Oscoz",
+                "affiliation": "Navarrabiomed, IdISNA and RICAPPS",
+                "id": "0009-0004-0387-6056"
+            },
+            {
+                "name": "Ibai Tamayo",
+                "affiliation": "Navarrabiomed, IdISNA and RICAPPS",
+                "id": "0000-0003-2860-3359"
+            },
+            {
+                "name": "Julián Librero-López",
+                "affiliation": "Navarrabiomed, IdISNA and RICAPPS",
+                "id": "0000-0002-4859-9054"
+            },
+            {
+                "name": "Mónica Enguita-Hernán",
+                "affiliation": "Navarrabiomed, IdISNA and RICAPPS",
+                "id": "0000-0002-2890-1252"
+            }
+        ],
+        "keywords": [
+            "Event Log Builder",
+            "Process Mining Pipeline",
+            "Data",
+            "Data Management"
+        ],
+        "description": "",
+        "notes": "Individual level data is required",
+        "spatial_coverage": "",
+        "license": "CC BY-NC-ND 4.0 https://creativecommons.org/licenses/by-nc-nd/4.0"
+    },
+    "cohort": {
+        "name": "CONCEPT-DM2",
+        "description": "Patients with Type 2 Diabetes",
+        "inclusion_criteria": "patients that, at 01/01/2017 or during the follow-up from 01/01/2017 to 31/12/2022 had active health card (active TIS - tarjeta sanitaria activa) and code of type 2 diabetes (T2D, DM2 in spanish) in the clinical records of primary care",
+        "exclusion_criteria": "patients with no contact with the health system from 01/01/2017  to 31/12/2022",
+        "beggining_study_period": "2017-01-01",
+        "end_study_period": "2022-12-31",
+        "cohort_definition_inclusion": null,
+        "cohort_definition_exclusion": null
+    },
+    "entities": [
+        {
+            "uuid": "9480f524-0a28-4a64-96b8-81caade0f388",
+            "name": "patient",
+            "time_varying": false,
+            "variables": [
+                {
+                    "label": "patient_id",
+                    "description": "Pseudonymized unique patient identifier",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "area_id",
+                    "description": "Pseudonymized area to which the patient belongs",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "health_profesional_id",
+                    "description": "Pseudonymized health profesional to which the patient is assigned",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "month_nac",
+                    "description": "Birth date of the patient, only month and year",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "sex",
+                    "description": "Sex of the patient",
+                    "standard_classification": "",
+                    "format": "Integer",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "avg_income",
+                    "description": "The annual mean income of the census tract in euros",
+                    "standard_classification": "",
+                    "format": "Double",
+                    "type": "Numerical",
+                    "units": "euros",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "education",
+                    "description": "Educational attainment of the patient divided in 4 categories",
+                    "standard_classification": "",
+                    "format": "Integer",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "education",
+                        "filename": "dm_patient_education.csv"
+                    }
+                },
+                {
+                    "label": "copayment",
+                    "description": "Copayment category (proxy of income)",
+                    "standard_classification": "",
+                    "format": "Integer",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "copayment",
+                        "filename": "dm_patient_copayment.csv"
+                    }
+                },
+                {
+                    "label": "country",
+                    "description": "Country of origin of the patient",
+                    "standard_classification": "iso-3166-1",
+                    "format": "Integer",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "Numeric_code",
+                        "filename": "dm_patient_country.csv"
+                    }
+                },
+                {
+                    "label": "nationality",
+                    "description": "Patient's nationality",
+                    "standard_classification": "iso-3166-1",
+                    "format": "Integer",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "Numeric_code",
+                        "filename": "dm_patient_country.csv"
+                    }
+                },
+                {
+                    "label": "dx_date",
+                    "description": "Diabetes diagnosis date",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "deregistration",
+                    "description": "System deregistration reason",
+                    "standard_classification": "",
+                    "format": "Integer",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "deregistration_date",
+                    "description": "System deregistration date",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "nursing_home_baseline",
+                    "description": "Does the patient live in a nursing_home at baseline?",
+                    "standard_classification": "",
+                    "format": "Integer",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "nursing_home_followup",
+                    "description": "Does the patient live in a nursing home at followup?",
+                    "standard_classification": "",
+                    "format": "Integer",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "nursing_home_date_followup",
+                    "description": "Since when does the patient live in a nursing_home?",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "death",
+                    "description": "Vital status of the patient in two categories",
+                    "standard_classification": "",
+                    "format": "Integer",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "death_date",
+                    "description": "Date of death (if death=1)",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "death_code_system",
+                    "description": "Death code classification system (ICD-9; ICD-10)",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "death_code1",
+                    "description": "Main cause of death: Primary Death code",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "death_code2",
+                    "description": "Death with multiple causes: Second Death code",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "death_code3",
+                    "description": "Death with multiple causes: Third Death code",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "death_code4",
+                    "description": "Death with multiple causes: forth Death code",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                }
+            ],
+            "rules": [
+                {
+                    "expression": "sex IN ('0', '1')",
+                    "name": "sex",
+                    "description": "Rule for column sex"
+                },
+                {
+                    "expression": "avg_income > 0",
+                    "name": "avg_income",
+                    "description": "Rule for column avg_income"
+                },
+                {
+                    "expression": "education IN ('0', '1', '2', '3')",
+                    "name": "education",
+                    "description": "Rule for column education"
+                },
+                {
+                    "expression": "copayment IN ('0', '1')",
+                    "name": "copayment",
+                    "description": "Rule for column copayment"
+                },
+                {
+                    "expression": "dx_date > month_nac",
+                    "name": "dx_date",
+                    "description": "Rule for column dx_date"
+                },
+                {
+                    "expression": "month_nac < '1955-01-01'",
+                    "name": "month_nac",
+                    "description": "Rule for column month_nac"
+                },
+                {
+                    "expression": "deregistration IN ('1', '2', '3')",
+                    "name": "deregistration",
+                    "description": "Rule for column deregistration"
+                },
+                {
+                    "expression": "nursing_home IN ('0', '1')",
+                    "name": "nursing_home",
+                    "description": "Rule for column nursing_home"
+                },
+                {
+                    "expression": "(nursing_home_date > month_nac) and (nursing_home_date <= '2022-12-31')",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "death IN ('0', '1')",
+                    "name": "death",
+                    "description": "Rule for column death"
+                }
+            ]
+        },
+        {
+            "uuid": "0a88c347-ccd6-4a25-a5b0-80dcd851779e",
+            "name": "param",
+            "time_varying": false,
+            "variables": [
+                {
+                    "label": "patient_id",
+                    "description": "ID of the patient to whom the measurement corresponds",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "param_name",
+                    "description": "Name of the parameter or variable being measured (LDL, etc.)",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "param_name",
+                        "filename": "dm_param_name.csv"
+                    }
+                },
+                {
+                    "label": "param_value",
+                    "description": "Value taken by the parameter for that patient's measurement",
+                    "standard_classification": "",
+                    "format": "Double",
+                    "type": "Numerical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "param_date",
+                    "description": "Date on which this parameter is measured",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                }
+            ],
+            "rules": [
+                {
+                    "expression": "param_date <= '2022-12-31'",
+                    "name": "param_date",
+                    "description": "Rule for column param_date"
+                },
+                {
+                    "expression": "param_value BETWEEN 5 AND 10",
+                    "name": "param_value",
+                    "description": "Rule for column param_value"
+                },
+                {
+                    "expression": "param_name IN ('bmi', 'hba1c')",
+                    "name": "param_name",
+                    "description": "Rule for column param_name"
+                }
+            ]
+        },
+        {
+            "uuid": "b3ec1fc3-f9c6-4499-8d04-2fe91e7f575e",
+            "name": "param_cat",
+            "time_varying": false,
+            "variables": [
+                {
+                    "label": "patient_id",
+                    "description": "ID of the patient to whom the measurement corresponds",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "param_cat_name",
+                    "description": "Name of the parameter or variable being measured",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "param_cat_name",
+                        "filename": "dm_param_cat_name.csv"
+                    }
+                },
+                {
+                    "label": "param_cat_value",
+                    "description": "Value taken by the parameter for that patient's measurement",
+                    "standard_classification": "",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "param_cat_date",
+                    "description": "Date on which this parameter is measured",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                }
+            ],
+            "rules": [
+                {
+                    "expression": "param_cat_date <= '2022-12-31'",
+                    "name": "param_cat_date",
+                    "description": "Rule for column param_cat_date"
+                }
+            ]
+        },
+        {
+            "uuid": "af119a77-a541-4cfe-b3a9-9556435d0426",
+            "name": "comorb",
+            "time_varying": false,
+            "variables": [
+                {
+                    "label": "patient_id",
+                    "description": "Patient identification code",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "comorb_codif",
+                    "description": "Disease classification system the code is refered to",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "comorb_code",
+                    "description": "Disease code",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "comorb_code",
+                        "filename": "dm_comorb_code.csv"
+                    }
+                },
+                {
+                    "label": "comorb_date_ini",
+                    "description": "Date when the disease was diagnosed",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "comorb_date_end",
+                    "description": "Date when the disease was healed (if applicable)",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                }
+            ],
+            "rules": [
+                {
+                    "expression": "comorb_date_ini <= '2022-12-31'",
+                    "name": "comorb_date_ini",
+                    "description": "Rule for column comorb_date_ini"
+                },
+                {
+                    "expression": "comorb_codif IN ('ICD9', 'ICD10', 'CIAP2')",
+                    "name": "comorb_codif",
+                    "description": "Rule for column comorb_codif"
+                },
+                {
+                    "expression": "comorb_date_end >= comorb_date_ini",
+                    "name": "comorb_date_end",
+                    "description": "Rule for column comorb_date_end"
+                }
+            ]
+        },
+        {
+            "uuid": "1d81ae89-1a25-4531-bc1f-64b0172f10d3",
+            "name": "cmbd",
+            "time_varying": false,
+            "variables": [
+                {
+                    "label": "patient_id",
+                    "description": "Admitted patient identification code",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "admission_date",
+                    "description": "Admission date",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "discharge_date",
+                    "description": "Hospital discharge date",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "diagnosis1_code",
+                    "description": "Main admission diagnosis code",
+                    "standard_classification": "",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "Código",
+                        "filename": "dm_cmbd_cie10es_diag.csv"
+                    }
+                },
+                {
+                    "label": "diagnosis2_code",
+                    "description": "D2 admission diagnosis code",
+                    "standard_classification": "",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "Código",
+                        "filename": "dm_cmbd_cie10es_diag.csv"
+                    }
+                },
+                {
+                    "label": "diagnosis3_code",
+                    "description": "D3 admission diagnosis code",
+                    "standard_classification": "",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "Código",
+                        "filename": "dm_cmbd_cie10es_diag.csv"
+                    }
+                },
+                {
+                    "label": "procedure1_code",
+                    "description": "Procedure 1 admission code",
+                    "standard_classification": "",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "codigo",
+                        "filename": "dm_cmbd_cie10es_proc.csv"
+                    }
+                },
+                {
+                    "label": "procedure2_code",
+                    "description": "procedure 2 admission code",
+                    "standard_classification": "",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "codigo",
+                        "filename": "dm_cmbd_cie10es_proc.csv"
+                    }
+                },
+                {
+                    "label": "procedure3_code",
+                    "description": "Procedure 3 admission code",
+                    "standard_classification": "",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "codigo",
+                        "filename": "dm_cmbd_cie10es_proc.csv"
+                    }
+                },
+                {
+                    "label": "contact_type",
+                    "description": "Contact type",
+                    "standard_classification": "",
+                    "format": "Integer",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "contact_type",
+                        "filename": "dm_cmbd_contact_type.csv"
+                    }
+                },
+                {
+                    "label": "contact_program",
+                    "description": "Contact circumstances",
+                    "standard_classification": "",
+                    "format": "Integer",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "contact_type",
+                        "filename": "dm_cmbd_contact_program.csv"
+                    }
+                }
+            ],
+            "rules": [
+                {
+                    "expression": "discharge_date >= admission_date",
+                    "name": "discharge_date",
+                    "description": "Rule for column discharge_date"
+                }
+            ]
+        },
+        {
+            "uuid": "7e128861-8ac8-4298-8da4-547d267b5b0b",
+            "name": "ss_use",
+            "time_varying": false,
+            "variables": [
+                {
+                    "label": "patient_id",
+                    "description": "Patient identification code",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "visit_type",
+                    "description": "Visit type",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "visit_loc",
+                    "description": "Visit location type",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "visit_service",
+                    "description": "Service of the visit",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "visit_service",
+                        "filename": "dm_ss_use_visit_service.csv"
+                    }
+                },
+                {
+                    "label": "visit_date",
+                    "description": "Date of the visit",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "visit_derivation_PC",
+                    "description": "Indicates if the visit is a derivation from PC",
+                    "standard_classification": "",
+                    "format": "Integer",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "consult_request",
+                    "description": "Indicates if in the visit the profesional conducted a consultation request (interconsulta)",
+                    "standard_classification": "",
+                    "format": "Integer",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "consult_request_service",
+                    "description": "Indicates the service for which a consult_request_service was conducted",
+                    "standard_classification": "",
+                    "format": "Integer",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "visit_service",
+                        "filename": "dm_ss_use_visit_service.csv"
+                    }
+                }
+            ],
+            "rules": [
+                {
+                    "expression": "visit_type IN ('1', '2', '3', '4', '5', '6', '7', '8', '999')",
+                    "name": "visit_type",
+                    "description": "Rule for column visit_type"
+                },
+                {
+                    "expression": "visit_loc IN ('1', '2', '3')",
+                    "name": "visit_loc",
+                    "description": "Rule for column visit_loc"
+                },
+                {
+                    "expression": "visit_derivation_PC IN ('0', '1')",
+                    "name": "visit_derivation_PC",
+                    "description": "Rule for column visit_derivation_PC"
+                },
+                {
+                    "expression": "consult_request IN ('0', '1')",
+                    "name": "consult_request",
+                    "description": "Rule for column consult_request"
+                }
+            ]
+        },
+        {
+            "uuid": "bf1b1e77-9cd1-4312-a4b2-6da9e467e399",
+            "name": "exams",
+            "time_varying": false,
+            "variables": [
+                {
+                    "label": "test_name",
+                    "description": "Test that has been conducted",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "test_name",
+                        "filename": "dm_exams_test_name.csv"
+                    }
+                },
+                {
+                    "label": "patient_id",
+                    "description": "Patient identification code",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "test_value",
+                    "description": "Test results of the test conducted in test_name",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "test_date",
+                    "description": "Date when the test was conducted",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                }
+            ],
+            "rules": [
+                {
+                    "expression": "(patient_id = 'shelf_care_training') and (test_value IN ('0', '1', '2'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(patient_id = 'ocular_exam_PC') and (test_value IN ('0', '1'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(patient_id = 'ocular_exam_ophthalmologist') and (test_value IN ('0', '1', '2', '3', '4'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(patient_id = 'foot_exam') and (test_value IN ('1', '2', '3', '4'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(patient_id = 'pedal_pulse') and (test_value IN ('0', '1', '2', '3'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(patient_id = 'pedal_pulse') and (test_value IN ('0', '1', '2', '3'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(patient_id = 'left_ankel_brachial_index') and (test_value IN ('0', '1'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(patient_id = 'right_ankel_brachial_index') and (test_value IN ('0', '1'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(patient_id = 'monofilament_sensibility') and (test_value IN ('0', '1', '2', '3'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(patient_id = 'mood_disorder') and (test_value IN ('0', '1', '2', '3', '4', '5', '6', '7'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                }
+            ]
+        },
+        {
+            "uuid": "2ca7b583-79d7-4899-b425-a3c25314e5f1",
+            "name": "treat",
+            "time_varying": false,
+            "variables": [
+                {
+                    "label": "patient_id",
+                    "description": "Identifier of the patient who is receiving the treatment",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "atc_code",
+                    "description": "ATC (Anatomical, Therapeutic, Chemical classification system) treatment code",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "Subgrupo7_Desc",
+                        "filename": "dm_treat_atc.csv"
+                    }
+                },
+                {
+                    "label": "nac_code",
+                    "description": "National drug code (NDC)",
+                    "standard_classification": "utf-8",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "dispensing_date",
+                    "description": "Date of Dispensing",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Required",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "containers_number",
+                    "description": "Number of containers",
+                    "standard_classification": "",
+                    "format": "Integer",
+                    "type": "Numerical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "prescription_date_ini",
+                    "description": "Prescription start date",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                },
+                {
+                    "label": "prescription_date_end",
+                    "description": "Prescription end date",
+                    "standard_classification": "iso-8601",
+                    "format": "Date",
+                    "type": "Date",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": false,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": null
+                }
+            ],
+            "rules": [
+                {
+                    "expression": "prescription_date_ini <= '2022-12-31'",
+                    "name": "prescription_date_ini",
+                    "description": "Rule for column prescription_date_ini"
+                },
+                {
+                    "expression": "prescription_date_end >= prescription_date_ini",
+                    "name": "prescription_date_end",
+                    "description": "Rule for column prescription_date_end"
+                },
+                {
+                    "expression": "containers_number > 0",
+                    "name": "containers_number",
+                    "description": "Rule for column containers_number"
+                },
+                {
+                    "expression": "atc_code IN ('A10AB01', 'A10BB01', 'A10BD02', 'A10BD05', 'A10BD14', 'A10BH01')",
+                    "name": "atc_code",
+                    "description": "Rule for column atc_code"
+                }
+            ]
+        }
+    ],
+    "relationships": [
+        {
+            "left_entity": "patient",
+            "right_entity": "param",
+            "join_type": "LEFT JOIN",
+            "left_column": "patient_id",
+            "right_column": "patient_id"
+        },
+        {
+            "left_entity": "patient",
+            "right_entity": "param_cat",
+            "join_type": "LEFT JOIN",
+            "left_column": "patient_id",
+            "right_column": "patient_id"
+        },
+        {
+            "left_entity": "patient",
+            "right_entity": "comorb",
+            "join_type": "LEFT JOIN",
+            "left_column": "patient_id",
+            "right_column": "patient_id"
+        },
+        {
+            "left_entity": "patient",
+            "right_entity": "cmbd",
+            "join_type": "LEFT JOIN",
+            "left_column": "patient_id",
+            "right_column": "patient_id"
+        },
+        {
+            "left_entity": "patient",
+            "right_entity": "ss_use",
+            "join_type": "LEFT JOIN",
+            "left_column": "patient_id",
+            "right_column": "patient_id"
+        },
+        {
+            "left_entity": "patient",
+            "right_entity": "exams",
+            "join_type": "LEFT JOIN",
+            "left_column": "patient_id",
+            "right_column": "test_name"
+        },
+        {
+            "left_entity": "patient",
+            "right_entity": "treat",
+            "join_type": "LEFT JOIN",
+            "left_column": "patient_id",
+            "right_column": "patient_id"
+        }
+    ]
+}

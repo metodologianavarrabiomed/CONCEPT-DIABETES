@@ -1,0 +1,5 @@
+education,categories,transformation
+0.0,Without studies,If CNES == 10 | 11 | 20 | 21 | 22 => 0=Without studies
+1.0,Primary school,If CNES ==30 | 31 |  32 => 1=Primary school
+2.0,High school,If CNES == 40| 41| 42| 43  => 2= High school
+3.0,University,If CNES == 44 | 45| 46| 47| 48 => 3= University

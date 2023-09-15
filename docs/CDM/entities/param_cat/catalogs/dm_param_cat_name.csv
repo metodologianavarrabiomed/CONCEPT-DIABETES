@@ -1,0 +1,8 @@
+param_cat_name,description,requirement_level,observations
+smoking_status,smoking status,required,see annex6
+alcohol,alcohol use,recommended,see annex6
+physical_activity,physical activity realization,required,see annex6
+vaccination_covid,covid vaccination,required,see annex6
+vaccination_flu,flu vaccination,recommended,see annex6
+family_history_CVD,family history of early coronary disease,recommended,see annex6
+working_status,employment status of the patient,recommended,see annex6

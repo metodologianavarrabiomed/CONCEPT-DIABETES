@@ -1,0 +1,3 @@
+copayment,description,transformation
+0.0,less.18000 € ,If codTSI.cod_subTSI: 1 | 2.2 | 3 => 0=less.18000 €
+1.0,more.equal.18000 € ,If codTSI.cod_subTSI:2.3 | 4 | 5 | 5.4 | 6 => 1=more.equal.18000 €
