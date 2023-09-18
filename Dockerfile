@@ -1,11 +1,11 @@
 FROM ghcr.io/cienciadedatosysalud/aspire:latest
 
 USER root
-# RUN apt update && apt install -y --no-install-recommends \
-#   && apt install -y xdg-utils graphviz \
-#   && rm -rf /var/lib/apt/lists/*
 
-
+RUN apt update && apt install -y --no-install-recommends \
+  && apt install -y xdg-utils graphviz \
+  && rm -rf /var/lib/apt/lists/*
+  
 # Set time Europe/Madrid
 
 RUN micromamba -n aspire install tzdata -c conda-forge && micromamba clean --all --yes \
@@ -25,7 +25,7 @@ RUN micromamba install -y -n aspire -f /tmp/env_project.yaml \
     && rm -rf /opt/conda/conda-meta /tmp/env_project.yaml
 
 # Installing R packages not found in conda-forge
-RUN micromamba run -n aspire Rscript -e 'remotes::install_cran(c("bupaR","processmapr"))'
+RUN micromamba run -n aspire Rscript -e 'remotes::install_cran(c("bupaR","processmapR"))'
 
 ENV RETICULATE_PYTHON=/opt/conda/envs/aspire/bin/python
 

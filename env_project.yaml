@@ -2,7 +2,9 @@ name: aspire
 channels:
  - conda-forge
 dependencies:
+ - quarto=1.2.475
  - more-itertools=8.12.0
+ - conda==23.7.4
  - pip=23.0.1 
  - pip:
     - datetime==5.1
@@ -17,9 +19,10 @@ dependencies:
     - tqdm==4.65.0
     - yellowbrick==1.5
     - pandas==1.4.4
+    - textdistance==4.5.0
+ - r-reticulate=1.32.0
  - r-tidyverse=2.0.0	
  - r-lubridate=1.9.2
- - r-mongolite=2.7.2	
  - r-jsonlite=1.8.4	
  - r-ggplot2=3.4.2	
  - r-dplyr=1.1.2	

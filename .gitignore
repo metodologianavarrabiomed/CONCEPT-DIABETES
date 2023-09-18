@@ -1,5 +1,9 @@
 docs/CDM/hashed_files_list.json
-inputs/data.duckdb
+inputs/*
+!inputs/readme.txt
+outputs/*
+!outputs/logs/readme.txt
+!outputs/readme.txt
 .Rproj.user
 *.Rproj
 *.Rhistory

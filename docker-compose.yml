@@ -1,10 +1,8 @@
 services:
-  cdmb_container:
+  concept-diabetes:
     build: .
-    container_name: aspire
-    image: aspire_image
+    container_name: concept-diabetes-aspire
+    image: ghcr.io/metodologianavarrabiomed/concept-diabetes
     ports:
       - "3000:3000"
-    volumes:
-      - $PWD/projects:/home/mambauser/projects
     

@@ -133,18 +133,17 @@ The R libraries used are:
 #| label: Load r libraries
 #| warning: FALSE
 
-pacman::p_load(tidyverse,
-              lubridate,
-              mongolite,
-              jsonlite,
-              ggplot2,
-              bupaR,
-              processmapR,
-              dplyr,
-              DiagrammeR,
-              DiagrammeRsvg,
-              rsvg,
-              here)
+library(tidyverse)
+library(lubridate)
+library(jsonlite)
+library(ggplot2)
+library(bupaR)
+library(processmapR)
+library(dplyr)
+library(DiagrammeR)
+library(DiagrammeRsvg)
+library(rsvg)
+library(here)
 
 ```
 
