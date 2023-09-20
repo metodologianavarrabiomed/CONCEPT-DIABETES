@@ -123,6 +123,7 @@ from pm4py.algo.decision_mining import algorithm as decision_mining
 from pm4py.visualization.petri_net import visualizer
 from gensim.models import LdaModel
 from datetime import  datetime, timedelta
+from dateutil.relativedelta import relativedelta
 import duckdb
 
 ```
@@ -176,14 +177,15 @@ def select_by_condition(cond):
     treat_df_path = '../../outputs/dm_treat_df.csv'
     
     con = duckdb.connect('../../inputs/data.duckdb')
-    cmbd_df = con.sql("SELECT * from main.cmbd").df()
-    comorb_df = con.sql("SELECT * from main.comorb").df()
-    param_df = con.sql("SELECT * from main.param").df()
-    patients_df = con.sql("SELECT * from main.patient").df()
-    treat_df = con.sql("SELECT * from main.treat").df()
-    
+    cmbd_df = con.sql("SELECT * FROM main.cmbd WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
+    comorb_df = con.sql("SELECT * FROM main.comorb WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
+    param_df = con.sql("SELECT * FROM main.param WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
+    patients_df = con.sql("SELECT * FROM main.patient WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
+    treat_df = con.sql("SELECT * FROM main.treat WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()    
+    con.close()
     ecv_code_list = ['K76','K75','K76','K91','K92']
     ic = 'K77'
+    erc = 'U99.01'
     ob = 'T82'
     cie9_df = pd.read_csv('./CIE9.csv')
     cie10_df = pd.read_csv('./CIE10.csv')
@@ -196,19 +198,65 @@ def select_by_condition(cond):
         elif comorb_df['comorb_codif'][n]=='ICD10':
             comorb_df['ciap2'][n] = cie10.get(comorb_df['comorb_code'][n],None)
         
-            
-    baseline = datetime.strptime('2012-01-01', "%Y-%m-%d")
+    # Which is the predominal clinical condition at baseline?         
+    baseline = datetime.strptime('2017-01-01', "%Y-%m-%d")
     patients_df['age'] = [(baseline-
                              patients_df['month_nac'][n]).days//365  
                              for n in  range(len(patients_df))]
-    f_list = set(patients_df['patient_id'][patients_df['age']>75])
     ob_list = set(comorb_df['patient_id'][comorb_df['ciap2']==ob])
-    erc_list = set(param_df['patient_id'][(param_df['param_name']=='filtglom'
-                                            ) & (param_df['param_value']<60)])
-    ic_list =  set(comorb_df['patient_id'][comorb_df['ciap2']==ic])
-    ecv_list = list(set(comorb_df['patient_id'][n] for n in range(len(comorb_df))
-                        if comorb_df['ciap2'][n] in ecv_code_list))
-         
+    f_list = set(patients_df['patient_id'][patients_df['age']>75])
+    erc_list = set(comorb_df['patient_id'][comorb_df['ciap2']==erc])
+    ic_list =  set(comorb_df['patient_id'][comorb_df['ciap2']==ic])    
+    ecv_list = set(comorb_df['patient_id'][n] for n in range(len(comorb_df))
+                        if comorb_df['ciap2'][n] in ecv_code_list)
+    
+    # Which is the predominal clinical condition at dx_date?
+    dx_date = dict(zip(patients_df.patient_id,patients_df.dx_date))
+    cmbd_long = pd.concat(
+        [cmbd_df[['patient_id','admission_date','diagnosis1_code']
+                 ].rename(columns = {'diagnosis1_code':'code'}),
+        cmbd_df[['patient_id','admission_date','diagnosis2_code']
+                 ].rename(columns = {'diagnosis2_code':'code'}).dropna(),
+        cmbd_df[['patient_id','admission_date','diagnosis3_code']
+                 ].rename(columns = {'diagnosis3_code':'code'}).dropna()])
+    cmbd_long['code'] = cmbd_long['code'].apply(
+        lambda x: x.replace('E66.3','sobrepeso').split('.')[0])
+
+    to_ecv_change_list = ['I2%i' %i for i in range(6)]+[
+                             'I6%i' %i for i in range(10)]+[
+                                'I7%i' %i for i in [0,3,4]]
+    # ENFERMEDADES ISQUÉMICAS CARDIACAS (I20-I25)
+    # ENFERMEDADES CEREBROVASCULARES (I60-I69)
+    # ATEROESCLEROSIS (ENFERMEDADES VASCULARES PERIFÉRICAS) (I70)
+    # OTRAS ENFERMEDADES VASCULARES PERIFÉRICAS (I73)
+    # EMBOLIA Y TROMBOSIS ARTERIAL (ENFERMEDADES VASCULARES PERIFÉRICAS) (I74)
+    to_ic_change_list = ['I50','I13']
+    # INSUFICIENCIA CARDÍACA (I50)
+    # ENFERMEDAD CARDÍACA Y RENAL CRÓNICA HIPERTENSIVA (I13)
+    to_erc_change_list = ['N18','I12']
+    # ENFERMEDAD RENAL CRÓNICA (N18)
+    # ENFERMEDAD RENAL CRÓNICA HIPERTENSIVA (I12)
+    to_f_change_list = []
+    to_ob_change_list = ['E66']
+    # SOBREPESO Y OBESIDAD (E66)
+    to_else_change_list = []
+    cmbd_long['dx_date'] = cmbd_long['patient_id'].apply(
+        lambda x: dx_date[x]).to_list()
+    ob_list.update( 
+        set(cmbd_long.query(
+        "code in @to_ob_change_list & admission_date<dx_date")['patient_id']))
+    erc_list.update( 
+        set(cmbd_long.query(
+        "code in @to_erc_change_list & admission_date<dx_date")['patient_id']))
+    ic_list.update( 
+        set(cmbd_long.query(
+        "code in @to_ic_change_list & admission_date<dx_date")['patient_id']))
+    ecv_list.update( 
+        set(cmbd_long.query(
+        "code in @to_ecv_change_list & admission_date<dx_date")['patient_id']))
+
+    
+    ecv_list = list(ecv_list)
     ic_list = list(ic_list.difference(ecv_list))
     erc_list = list(erc_list.difference(ecv_list+ic_list))
     f_list = list(f_list.difference(ecv_list+ic_list+erc_list))
@@ -216,19 +264,49 @@ def select_by_condition(cond):
     else_list = list(set(patients_df['patient_id']
                          ).difference(ecv_list+ic_list+erc_list+f_list+ob_list))
                
-    lists_dic = {'ecv':ecv_list,'ic':ic_list,'erc':erc_list,'f':f_list,
-                 'ob':ob_list,'else':else_list}     
-                        
-    patients_df = patients_df[patients_df['patient_id'].isin(lists_dic[cond])]
+    list_cond = eval('%s_list' % cond)                  
+    patients_df = patients_df[patients_df['patient_id'].isin(list_cond)]
     patients_df.index = range(len(patients_df))
-    param_df = param_df[param_df['patient_id'].isin(lists_dic[cond])]
-    param_df.index = range(len(param_df))
-    treat_df = treat_df[treat_df['patient_id'].isin(lists_dic[cond])]
-    treat_df.index = range(len(treat_df))
-    comorb_df = comorb_df[comorb_df['patient_id'].isin(lists_dic[cond])]
+    param_df = param_df[param_df['patient_id'].isin(list_cond)]
+    treat_df = treat_df[treat_df['patient_id'].isin(list_cond)]
+    comorb_df = comorb_df[comorb_df['patient_id'].isin(list_cond)]
     comorb_df.index = range(len(comorb_df))
-    cmbd_df = cmbd_df[cmbd_df['patient_id'].isin(lists_dic[cond])]
+    cmbd_df = cmbd_df[cmbd_df['patient_id'].isin(list_cond)]
     cmbd_df.index = range(len(cmbd_df))    
+    
+    # When is a change on predominant clinical condition made?   
+    from_ecv_change_list = []
+    from_ic_change_list = to_ecv_change_list
+    from_erc_change_list = from_ic_change_list+to_ic_change_list
+    from_f_change_list = from_erc_change_list+to_erc_change_list
+    from_ob_change_list = from_f_change_list
+    from_else_change_list = from_ob_change_list+to_ob_change_list
+    for id in list_cond:
+        cmbd_id = cmbd_long[cmbd_long['patient_id']==id]
+        
+        try:
+            date = min(cmbd_id.query(
+                'code in @from_%s_change_list & admission_date>=dx_date' % cond
+                )['admission_date'])
+            if cond in ['ob','else']:
+                turn_75_date = list(patients_df['month_nac'][
+                    patients_df['patient_id']==id])[0]+relativedelta(years=75)
+                date = min([date,turn_75_date])
+            treat_df.drop(treat_df[((treat_df['dispensing_date']>date) | (
+                treat_df['dispensing_date']<dx_date[id])) & (
+                treat_df['patient_id']==id)].index, inplace=True)
+            param_df.drop(param_df[((param_df['param_date']>date) | (
+                param_df['param_date']<dx_date[id])) & (
+                param_df['patient_id']==id)].index, inplace=True)
+            
+        except:
+            treat_df.drop(treat_df[(treat_df['dispensing_date']<dx_date[id]) & (
+                treat_df['patient_id']==id)].index, inplace=True)
+            param_df.drop(param_df[(param_df['param_date']<dx_date[id]) & (
+                param_df['patient_id']==id)].index, inplace=True)
+
+    treat_df.index = range(len(treat_df))
+    param_df.index = range(len(param_df))
     
     patients_df.to_csv(patients_df_path,index=False)
     param_df.to_csv(param_df_path,index=False)
@@ -658,7 +736,7 @@ def kelbow(dm,elbow_metric='distortion',locate_elbow=False,
                                   linkage = 'average')
   # k is range of number of clusters.
   visualizer_ = KElbowVisualizer(model,
-                                k=(2,25),
+                                k=(5,25),
                                 timings=False,
                                 xlabel = 'cluster numbers',
                                 metric=elbow_metric,
@@ -1255,7 +1333,7 @@ df,df_, id2trace = df2dict(df_)
 df_.to_csv("../../outputs/eventlog.csv")
 patients = sorted(id2trace.keys())
 traces = list(id2trace[id] for id in patients)     
-
+del df
 ```
 
 ```{r}
@@ -1334,7 +1412,8 @@ dendogram(dm)
 #| label: kelbow
 #| eval: TRUE
 #| echo: FALSE
-kelbow(dm,elbow_metric='distortion',locate_elbow=False)
+#| output: TRUE
+n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
 ```
 
@@ -1346,10 +1425,12 @@ kelbow(dm,elbow_metric='distortion',locate_elbow=False)
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-clust(18,dm,df_,id2trace,patients)
+clust(n_clusters,dm,df_,id2trace,patients)
+del dm
+del df_
 ```
 
-Choosing 18 as the optimal number of clusters, too small clusters appear. Excluding those clusters of less than 30 traces, to avoid having clusters of low representation, process maps and the most frequent traces of the eight clusters that remain are the followings.
+Choosing the optimal number of clusters, too small clusters can appear, but we can exclude those of less than 30 traces  to avoid having clusters of low representation. The process map and the most frequent traces of one of these clusters that remain are the followings.
 
 ```{python}
 #| label: trace explorer
@@ -1379,69 +1460,8 @@ process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
 Cluster 0
 :::
 
-::: {#fig-cluster2 .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/trace_2.png){#fig-traceexplorer2}
 
-![Process map covering 25% most frequent traces](../../outputs/evlog_pm_cluster_2.png){#fig-processmap2}
 
-Cluster 2
-:::
-
-::: {.column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/trace_3.png){#fig-traceexplorer3}
-
-![Process map covering 25% most frequent traces](../../outputs/evlog_pm_cluster_3.png){#fig-processmap3}
-
-Cluster 3
-:::
-
-::: {#fig-cluster4 .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/trace_4.png){#fig-traceexplorer4}
-
-![Process map covering 25% most frequent traces](../../outputs/evlog_pm_cluster_4.png){#fig-processmap4}
-
-Cluster 4
-:::
-
-::: {#fig-cluster5 .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/trace_5.png){#fig-traceexplorer5}
-
-![Process map covering 25% most frequent traces](../../outputs/evlog_pm_cluster_5.png){#fig-processmap5}
-
-Cluster 5
-:::
-
-::: {#fig-cluster6 .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/trace_6.png){#fig-traceexplorer6}
-
-![Process map covering 25% most frequent traces](../../outputs/evlog_pm_cluster_6.png){#fig-processmap6}
-
-Cluster 6
-:::
-
-::: {#fig-cluster8 .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/trace_8.png){#fig-traceexplorer8}
-
-![Process map covering 25% most frequent traces](../../outputs/evlog_pm_cluster_8.png){#fig-processmap8}
-
-Cluster 8
-:::
-
-::: {#fig-cluster10 .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/trace_10.png){#fig-traceexplorer10}
-
-![Process map covering 25% most frequent traces](../../outputs/evlog_pm_cluster_10.png){#fig-processmap10}
-
-Cluster 10
-:::
-
-::: {#fig-cluster11 .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/trace_11.png){#fig-traceexplorer11}
-
-![Process map covering 25% most frequent traces](../../outputs/evlog_pm_cluster_11.png){#fig-processmap11}
-
-Cluster 11
-:::
 
 ### Conformace checking
 
@@ -1472,7 +1492,7 @@ In @fig-decision_tree is shown how patients' age, sex and copayment would influe
 #| output: FALSE
 
 patients_df = pd.read_csv('../../outputs/dm_patients_df.csv')
-
+patients_df["patient_id"]= patients_df["patient_id"].astype(str)
 decision_tree_pn_place(patients_df)
 ```
 

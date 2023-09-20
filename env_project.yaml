@@ -20,6 +20,7 @@ dependencies:
     - yellowbrick==1.5
     - pandas==1.4.4
     - textdistance==4.5.0
+    - dateutil==2.8.2
  - r-reticulate=1.32.0
  - r-tidyverse=2.0.0	
  - r-lubridate=1.9.2
