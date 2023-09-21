@@ -5,16 +5,6 @@
             "expression": "param_date <= '2022-12-31'",
             "name": "param_date",
             "description": "Rule for column param_date"
-        },
-        {
-            "expression": "param_value BETWEEN 5 AND 10",
-            "name": "param_value",
-            "description": "Rule for column param_value"
-        },
-        {
-            "expression": "param_name IN ('bmi', 'hba1c')",
-            "name": "param_name",
-            "description": "Rule for column param_name"
         }
     ]
 }

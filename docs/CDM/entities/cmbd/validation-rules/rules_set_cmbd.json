@@ -5,6 +5,16 @@
             "expression": "discharge_date >= admission_date",
             "name": "discharge_date",
             "description": "Rule for column discharge_date"
+        },
+        {
+            "expression": "contact_type IN ('1', '2', '3', '4', '5', '6', '8')",
+            "name": "contact_type",
+            "description": "Rule for column contact_type"
+        },
+        {
+            "expression": "contact_program IN ('1', '2', '9')",
+            "name": "contact_program",
+            "description": "Rule for column contact_program"
         }
     ]
 }

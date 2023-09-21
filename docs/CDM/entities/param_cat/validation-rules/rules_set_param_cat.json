@@ -5,6 +5,41 @@
             "expression": "param_cat_date <= '2022-12-31'",
             "name": "param_cat_date",
             "description": "Rule for column param_cat_date"
+        },
+        {
+            "expression": "(param_cat_name = 'smoking_status') and (param_cat_value IN ('0', '1', '2', '3'))",
+            "name": "Composed rule",
+            "description": "Complex rule"
+        },
+        {
+            "expression": "(param_cat_name = 'alcohol') and (param_cat_value IN ('0', '1', '2'))",
+            "name": "Composed rule",
+            "description": "Complex rule"
+        },
+        {
+            "expression": "(param_cat_name = 'physical_activity') and (param_cat_value IN ('0', '1', '2', '3'))",
+            "name": "Composed rule",
+            "description": "Complex rule"
+        },
+        {
+            "expression": "(param_cat_name = 'vaccination_covid') and (param_cat_value IN ('0', '1', '2', '3', '4', '5', '6', '7'))",
+            "name": "Composed rule",
+            "description": "Complex rule"
+        },
+        {
+            "expression": "(param_cat_name = 'vaccination_flu') and (param_cat_value IN ('0', '1'))",
+            "name": "Composed rule",
+            "description": "Complex rule"
+        },
+        {
+            "expression": "(param_cat_name = 'family_history_CVD') and (param_cat_value IN ('0', '1'))",
+            "name": "Composed rule",
+            "description": "Complex rule"
+        },
+        {
+            "expression": "(param_cat_name = 'working_status') and (param_cat_value IN ('0', '1', '2'))",
+            "name": "Composed rule",
+            "description": "Complex rule"
         }
     ]
 }

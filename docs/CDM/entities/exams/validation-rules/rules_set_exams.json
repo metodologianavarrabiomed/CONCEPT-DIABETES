@@ -2,54 +2,54 @@
     "description": "The expressions of the different rules follow the syntax of the SQL OLAP database \n        management system called DuckDB. For more information, visit https://duckdb.org/docs/sql/introduction. \n        Keep in mind that you only have to declare as a rule the statement that would follow a WHERE clause. \n        e.g.,  Select * from people WHERE {expression}\n        expression = age >= 18\n        ",
     "rules": [
         {
-            "expression": "(patient_id = 'shelf_care_training') and (test_value IN ('0', '1', '2'))",
+            "expression": "(test_name = 'shelf_care_training') and (test_value IN ('0', '1', '2'))",
             "name": "Composed rule",
             "description": "Complex rule"
         },
         {
-            "expression": "(patient_id = 'ocular_exam_PC') and (test_value IN ('0', '1'))",
+            "expression": "(test_name = 'ocular_exam_PC') and (test_value IN ('0', '1'))",
             "name": "Composed rule",
             "description": "Complex rule"
         },
         {
-            "expression": "(patient_id = 'ocular_exam_ophthalmologist') and (test_value IN ('0', '1', '2', '3', '4'))",
+            "expression": "(test_name = 'ocular_exam_ophthalmologist') and (test_value IN ('0', '1', '2', '3', '4'))",
             "name": "Composed rule",
             "description": "Complex rule"
         },
         {
-            "expression": "(patient_id = 'foot_exam') and (test_value IN ('1', '2', '3', '4'))",
+            "expression": "(test_name = 'foot_exam') and (test_value IN ('1', '2', '3', '4'))",
             "name": "Composed rule",
             "description": "Complex rule"
         },
         {
-            "expression": "(patient_id = 'pedal_pulse') and (test_value IN ('0', '1', '2', '3'))",
+            "expression": "(test_name = 'pedal_pulse') and (test_value IN ('0', '1', '2', '3'))",
             "name": "Composed rule",
             "description": "Complex rule"
         },
         {
-            "expression": "(patient_id = 'pedal_pulse') and (test_value IN ('0', '1', '2', '3'))",
+            "expression": "(test_name = 'left_ankel_brachial_index') and (test_value IN ('0', '1'))",
             "name": "Composed rule",
             "description": "Complex rule"
         },
         {
-            "expression": "(patient_id = 'left_ankel_brachial_index') and (test_value IN ('0', '1'))",
+            "expression": "(test_name = 'right_ankel_brachial_index') and (test_value IN ('0', '1'))",
             "name": "Composed rule",
             "description": "Complex rule"
         },
         {
-            "expression": "(patient_id = 'right_ankel_brachial_index') and (test_value IN ('0', '1'))",
+            "expression": "(test_name = 'monofilament_sensibility') and (test_value IN ('0', '1', '2', '3'))",
             "name": "Composed rule",
             "description": "Complex rule"
         },
         {
-            "expression": "(patient_id = 'monofilament_sensibility') and (test_value IN ('0', '1', '2', '3'))",
+            "expression": "(test_name = 'mood_disorder') and (test_value IN ('0', '1', '2', '3', '4', '5', '6', '7'))",
             "name": "Composed rule",
             "description": "Complex rule"
         },
         {
-            "expression": "(patient_id = 'mood_disorder') and (test_value IN ('0', '1', '2', '3', '4', '5', '6', '7'))",
-            "name": "Composed rule",
-            "description": "Complex rule"
+            "expression": "test_date <= '2022-12-31'",
+            "name": "test_date",
+            "description": "Rule for column test_date"
         }
     ]
 }

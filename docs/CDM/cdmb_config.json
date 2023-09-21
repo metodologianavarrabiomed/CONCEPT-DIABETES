@@ -1,8 +1,8 @@
 {
-    "created_dt": "20230912071534_cdmb",
-    "uuid": "64cbc17b-2392-407f-90b5-43b9702728e5",
+    "created_dt": "20230921100549_cdmb",
+    "uuid": "b1ad81c5-8879-439b-91d2-545c0ca2d210",
     "metadata": {
-        "uuid": "873cbe1a-f4cf-4867-804c-ac9082a59d2e",
+        "uuid": "7fe67cdc-975c-4caf-ad4f-192d66608834",
         "project": "CONCEPT PI19/00154",
         "funder": "This project has received funding from the Instituto de Salud Carlos III under grant agreement (PI19/00154; PI19/00306; PI19/00381; PI19/00056; PI 20/00783). The project also received a research grant from Instituto de Salud Carlos III, Ministry of Science and Innovation (Spain), awarded on thecall for the creation of Health Outcomes-Oriented Cooperative Research Networks (RICORS), with reference RD21/0016/0016, co-funded with European Union – NextGenerationEU funds.",
         "url_project": "",
@@ -65,7 +65,7 @@
     },
     "entities": [
         {
-            "uuid": "9480f524-0a28-4a64-96b8-81caade0f388",
+            "uuid": "9b53404f-2189-40c6-940c-33946dea8237",
             "name": "patient",
             "time_varying": false,
             "variables": [
@@ -174,15 +174,12 @@
                     "units": "",
                     "requirement_level": "Recommended",
                     "characteristic": "Observed",
-                    "catalog_bl": true,
+                    "catalog_bl": false,
                     "transformations_from_origin": "",
                     "possible_data_source": "",
                     "observations_comments": "",
                     "examples": "",
-                    "catalog": {
-                        "column_name": "education",
-                        "filename": "dm_patient_education.csv"
-                    }
+                    "catalog": null
                 },
                 {
                     "label": "copayment",
@@ -193,15 +190,12 @@
                     "units": "",
                     "requirement_level": "Required",
                     "characteristic": "Observed",
-                    "catalog_bl": true,
+                    "catalog_bl": false,
                     "transformations_from_origin": "",
                     "possible_data_source": "",
                     "observations_comments": "",
                     "examples": "",
-                    "catalog": {
-                        "column_name": "copayment",
-                        "filename": "dm_patient_copayment.csv"
-                    }
+                    "catalog": null
                 },
                 {
                     "label": "country",
@@ -452,6 +446,11 @@
             ],
             "rules": [
                 {
+                    "expression": "month_nac >= '1900-01-01'",
+                    "name": "month_nac",
+                    "description": "Rule for column month_nac"
+                },
+                {
                     "expression": "sex IN ('0', '1')",
                     "name": "sex",
                     "description": "Rule for column sex"
@@ -477,34 +476,44 @@
                     "description": "Rule for column dx_date"
                 },
                 {
-                    "expression": "month_nac < '1955-01-01'",
-                    "name": "month_nac",
-                    "description": "Rule for column month_nac"
-                },
-                {
                     "expression": "deregistration IN ('1', '2', '3')",
                     "name": "deregistration",
                     "description": "Rule for column deregistration"
                 },
                 {
-                    "expression": "nursing_home IN ('0', '1')",
-                    "name": "nursing_home",
-                    "description": "Rule for column nursing_home"
+                    "expression": "deregistration_date >= '2017-01-01'",
+                    "name": "deregistration_date",
+                    "description": "Rule for column deregistration_date"
                 },
                 {
-                    "expression": "(nursing_home_date > month_nac) and (nursing_home_date <= '2022-12-31')",
-                    "name": "Composed rule",
-                    "description": "Complex rule"
+                    "expression": "nursing_home_followup IN ('0', '1')",
+                    "name": "nursing_home_followup",
+                    "description": "Rule for column nursing_home_followup"
+                },
+                {
+                    "expression": "nursing_home_baseline IN ('0', '1')",
+                    "name": "nursing_home_baseline",
+                    "description": "Rule for column nursing_home_baseline"
+                },
+                {
+                    "expression": "nursing_home_date_followup >= '2017-01-01'",
+                    "name": "nursing_home_date_followup",
+                    "description": "Rule for column nursing_home_date_followup"
                 },
                 {
                     "expression": "death IN ('0', '1')",
                     "name": "death",
                     "description": "Rule for column death"
+                },
+                {
+                    "expression": "death_code_system IN ('ICD9', 'ICD10')",
+                    "name": "death_code_system",
+                    "description": "Rule for column death_code_system"
                 }
             ]
         },
         {
-            "uuid": "0a88c347-ccd6-4a25-a5b0-80dcd851779e",
+            "uuid": "d3014796-356f-4798-aaf1-0ab7f3f1aed6",
             "name": "param",
             "time_varying": false,
             "variables": [
@@ -581,21 +590,11 @@
                     "expression": "param_date <= '2022-12-31'",
                     "name": "param_date",
                     "description": "Rule for column param_date"
-                },
-                {
-                    "expression": "param_value BETWEEN 5 AND 10",
-                    "name": "param_value",
-                    "description": "Rule for column param_value"
-                },
-                {
-                    "expression": "param_name IN ('bmi', 'hba1c')",
-                    "name": "param_name",
-                    "description": "Rule for column param_name"
                 }
             ]
         },
         {
-            "uuid": "b3ec1fc3-f9c6-4499-8d04-2fe91e7f575e",
+            "uuid": "cf283569-377c-493b-9575-1273895e23f8",
             "name": "param_cat",
             "time_varying": false,
             "variables": [
@@ -672,11 +671,46 @@
                     "expression": "param_cat_date <= '2022-12-31'",
                     "name": "param_cat_date",
                     "description": "Rule for column param_cat_date"
+                },
+                {
+                    "expression": "(param_cat_name = 'smoking_status') and (param_cat_value IN ('0', '1', '2', '3'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(param_cat_name = 'alcohol') and (param_cat_value IN ('0', '1', '2'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(param_cat_name = 'physical_activity') and (param_cat_value IN ('0', '1', '2', '3'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(param_cat_name = 'vaccination_covid') and (param_cat_value IN ('0', '1', '2', '3', '4', '5', '6', '7'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(param_cat_name = 'vaccination_flu') and (param_cat_value IN ('0', '1'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(param_cat_name = 'family_history_CVD') and (param_cat_value IN ('0', '1'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
+                },
+                {
+                    "expression": "(param_cat_name = 'working_status') and (param_cat_value IN ('0', '1', '2'))",
+                    "name": "Composed rule",
+                    "description": "Complex rule"
                 }
             ]
         },
         {
-            "uuid": "af119a77-a541-4cfe-b3a9-9556435d0426",
+            "uuid": "e19d051f-56f5-4ea6-9cf4-c6beacfbabda",
             "name": "comorb",
             "time_varying": false,
             "variables": [
@@ -783,7 +817,7 @@
             ]
         },
         {
-            "uuid": "1d81ae89-1a25-4531-bc1f-64b0172f10d3",
+            "uuid": "9a4e7200-6b63-4377-97f8-6602ca4eb753",
             "name": "cmbd",
             "time_varying": false,
             "variables": [
@@ -958,15 +992,12 @@
                     "units": "",
                     "requirement_level": "Required",
                     "characteristic": "Observed",
-                    "catalog_bl": true,
+                    "catalog_bl": false,
                     "transformations_from_origin": "",
                     "possible_data_source": "",
                     "observations_comments": "",
                     "examples": "",
-                    "catalog": {
-                        "column_name": "contact_type",
-                        "filename": "dm_cmbd_contact_type.csv"
-                    }
+                    "catalog": null
                 },
                 {
                     "label": "contact_program",
@@ -977,15 +1008,12 @@
                     "units": "",
                     "requirement_level": "Required",
                     "characteristic": "Observed",
-                    "catalog_bl": true,
+                    "catalog_bl": false,
                     "transformations_from_origin": "",
                     "possible_data_source": "",
                     "observations_comments": "",
                     "examples": "",
-                    "catalog": {
-                        "column_name": "contact_type",
-                        "filename": "dm_cmbd_contact_program.csv"
-                    }
+                    "catalog": null
                 }
             ],
             "rules": [
@@ -993,11 +1021,21 @@
                     "expression": "discharge_date >= admission_date",
                     "name": "discharge_date",
                     "description": "Rule for column discharge_date"
+                },
+                {
+                    "expression": "contact_type IN ('1', '2', '3', '4', '5', '6', '8')",
+                    "name": "contact_type",
+                    "description": "Rule for column contact_type"
+                },
+                {
+                    "expression": "contact_program IN ('1', '2', '9')",
+                    "name": "contact_program",
+                    "description": "Rule for column contact_program"
                 }
             ]
         },
         {
-            "uuid": "7e128861-8ac8-4298-8da4-547d267b5b0b",
+            "uuid": "56ac2ecb-79d6-4324-9092-1ec448388408",
             "name": "ss_use",
             "time_varying": false,
             "variables": [
@@ -1138,7 +1176,7 @@
             ],
             "rules": [
                 {
-                    "expression": "visit_type IN ('1', '2', '3', '4', '5', '6', '7', '8', '999')",
+                    "expression": "visit_type IN ('1', '2', '3', '4', '5', '6', '7', '8')",
                     "name": "visit_type",
                     "description": "Rule for column visit_type"
                 },
@@ -1160,7 +1198,7 @@
             ]
         },
         {
-            "uuid": "bf1b1e77-9cd1-4312-a4b2-6da9e467e399",
+            "uuid": "89608161-9be5-4120-a5c9-0fd515321fc7",
             "name": "exams",
             "time_varying": false,
             "variables": [
@@ -1234,59 +1272,59 @@
             ],
             "rules": [
                 {
-                    "expression": "(patient_id = 'shelf_care_training') and (test_value IN ('0', '1', '2'))",
+                    "expression": "(test_name = 'shelf_care_training') and (test_value IN ('0', '1', '2'))",
                     "name": "Composed rule",
                     "description": "Complex rule"
                 },
                 {
-                    "expression": "(patient_id = 'ocular_exam_PC') and (test_value IN ('0', '1'))",
+                    "expression": "(test_name = 'ocular_exam_PC') and (test_value IN ('0', '1'))",
                     "name": "Composed rule",
                     "description": "Complex rule"
                 },
                 {
-                    "expression": "(patient_id = 'ocular_exam_ophthalmologist') and (test_value IN ('0', '1', '2', '3', '4'))",
+                    "expression": "(test_name = 'ocular_exam_ophthalmologist') and (test_value IN ('0', '1', '2', '3', '4'))",
                     "name": "Composed rule",
                     "description": "Complex rule"
                 },
                 {
-                    "expression": "(patient_id = 'foot_exam') and (test_value IN ('1', '2', '3', '4'))",
+                    "expression": "(test_name = 'foot_exam') and (test_value IN ('1', '2', '3', '4'))",
                     "name": "Composed rule",
                     "description": "Complex rule"
                 },
                 {
-                    "expression": "(patient_id = 'pedal_pulse') and (test_value IN ('0', '1', '2', '3'))",
+                    "expression": "(test_name = 'pedal_pulse') and (test_value IN ('0', '1', '2', '3'))",
                     "name": "Composed rule",
                     "description": "Complex rule"
                 },
                 {
-                    "expression": "(patient_id = 'pedal_pulse') and (test_value IN ('0', '1', '2', '3'))",
+                    "expression": "(test_name = 'left_ankel_brachial_index') and (test_value IN ('0', '1'))",
                     "name": "Composed rule",
                     "description": "Complex rule"
                 },
                 {
-                    "expression": "(patient_id = 'left_ankel_brachial_index') and (test_value IN ('0', '1'))",
+                    "expression": "(test_name = 'right_ankel_brachial_index') and (test_value IN ('0', '1'))",
                     "name": "Composed rule",
                     "description": "Complex rule"
                 },
                 {
-                    "expression": "(patient_id = 'right_ankel_brachial_index') and (test_value IN ('0', '1'))",
+                    "expression": "(test_name = 'monofilament_sensibility') and (test_value IN ('0', '1', '2', '3'))",
                     "name": "Composed rule",
                     "description": "Complex rule"
                 },
                 {
-                    "expression": "(patient_id = 'monofilament_sensibility') and (test_value IN ('0', '1', '2', '3'))",
+                    "expression": "(test_name = 'mood_disorder') and (test_value IN ('0', '1', '2', '3', '4', '5', '6', '7'))",
                     "name": "Composed rule",
                     "description": "Complex rule"
                 },
                 {
-                    "expression": "(patient_id = 'mood_disorder') and (test_value IN ('0', '1', '2', '3', '4', '5', '6', '7'))",
-                    "name": "Composed rule",
-                    "description": "Complex rule"
+                    "expression": "test_date <= '2022-12-31'",
+                    "name": "test_date",
+                    "description": "Rule for column test_date"
                 }
             ]
         },
         {
-            "uuid": "2ca7b583-79d7-4899-b425-a3c25314e5f1",
+            "uuid": "f5cb07d5-2921-45cf-9c87-5c6cf0ffa42c",
             "name": "treat",
             "time_varying": false,
             "variables": [
@@ -1408,6 +1446,11 @@
             ],
             "rules": [
                 {
+                    "expression": "dispensing_date >= '2017-01-01'",
+                    "name": "dispensing_date",
+                    "description": "Rule for column dispensing_date"
+                },
+                {
                     "expression": "prescription_date_ini <= '2022-12-31'",
                     "name": "prescription_date_ini",
                     "description": "Rule for column prescription_date_ini"
@@ -1421,11 +1464,6 @@
                     "expression": "containers_number > 0",
                     "name": "containers_number",
                     "description": "Rule for column containers_number"
-                },
-                {
-                    "expression": "atc_code IN ('A10AB01', 'A10BB01', 'A10BD02', 'A10BD05', 'A10BD14', 'A10BH01')",
-                    "name": "atc_code",
-                    "description": "Rule for column atc_code"
                 }
             ]
         }

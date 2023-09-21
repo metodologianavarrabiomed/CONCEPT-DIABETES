@@ -2,6 +2,11 @@
     "description": "The expressions of the different rules follow the syntax of the SQL OLAP database \n        management system called DuckDB. For more information, visit https://duckdb.org/docs/sql/introduction. \n        Keep in mind that you only have to declare as a rule the statement that would follow a WHERE clause. \n        e.g.,  Select * from people WHERE {expression}\n        expression = age >= 18\n        ",
     "rules": [
         {
+            "expression": "month_nac >= '1900-01-01'",
+            "name": "month_nac",
+            "description": "Rule for column month_nac"
+        },
+        {
             "expression": "sex IN ('0', '1')",
             "name": "sex",
             "description": "Rule for column sex"
@@ -27,29 +32,39 @@
             "description": "Rule for column dx_date"
         },
         {
-            "expression": "month_nac < '1955-01-01'",
-            "name": "month_nac",
-            "description": "Rule for column month_nac"
-        },
-        {
             "expression": "deregistration IN ('1', '2', '3')",
             "name": "deregistration",
             "description": "Rule for column deregistration"
         },
         {
-            "expression": "nursing_home IN ('0', '1')",
-            "name": "nursing_home",
-            "description": "Rule for column nursing_home"
+            "expression": "deregistration_date >= '2017-01-01'",
+            "name": "deregistration_date",
+            "description": "Rule for column deregistration_date"
         },
         {
-            "expression": "(nursing_home_date > month_nac) and (nursing_home_date <= '2022-12-31')",
-            "name": "Composed rule",
-            "description": "Complex rule"
+            "expression": "nursing_home_followup IN ('0', '1')",
+            "name": "nursing_home_followup",
+            "description": "Rule for column nursing_home_followup"
+        },
+        {
+            "expression": "nursing_home_baseline IN ('0', '1')",
+            "name": "nursing_home_baseline",
+            "description": "Rule for column nursing_home_baseline"
+        },
+        {
+            "expression": "nursing_home_date_followup >= '2017-01-01'",
+            "name": "nursing_home_date_followup",
+            "description": "Rule for column nursing_home_date_followup"
         },
         {
             "expression": "death IN ('0', '1')",
             "name": "death",
             "description": "Rule for column death"
+        },
+        {
+            "expression": "death_code_system IN ('ICD9', 'ICD10')",
+            "name": "death_code_system",
+            "description": "Rule for column death_code_system"
         }
     ]
 }

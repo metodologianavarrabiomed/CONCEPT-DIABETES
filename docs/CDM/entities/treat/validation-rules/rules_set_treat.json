@@ -2,6 +2,11 @@
     "description": "The expressions of the different rules follow the syntax of the SQL OLAP database \n        management system called DuckDB. For more information, visit https://duckdb.org/docs/sql/introduction. \n        Keep in mind that you only have to declare as a rule the statement that would follow a WHERE clause. \n        e.g.,  Select * from people WHERE {expression}\n        expression = age >= 18\n        ",
     "rules": [
         {
+            "expression": "dispensing_date >= '2017-01-01'",
+            "name": "dispensing_date",
+            "description": "Rule for column dispensing_date"
+        },
+        {
             "expression": "prescription_date_ini <= '2022-12-31'",
             "name": "prescription_date_ini",
             "description": "Rule for column prescription_date_ini"
@@ -15,11 +20,6 @@
             "expression": "containers_number > 0",
             "name": "containers_number",
             "description": "Rule for column containers_number"
-        },
-        {
-            "expression": "atc_code IN ('A10AB01', 'A10BB01', 'A10BD02', 'A10BD05', 'A10BD14', 'A10BH01')",
-            "name": "atc_code",
-            "description": "Rule for column atc_code"
         }
     ]
 }
