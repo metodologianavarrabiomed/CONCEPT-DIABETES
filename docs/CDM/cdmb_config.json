@@ -1158,7 +1158,7 @@
                     "label": "consult_request_service",
                     "description": "Indicates the service for which a consult_request_service was conducted",
                     "standard_classification": "",
-                    "format": "Integer",
+                    "format": "String",
                     "type": "Categorical",
                     "units": "",
                     "requirement_level": "Recommended",
