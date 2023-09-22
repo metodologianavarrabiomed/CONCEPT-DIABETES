@@ -25,7 +25,8 @@ RUN micromamba install -y -n aspire -f /tmp/env_project.yaml \
     && rm -rf /opt/conda/conda-meta /tmp/env_project.yaml
 
 # Installing R packages not found in conda-forge
-RUN micromamba run -n aspire Rscript -e 'remotes::install_cran(c("bupaR","processmapR"))'
+RUN micromamba run -n aspire Rscript -e 'remotes::install_cran("bupaR")'
+RUN micromamba run -n aspire Rscript -e 'remotes::install_cran("processmapR")'
 
 ENV RETICULATE_PYTHON=/opt/conda/envs/aspire/bin/python
 
