@@ -9,78 +9,48 @@ CONCEPT-DIABETES is a project that focuses on assessing the effectiveness of a s
 
 ## Analytical pipeline
 
-### Project structure
-```shell
-.
-├── Algoritmo_DM2_ENG_2023.pdf
-├── analytical_pipeline.qmd
-├── analytical_pipeline.html
-├── inputs
-│   ├── CIE9.csv
-│   ├── CIE10.csv
-│   ├── diabetes_drugs.csv
-│   ├── dm_cmbd_df.csv
-│   ├── dm_comorb.csv
-│   ├── dm_param_df.csv
-│   ├── dm_patients_df.csv
-│   ├── dm_treat_df.csv
-│   └── FRAG_HBA.pnml
-├── LICENSE
-├── outputs
-│   ├── activity_presence.png
-│   ├── barplot_features_importance.png
-│   ├── decision_tree.png
-│   ├── dendogram.png
-│   ├── dm_cmbd_df.csv
-│   ├── dm_comorb.csv
-│   ├── dm_param_df.csv
-│   ├── dm_patients_df.csv
-│   ├── dm_treat_df.csv
-│   ├── eventlog.csv
-│   ├── eventlog.xes
-│   ├── eventlog_filtered.csv
-│   ├── eventlog_filtered.xes
-│   ├── eventlog_raw.csv
-│   ├── evlog_pm_02.png
-│   ├── evlog_pm_1.png
-│   ├── evlog_pm_cluster_0.png
-│   ├── evlog_pm_cluster_1.png
-│   ├── evlog_pm_cluster_2.png
-│   ├── evlog_pm_cluster_5.png
-│   ├── evlog_pm_cluster_3.png
-│   ├── evlog_pm_cluster_7.png
-│   ├── evlog_pm_cluster_8.png
-│   ├── evlog_pm_cluster_9.png
-│   ├── evlog_pm_cluster_11.png
-│   ├── fitness_by_cluster.csv
-│   ├── fitness_by_cluster.png
-│   ├── trace_0.png
-│   ├── trace_1.png
-│   ├── trace_2.png
-│   ├── trace_5.png
-│   ├── trace_7.png
-│   ├── trace_8.png
-│   ├── trace_6.png
-│   └── trace_9.png
-│   └── trace_11.png
-├── petri_net.png
-└── README.md
+## Outputs
+Outputs structure and content is described below including the files and folders that are generated when creating a research project with the `cdmb` Python library. There are four main folders corresponding to:
 
+- __docs/CDM/__
+  - **cdmb_config.json**: Configuration file.
+  - **cohort_definition_inclusion.csv**: csv file that defines the criteria (i.e., codes) for inclusion in a cohort.
+  - **cohort_definition_exclusion.csv**: csv file that defines the criteria (i.e., codes) for exclusion in a cohort.
+  - **common_datamodel.xlsx**: The definition of the common data model in Excel format.
+  - **entities/**: Folder structure where, for each defined entity, the catalogs and the established validation rules are stored.
+  - **ER.gv, ER.gv.png**: an Entity-Relationship Diagram of the entities included in the CDM.
+  - **synthetic-data/**: Folder structure contaning an automatically generated set of 1000 synthetic records per entity included en the CDM.
+  - **hashed_files_list.json**: List of the files generated or used after generating the project with their md5 hash. This file must be kept hidden 
+and should be used to cross-check with the results obtained from the analysis from the original input files.
+- __inputs/__
+  - **data.duckdb**: Database that temporarily contains the data entered by the user (synthetic data by default)
+- __outputs/__
+  - (Default directory of all the outputs produced in the project execution)
+- __src/__
+  - __analysis-scripts/__
+    - (directory where the analysis scripts developed by the user are stored)
+    - **analytical_pipeline.qmd**: Quarto document containing the entire analytical pipeline (code, results and information on the analysis methodology followed).
+    - **diabetes_drugs.csv**: Table with diabetes drugs' information.
+    - **CIE9.csv**: Table with from CIE9 to CIAP2 translation information.
+    - **CIE10.csv**: Table with from CIE10 to CIAP2 translation information.
+    - **petri_net.pnml**: DM2 Treatment Algorithm's interpretation to patients with frailty in Petri net format.
+    - **_quarto.yml**: File containing the Metadata to execute Quarto documents.
+  - __check_load-scripts/__
+    - **check_load.py**: Script in charge of the mapping between the files introduced by the user (./inputs) and map them to the defined entities (inputs/data.duckdb). 
+    In the loading process, the following checks are performed: Name of the variables match; the format/type of the variables match those established in the configuration.
+    - __inputs/__: Auxiliary folder for the script 'check_load.py'.
+  - __dqa-scripts/__
+    - **dqa.py**: Data Quality Assesment script by default.
+  - **validation-scripts/**
+    - **validator.py**: Script in charge of applying the validation rules to the data.
+    - **valididator_report.qmd**: Quarto document that generates a report in html from the results obtained from 'validator.py'. 
+    - **_quarto.yml**: File containing metadata to execute Quarto documents.
+- **ro-crate-metadata.json**: Accessible and practical formal metadata description for use in a wider variety of situations, 
+from an individual researcher working with a folder of data, to large data-intensive computational research environments. For more information, visit [RO-Crate](https://www.researchobject.org/ro-crate/).
+- **man_container_deployment.md**: From Data Science for Health Services and Policy Research group we provide in the following
+  GitHub repository, a solution, for the deployment of the generated project. This step is optional.
+- **LICENSE.md**: Project license.
 
-```
-#### Main files
-
-- **analytical_pipeline.qmd**: Quarto document containing the entire analytical pipeline (code, results and information on the analysis methodology followed).
-- **analytical_pipeline.html**: Output self-contained HTML file containing the analysis results and additional project information.
-- **diabetes_drugs.csv**: Table with diabetes drugs' information.
-- **CIE9.csv**: Table with from CIE9 to CIAP2 translation information.
-- **CIE10.csv**: Table with from CIE10 to CIAP2 translation information.
-- **dm_cmbd_df.csv**: Synthetic data of hospitalizations table compliant with the Common Data Model.
-- **dm_comorb_df.csv**: Synthetic data of comorbidities table compliant with the Common Data Model.
-- **dm_param_df.csv**: Synthetic data of parameters table compliant with the Common Data Model.
-- **dm_patients_df.csv**: Synthetic data of patients compliant with the Common Data Model.
-- **dm_treat_df.csv**: Synthetic data of treatments compliant with the Common Data Model.
-- **FRAG_HBA.pnml**: DM2 Treatment Algorithm's interpretation to patients with frailty in Petri net format.
 
 ## R dependencies
 Version of Rbase used: **4.2.3**
@@ -91,7 +61,6 @@ Version of [Quarto](https://quarto.org/) used: **1.3.361**
 |---|---|---|
 | tidyverse  | 2.0.0	 | https://doi.org/10.21105/joss.01686  |
 | lubridate  | 1.9.2	 | https://github.com/tidyverse/lubridate  |
-| mongolite  | 2.7.2	 | 	https://github.com/jeroen/mongolite  |
 | jsonlite  | 1.8.4	 | 	https://jeroen.r-universe.dev/jsonlite  |
 | ggplot2  | 3.4.2	 | https://github.com/tidyverse/ggplot2  |
 | bupaR  | 0.5.3	 | https://bupar.net/  |
@@ -101,6 +70,7 @@ Version of [Quarto](https://quarto.org/) used: **1.3.361**
 | DiagrammeRsvg  | 0.1	 | 	https://github.com/rich-iannone/DiagrammeRsvg  |
 | rsvg  | 2.4.0	 | 	https://docs.ropensci.org/rsvg/  |
 | here  | 1.0.1	 | https://here.r-lib.org/  |
+| reticulate  | 1.32.0	 | https://github.com/rstudio/reticulate  |
 
 
 ## Python dependencies
@@ -118,7 +88,7 @@ Version of Python used: **3.9**
 | scipy  | 1.10.1  | https://scipy.org/  |
 | scikit-learn  | 1.2.2  | https://scikit-learn.org/stable/  |
 | yellowbrick  | 1.5  | https://www.scikit-yb.org/en/latest/  |
-
+| dateutil  | 2.8.2  | [https://www.scikit-yb.org/en/latest/](https://pypi.org/project/python-dateutil/)  |
 
 ## Usage
 
