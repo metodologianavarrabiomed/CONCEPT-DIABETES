@@ -191,7 +191,9 @@ def select_by_condition(cond):
     cie10_df = pd.read_csv('./CIE10.csv')
     cie9 = dict(zip(cie9_df.CIE9,cie9_df.BDCAP))
     cie10 = dict(zip(cie10_df.CIE10,cie10_df.BDCAP))
+    comorb_df = comorb_df[comorb_df['comorb_date_end'].isna()]
     comorb_df['ciap2'] = comorb_df['comorb_code']
+    comorb_df.index = range(len(comorb_df))
     for n in range(len(comorb_df)):
         if comorb_df['comorb_codif'][n]=='ICD9':
             comorb_df['ciap2'][n] = cie9.get(comorb_df['comorb_code'][n],None)
@@ -233,18 +235,50 @@ def select_by_condition(cond):
     to_ic_change_list = ['I50','I13']
     # INSUFICIENCIA CARDÍACA (I50)
     # ENFERMEDAD CARDÍACA Y RENAL CRÓNICA HIPERTENSIVA (I13)
-    to_erc_change_list = ['N18','I12']
+    to_erc_change_list = ['N18','I12','filtglom']
     # ENFERMEDAD RENAL CRÓNICA (N18)
     # ENFERMEDAD RENAL CRÓNICA HIPERTENSIVA (I12)
     to_f_change_list = []
     to_ob_change_list = ['E66']
     # SOBREPESO Y OBESIDAD (E66)
     to_else_change_list = []
+    # https://ukkidney.org/health-professionals/information-resources/uk-eckd-guide/ckd-stages
+    # Include obesity and kcd detection by parameters values
+    cmbd_bmi = param_df[param_df['param_name']=='bmi']
+    cmbd_bmi['param_value'] = cmbd_bmi['param_value'].apply( 
+        lambda x: 'bmi>30' if x>30 else 'bmi<30')
+    cmbd_bmi['dx_date'] = cmbd_bmi['patient_id'].apply(
+        lambda x: dx_date[x]).to_list()
+    dx_previous_bmi = (cmbd_bmi[cmbd_bmi['param_date'] <= cmbd_bmi['dx_date']]
+                       ).groupby('patient_id')['param_date'].max().to_dict() 
+    cmbd_bmi = cmbd_bmi[['patient_id','param_date','param_value']
+                             ].rename(columns={
+                                   'param_value':'code',
+                                   'param_date':'admission_date'})                                 
+    param_filt = param_df[(param_df['param_name']=='filtglom') & 
+                          (param_df['param_value']>60)
+                          ].sort_values(['patient_id','param_date'])
+    param_filt['time_diff'] = param_filt.groupby(
+        'patient_id')['param_date'].diff()
+    cmbd_filt = param_filt[param_filt['time_diff'] < pd.Timedelta(days=90)
+                           ].drop_duplicates(subset='patient_id',keep='first')[
+                               ['patient_id','param_date','param_name']
+                               ].rename(columns={
+                                   'param_name':'code',
+                                   'param_date':'admission_date'})
+    
+    cmbd_long = pd.concat([cmbd_long,cmbd_filt,cmbd_bmi])
+    cmbd_long.index = range(len(cmbd_long))    
     cmbd_long['dx_date'] = cmbd_long['patient_id'].apply(
         lambda x: dx_date[x]).to_list()
     ob_list.update( 
         set(cmbd_long.query(
         "code in @to_ob_change_list & admission_date<dx_date")['patient_id']))
+    ob_list.update(
+        set([cmbd_long['patient_id'][n] for n in range(len(cmbd_long)) if
+             cmbd_long['code'][n]=='bmi>30' and 
+             dx_previous_bmi.get(cmbd_long['patient_id'][n],
+                                 '')==cmbd_long['admission_date'][n]]))    
     erc_list.update( 
         set(cmbd_long.query(
         "code in @to_erc_change_list & admission_date<dx_date")['patient_id']))
@@ -279,7 +313,7 @@ def select_by_condition(cond):
     from_ic_change_list = to_ecv_change_list
     from_erc_change_list = from_ic_change_list+to_ic_change_list
     from_f_change_list = from_erc_change_list+to_erc_change_list
-    from_ob_change_list = from_f_change_list
+    from_ob_change_list = from_f_change_list+['bmi<30']
     from_else_change_list = from_ob_change_list+to_ob_change_list
     for id in list_cond:
         cmbd_id = cmbd_long[cmbd_long['patient_id']==id]
