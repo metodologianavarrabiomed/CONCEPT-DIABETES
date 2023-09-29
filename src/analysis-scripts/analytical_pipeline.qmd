@@ -125,6 +125,7 @@ from gensim.models import LdaModel
 from datetime import  datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import duckdb
+import re
 
 ```
 
@@ -161,6 +162,8 @@ def select_by_condition(cond):
     Filtering data by predominant clinical condition according to redGDPS
     Args:
         cond (str): condition wanted to analyze
+    Return:
+        presc_data_p (float): percentage of not null data in prescription dates
         
     https://www.sciencedirect.com/science/article/pii/S1751991821000176?via%3Dihub#tbl0015
     https://www.sanidad.gob.es/estadEstudios/estadisticas/estadisticas/estMinisterio/SIAP/map_cie9mc_cie10_ciap2.htm
@@ -176,7 +179,7 @@ def select_by_condition(cond):
     patients_df_path = '../../outputs/dm_patients_df.csv'
     treat_df_path = '../../outputs/dm_treat_df.csv'
     
-    con = duckdb.connect('../../inputs/data.duckdb')
+    con = duckdb.connect('C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb')
     cmbd_df = con.sql("SELECT * FROM main.cmbd WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
     comorb_df = con.sql("SELECT * FROM main.comorb WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
     param_df = con.sql("SELECT * FROM main.param WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
@@ -222,7 +225,7 @@ def select_by_condition(cond):
         cmbd_df[['patient_id','admission_date','diagnosis3_code']
                  ].rename(columns = {'diagnosis3_code':'code'}).dropna()])
     cmbd_long['code'] = cmbd_long['code'].apply(
-        lambda x: x.replace('E66.3','sobrepeso').split('.')[0])
+        lambda x: str(x).replace('E66.3','sobrepeso').split('.')[0])
 
     to_ecv_change_list = ['I2%i' %i for i in range(6)]+[
                              'I6%i' %i for i in range(10)]+[
@@ -347,7 +350,10 @@ def select_by_condition(cond):
     treat_df.to_csv(treat_df_path,index=False)
     comorb_df.to_csv(comorb_df_path,index=False)
     cmbd_df.to_csv(cmbd_df_path,index=False)
-
+    
+    presc_data_p = treat_df['prescription_date_ini'].notna().sum()/len(treat_df)
+    return presc_data_p
+  
 def change_matrix_values(matrix,list_rows,list_cols, new_value=0):
     '''change selected rows' and columns' matrix`s values
     Args:
@@ -383,11 +389,253 @@ def col2treat(matrix,rows,col):
     else:
         return '_'
     
-def evlog_creation(treat_df_path='../../outputs/dm_treat_df.csv',
-                  param_df_path='../../outputs/dm_param_df.csv',
-                  code2drug_path='./diabetes_drugs.csv',
-                  output_file='../../outputs/eventlog_raw.csv'):
-    '''Preprocessing and event log obtention
+def nac2comprimidos(nac_path,code_set):
+    '''Creating dictionary of nac drugs container's number of tablets
+  
+    Args:
+      nac_path (str): nac table's path
+      code_set (set): nac code list
+      code2drug_path (str): drugs' and their codes' info's table's path
+    Outputs:
+        nac_dict (dic): nac codes as keys and their number of tablets as values
+    '''
+
+    nac = pd.read_csv(nac_path)
+    nac['Código Nacional'] = nac['Código Nacional'].astype(str)
+    nac_dict = {}
+
+    for n in range(len(nac)):
+        if nac['Código Nacional'][n] in code_set:
+            text = nac['Nombre del producto farmacéutico'][n].lower()
+            if re.search(r'\d+(?=\s*comprim)', text)!=None:
+                nac_dict[nac['Código Nacional'][n]
+                         ] = int(re.search(r'\d+(?=\s*comprim)', text).group())
+            elif re.search(r'\d+(?=\s*comprim)', 
+                           re.sub(r'\([^()]*\)', '', text))!=None:
+                nac_dict[nac['Código Nacional'][n]
+                         ] = int(re.search(r'\d+(?=\s*comprim)', 
+                                re.sub(r'\([^()]*\)', '', text)).group())          
+            elif re.search(r'con pelicula (\d+)', text)!=None:
+                nac_dict[nac['Código Nacional'][n]
+                         ] = int(re.search(r'con pelicula (\d+)',
+                                    text).group().split()[-1])
+    return nac_dict
+
+
+
+def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
+                                param_df_path='../../outputs/dm_param_df.csv',
+                                code2drug_path='./diabetes_drugs.csv',
+                                output_file='../../outputs/eventlog_raw.csv'):
+    '''Preprocessing and event log obtention with prescriptions
+  
+    Args:
+      treat_df_path (str): datamodel's treatment table's path
+      param_df_path (str): datamodel's parameter table's path
+      code2drug_path (str): drugs' and their codes' info's table's path
+  
+    ADNI: ANTIDIABETICOS NO INSULINICOS
+  
+    The treatment of type 2 diabetes mellitus with ADNI includes a wide range of 
+    drugs which, depending on their drugs which, according to their mechanisms of 
+    action, can be grouped as follows: 
+     Increased endogenous insulin sensitivity:
+        o Biguanides: metformin (MET).
+        o Thiazolidinediones: pioglitazone (PIO).
+     Increased endogenous insulin secretion/release:
+        o Sulfonylureas (SU).
+        o Meglitinides: repaglinide (REP)
+     Reduction of digestive glucose absorption:
+        o Alpha-glucosidase inhibitors.
+        o Vegetable fiber and derivatives.
+     Incretin effect enhancers.
+        o Inhibitors of DPP-4 (iDPP-4).
+        o GLP-1 analogues (aGLP-1).
+     Inhibitors of renal glucose reuptake
+        o SGLT-2 inhibitors (iSGLP-2)
+
+    '''
+    treat_df = pd.read_csv(treat_df_path)
+    param_df = pd.read_csv(param_df_path)
+    code2drug = pd.read_csv(code2drug_path,index_col=0).to_dict()
+    
+
+    # definir los tipos de medicamentos a analizar
+    col_atc = 'atc_code'
+    col_id = 'patient_id'
+    col_date_start = 'prescription_date_ini'
+    col_date_end = 'prescription_date_end'
+    col_name = 'Event'
+    treat_df.index = range(len(treat_df))
+    treat_df[col_name] = [code2drug.get(treat_df[col_atc][c],{'class' : 'ERROR'}
+                                    ).get('class','ERROR2').replace('+','&'
+                                    ) if treat_df[col_atc][c].startswith('A'
+                                    ) else None for c in range(
+                                      len(treat_df[col_atc]))  ]
+    treat_df = treat_df.drop(labels=[i for i in range(len(treat_df)
+                        ) if treat_df[col_name][i] in [None,'ERROR','ERROR2']],
+                        axis=0).drop_duplicates(subset=[col_id,
+                                                        col_date_start,
+                                                        col_date_end,
+                                                        col_name])
+    treat_df['actins'] = range(len(treat_df))
+    treat_df_start = treat_df[[col_id,col_date_start,col_name,'actins']
+                              ].rename(columns = {col_date_start:'date'})
+    treat_df_start['date'] = pd.to_datetime(treat_df_start['date'],
+                                            format='%Y-%m-%d')
+    treat_df_end = treat_df[[col_id,col_date_end,col_name,'actins']
+                              ].rename(columns = {col_date_end:'date'})
+    treat_df_start['cycle'] = 'start'
+    treat_df_end['cycle'] = 'end'
+    treat_df_end['date'] = treat_df_end['date'].fillna('2022-12-31').apply(
+        lambda x: min([x,'2023-01-01']))
+    treat_df_end['date'] = pd.to_datetime(treat_df_end['date'],
+                                          format='%Y-%m-%d').apply(
+                                              lambda x: x-timedelta(days=1))
+    
+    col_param = 'param_name'
+    col_value = 'param_value'
+    col_date = 'param_date'
+    param_df = param_df.drop(labels=[i for i in range(len(param_df)
+                              ) if param_df[col_param][i]!='hba1c'],
+               axis=0)
+    param_df.index = range(len(param_df))
+    param_df[col_value] = ['HBA<75' if i<7.5  else 'HBA>75'  for i in list(
+      param_df[col_value])]
+    param_df.rename(columns = {col_value: col_name,col_date:'date'},
+                    inplace = True)
+    param_df['actins'] = param_df.index+[max(treat_df['actins'])+1]*len(param_df)
+    param_df = param_df[[col_id,'date',col_name,'actins']]
+    param_df['date'] = pd.to_datetime(param_df['date'],
+                                      format='%Y-%m-%d')
+    param_df_start = param_df.copy()
+    param_df_start['cycle'] = 'start'
+    param_df_end = param_df.copy()
+    param_df_end['cycle'] = 'end'
+    
+    
+    df = pd.concat([param_df_start,treat_df_start,param_df_end,treat_df_end]
+                   ).drop_duplicates()
+    
+    df = df.sort_values(by = [col_id,'date',col_name,'cycle'],
+                        ascending = [True,True,True,False])
+    df.index = range(len(df))
+    patient_list = list(set(df[col_id]))
+    df['nid'] = [patient_list.index(df[col_id][n]) for n in range(len(df))]
+    
+    df = df.sort_values(by = [col_id, 'date','cycle'],
+                        ascending = [True, True, False])
+    df.index = range(len(df))
+
+    #####################################################################
+    
+    event_log = dict()
+    event_log['patient_id'] = []
+    event_log['date'] = []
+    event_log['nid'] = []
+    event_log['Event'] = []
+    event_log['cycle'] = []
+    days_after_m = 5
+    id_list = list(set(df['patient_id']))
+    events = list(set([drug for e in set(df['Event']) for drug in e.split('&')]))
+    hba0, hba1 = events.index('HBA<75'), events.index('HBA>75')
+    row = len(events)
+    no_hba = [i for i in range(row) if i not in [hba0,hba1]]
+    for id in tqdm(id_list):
+        df_id = df[df['patient_id']==id]
+        nid = id_list.index(id)
+        actins = set(df_id['actins'])
+        date_min = min(set(df_id['date']))
+        date_max = max(set(df_id['date']))
+        dd = [date_min + timedelta(days=x) for x in range(
+          (date_max-date_min).days + 1)]
+        col = len(dd)
+        ev_status = np.zeros((row,col))
+        for act in actins:
+            ini = list(df_id['date'][np.logical_and(df_id['actins']==act,
+                                                  df_id['cycle']=='start')])[0]
+            ev =  list(df_id['Event'][df_id['actins']==act])[0]            
+            fin = list(df_id['date'][np.logical_and(df_id['actins']==act,
+                                                  df_id['cycle']=='end')])[0]
+            ev_cols = [events.index(ev_) for ev_ in ev.split('&')]
+            ev_status = change_matrix_values(ev_status,ev_cols,
+                                             list(range(dd.index(ini),
+                                                        dd.index(fin)+1)),1)
+                            
+        measures = list(np.concatenate((ev_status[hba0,:].nonzero()[0],
+                                        ev_status[hba1,:].nonzero()[0])))
+        ev_status = ev_status.astype(int)              
+        #delete treatments in measure events        
+        ev_status = change_matrix_values(ev_status,no_hba,measures,0)
+        #correction to eliminate events after hemoglobin measurement that are
+        #the continuation of the previous treatment and not the new treatment.
+        #Example: If a patient has 'A' treatment and because of hemoglobin's
+        #         measure they change their treatment to 'B', originally their
+        #         trace could appear as A>measure>A>B, but the true trace
+        #         should be A>measure>B. Therefore, in a fixed period time 
+        #         after each measurement 'days_after_m', if we detect that 
+        #         mistake we delete it. 
+
+        for j in measures:
+            if ev_status.shape[1]<=j+1 or days_after_m<3:
+                continue
+            first_col = ev_status[:,j+1]
+            dif_col = np.where(np.any(ev_status[:, j+2:j+days_after_m]!=
+                                      first_col[:, np.newaxis],
+                                      axis=0))[0]
+          
+            if  (dif_col.size > 0) and (not
+                    np.array_equal(ev_status[:,j-1],
+                                    ev_status[:,j+dif_col[0]+2])) and (
+                    np.array_equal(ev_status[:,j-1],
+                                    ev_status[:,j+1])):
+                ev_status = change_matrix_values(ev_status,no_hba,
+                                                  range(j+1,j+dif_col[0]+2),0)
+
+          
+        col = 0
+        col_0 = 0
+        min_change_days = 7
+        while col<len(dd)-1:
+            if not np.array_equal(ev_status[:,col],ev_status[:,col+1]):
+                ev = col2treat(ev_status,events,col_0)
+                if  ('HBA' not in ev and col-col_0<min_change_days):
+                    col+=1
+                    col_0 = col
+                    continue
+                event_log['patient_id'].extend([id,id])
+                event_log['date'].extend([dd[col_0],dd[col]])
+                event_log['Event'].extend([ev,ev])
+                event_log['nid'].extend([nid,nid])
+                event_log['cycle'].extend(['start','end'])
+                
+                col+=1
+                col_0 = col
+            else:
+                col+=1
+        ev = col2treat(ev_status,events,col_0)
+        if 'HBA' in ev or col-col_0>=min_change_days:
+            event_log['patient_id'].extend([id,id])
+            event_log['date'].extend([dd[col_0],dd[col]])
+            event_log['Event'].extend([ev,ev])
+            event_log['nid'].extend([nid,nid])
+            event_log['cycle'].extend(['start','end'])
+    
+            
+    evlog = pd.DataFrame.from_dict(event_log)   
+    evlog = evlog.sort_values(['patient_id','date'])
+    evlog.rename(columns = {'patient_id':'ID'}, inplace = True)
+    evlog.index = range(len(evlog))
+    evlog['cycle'] = ['start','end']*int(0.5*len(evlog))
+    evlog['actins'] = [n//2 for n in range(len(evlog))]
+    evlog.to_csv(output_file)
+
+def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
+                                param_df_path='../../outputs/dm_param_df.csv',
+                                code2drug_path='./diabetes_drugs.csv',
+                                nac_path='./Nomenclator_de_Facturacion.csv',
+                                output_file='../../outputs/eventlog_raw.csv'):
+    '''Preprocessing and event log obtention with dispensations
   
     Args:
       treat_df_path (str): datamodel's treatment table's path
@@ -419,13 +667,14 @@ def evlog_creation(treat_df_path='../../outputs/dm_treat_df.csv',
     param_df = pd.read_csv(param_df_path)
     code2drug = pd.read_csv(code2drug_path,index_col=0).to_dict()
 
-    treatment_days = 3
-    days_error = 40-treatment_days
+    treat_min_days = 2
+    days_error = 60-treat_min_days
     days_after_m = 7
     
 
     # definir los tipos de medicamentos a analizar
     col_atc = 'atc_code'
+    col_nac = 'nac_code'
     col_id = 'patient_id'
     col_date = 'dispensing_date'
     col_name = 'Event'
@@ -439,13 +688,14 @@ def evlog_creation(treat_df_path='../../outputs/dm_treat_df.csv',
                         ) if treat_df[col_name][i] in [None,'ERROR','ERROR2']],
                         axis=0)
     treat_df.index = range(len(treat_df))
-    
-    
-    treat_df = treat_df[[col_id,col_date,col_atc,col_name]]
+    treat_df[col_nac] = treat_df[col_nac].astype(str)
+    nac_dict = nac2comprimidos(nac_path,set(treat_df[col_nac]))
+    treat_df[col_nac] = treat_df[col_nac].apply(
+        lambda x: nac_dict.get(x,days_error))
     treat_df = treat_df.sort_values(by = [col_id,col_date ],
                       ascending = [True, True])
     treat_df.rename(columns = {col_date:'date'}, inplace = True)
-    treat_df = treat_df[[col_id,'date',col_name]]
+    treat_df = treat_df[[col_id,'date',col_name,col_nac]]
     
     col_param = 'param_name'
     col_value = 'param_value'
@@ -473,12 +723,13 @@ def evlog_creation(treat_df_path='../../outputs/dm_treat_df.csv',
     for n in range(len(df_)):
         if 'HBA' in df_[col_name][n]:
             continue
-        df_['date'][n] += timedelta(days=treatment_days)
+        df_['date'][n] += timedelta(days=treat_min_days)
     
     df = pd.concat([df,df_])
     df = df.sort_values(by = [col_id, 'actins','cycle'],
                         ascending = [True, True, False])
     df.index = range(len(df))
+    df[col_nac].fillna(0,inplace=True)
     #####################################################################
     
     event_log = dict()
@@ -503,16 +754,30 @@ def evlog_creation(treat_df_path='../../outputs/dm_treat_df.csv',
           (date_max-date_min).days + 1)]
         col = len(dd)
         ev_status = np.zeros((row,col))
+        max_nac = int(max(df_id[col_nac])*1.2)
         #event matrix where columns are days and rows treatments
+        #0:no treatment, 1:treatment, 2:posible treatment,
+        #3:after measuring period
         for act in actins:
             ini = list(df_id['date'][np.logical_and(df_id['actins']==act,
                                                   df_id['cycle']=='start')])[0]
-            ev =  list(df_id['Event'][df_id['actins']==act])[0]
-            fin = ini+timedelta(days=treatment_days) if 'HBA' not in ev else ini
+            ev =  list(df_id['Event'][df_id['actins']==act])[0]            
+            fin = ini+timedelta(days=treat_min_days) if 'HBA' not in ev else ini
             ev_cols = [events.index(ev_) for ev_ in ev.split('&')]
             ev_status = change_matrix_values(ev_status,ev_cols,
                                              list(range(dd.index(ini),
                                                         dd.index(fin)+1)),1)
+            if 'HBA' not in ev:
+                possible_day_duration = int(list(
+                    df_id['nac_code'][np.logical_and(df_id['actins']==act,
+                    df_id['cycle']=='start')])[0]*1.2)
+                until_day = min([dd.index(ini)+possible_day_duration,col])
+                ev_status = change_matrix_values(ev_status,ev_cols,
+                                                 list(range(dd.index(fin),
+                                                            until_day)),2)
+                            
+                                        
+                
                 
         measures = list(np.concatenate((ev_status[hba0,:].nonzero()[0],
                                         ev_status[hba1,:].nonzero()[0])))
@@ -521,57 +786,61 @@ def evlog_creation(treat_df_path='../../outputs/dm_treat_df.csv',
         #         drug multiple times, their trace could appear as A>A>A>A, 
         #         but the true trace should appear as 'A' treatment lasting
         #         its corresponding time. Therefore, if the difference between
-        #         the last day and the first day of two consecutive same
-        #         treatments is less than a fixed period of time 'days_error', 
-        #         two events are jointed in one with the first day of the first 
-        #         event as initial date and last day of the last event as the 
-        #         end date.
+        #         the last day and the first day of two consecutive same drugs's
+        #         dispensation is less than the number of tablets of the 
+        #         container two events are jointed in one with the first day of
+        #         the first event as initial date and last day of the last 
+        #         event as the end date.
         ev_status = ev_status.astype(int)
         for i in no_hba:
             seq = str(list(ev_status[i,:]))
-            for delta_days in range(1,days_error):
-                pattern = ', '+str([1]+[0]*delta_days+[1])[1:-1]
+            for delta_days in range(1,max_nac):
+                pattern = ', '+str([1]+[2]*delta_days+[1])[1:-1]
                 new_pattern = ', '+str([1]+[1]*delta_days+[1])[1:-1]
                 seq = seq.replace(pattern,new_pattern)
-            ev_status[i,:] = eval(seq)
-        
-        #delete treatments in measure events
-        ev_status = change_matrix_values(ev_status,no_hba,measures,0)
-        #correction to eliminate events after hemoglobin measurement that are
-        #the continuation of the previous treatment and not the new treatment.
-        #Example: If a patient has 'A' treatment and because of hemoglobin's
-        #         measure they change their treatment to 'B', originally their
-        #         trace could appear as A>measure>A+B>B, but the true trace
-        #         should be A>measure>B. Therefore, in a fixed period time 
-        #         after each measurement 'days_after_m', if we detect that 
-        #         mistake we delete it. 
-        
-        for j in measures:
-            if ev_status.shape[1]<=j+1 or days_after_m<3:
-                continue
-            first_col = ev_status[:,j+1]
-            dif_col = np.where(np.any(ev_status[:, j+2:j+days_after_m]!=
-                                      first_col[:, np.newaxis],
-                                      axis=0))[0]
-          
-            if  (dif_col.size > 0) and (not
-                    np.array_equal(ev_status[:,j-1],
-                                    ev_status[:,j+dif_col[-1]+2])) and (
-                    np.dot(ev_status[:,j-1],ev_status[:,j+1])*np.dot(
-                        ev_status[:,j+1],ev_status[:,j+2])>0):
-                ev_status = change_matrix_values(ev_status,no_hba,
-                                                  range(j+1,j+dif_col[0]+2),0)
-                
+            ev_status[i,:] = eval(seq) 
+              
+        ev_status = change_matrix_values(ev_status,no_hba,measures,3)
+        for i,j in list(itertools.combinations(no_hba,2)):
+            seq_i = str(list(ev_status[i,:]))
+            seq_j = str(list(ev_status[j,:]))
+            for delta_days in range(1,max_nac):
+                pattern_i = ', '+str([1]+[1]*delta_days+[3])[1:-1]
+                if re.search(pattern_i,seq_i)==None:
+                    continue
+                pattern_j = ', '+str([1]+[2]*delta_days+[3])[1:-1]
+                new_pattern_j = ', '+str([1]+[1]*delta_days+[3])[1:-1]
+                seq_j = seq_j.replace(pattern_j,new_pattern_j)
+            for delta_days in range(1,max_nac):
+                pattern_j = ', '+str([1]+[1]*delta_days+[3])[1:-1]
+                if re.search(pattern_j,seq_j)==None:
+                    continue
+                pattern_i = ', '+str([1]+[2]*delta_days+[3])[1:-1]
+                new_pattern_i = ', '+str([1]+[1]*delta_days+[3])[1:-1]
+                seq_i = seq_i.replace(pattern_i,new_pattern_i)
+            ev_status[i,:] = eval(seq_i)
+            ev_status[j,:] = eval(seq_j)
+
+        measures_w_dp = [[i+d_p for d_p in range(days_after_m+1)
+                          if i+d_p<col] for i in measures]    
+        measures_w_dp = list(itertools.chain(*measures_w_dp))
+        ev_status = change_matrix_values(ev_status,no_hba,measures_w_dp,3)
+
+        for i in no_hba:
+            seq = str(list(ev_status[i,:]))
+            seq = seq.replace('2','0').replace('3','0')
+            ev_status[i,:] = eval(seq)               
                 
           
         col = 0
         col_0 = 0
+        min_change_days = 42
         while col<len(dd)-1:
             if not np.array_equal(ev_status[:,col],ev_status[:,col+1]):
                 ev = col2treat(ev_status,events,col_0)
-                if ev=='_' and col-col_0<21:
+                if  (ev=='_' and col-col_0<min_change_days):
                     col+=1
-                    col_0
+                    col_0 = col
                     continue
                 event_log['patient_id'].extend([id,id])
                 event_log['date'].extend([dd[col_0],dd[col]])
@@ -584,11 +853,12 @@ def evlog_creation(treat_df_path='../../outputs/dm_treat_df.csv',
             else:
                 col+=1
         ev = col2treat(ev_status,events,col_0)
-        event_log['patient_id'].extend([id,id])
-        event_log['date'].extend([dd[col_0],dd[col]])
-        event_log['Event'].extend([ev,ev])
-        event_log['nid'].extend([nid,nid])
-        event_log['cycle'].extend(['start','end'])
+        if ev!='_' or col-col_0>=min_change_days:
+            event_log['patient_id'].extend([id,id])
+            event_log['date'].extend([dd[col_0],dd[col]])
+            event_log['Event'].extend([ev,ev])
+            event_log['nid'].extend([nid,nid])
+            event_log['cycle'].extend(['start','end'])
     
             
     evlog = pd.DataFrame.from_dict(event_log)   
@@ -1310,8 +1580,11 @@ The link between guideline adherence, in terms of performed process measures, an
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-select_by_condition('f')
-evlog_creation()                  
+notnan_p = select_by_condition('f')
+if notnan_p>0.98:
+  evlog_creation_prescriptions()
+else:
+  evlog_creation_dispensations()                  
 ```
 
 ```{python}
