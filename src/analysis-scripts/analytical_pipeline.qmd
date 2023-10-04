@@ -81,7 +81,6 @@ import matplotlib.pyplot as plt
 import textdistance
 import gensim.corpora as corpora
 from tqdm import trange, tqdm
-from itertools import product
 from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import fcluster, linkage, dendrogram
 from sklearn.cluster import AgglomerativeClustering 
@@ -93,8 +92,9 @@ from pm4py.algo.decision_mining import algorithm as decision_mining
 from pm4py.visualization.petri_net import visualizer
 from gensim.models import LdaModel
 from datetime import  datetime, timedelta
+from dateutil.relativedelta import relativedelta
 import duckdb
-
+import re
 ```
 
 ```{python}
@@ -173,13 +173,13 @@ def select_by_condition(cond):
      or peripheral arterial disease), CKD (defined as eGFR < 60 ml/min/
      1.73 m2 and/or UACR ≥ 30 mg/g) and HF. 
     '''
-    cmbd_df_path = '../../outputs/dm_cmbd_df.csv'
-    comorb_df_path = '../../outputs/dm_comorb_df.csv'
-    param_df_path = '../../outputs/dm_param_df.csv'
-    patients_df_path = '../../outputs/dm_patients_df.csv'
-    treat_df_path = '../../outputs/dm_treat_df.csv'
+    cmbd_df_path = '../../outputs/dm_cmbd_df_%s.csv' % cond
+    comorb_df_path = '../../outputs/dm_comorb_df_%s.csv' % cond
+    param_df_path = '../../outputs/dm_param_df_%s.csv' % cond
+    patients_df_path = '../../outputs/dm_patients_df_%s.csv' % cond
+    treat_df_path = '../../outputs/dm_treat_df_%s.csv' % cond
     
-    con = duckdb.connect('C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb')
+    con = duckdb.connect('../../inputs/data.duckdb')
     cmbd_df = con.sql("SELECT * FROM main.cmbd WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
     comorb_df = con.sql("SELECT * FROM main.comorb WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
     param_df = con.sql("SELECT * FROM main.param WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
@@ -1040,7 +1040,7 @@ def kelbow(dm,elbow_metric='distortion',locate_elbow=False,
                                   linkage = 'average')
   # k is range of number of clusters.
   visualizer_ = KElbowVisualizer(model,
-                                k=(5,25),
+                                k=(2,25),
                                 timings=False,
                                 xlabel = 'cluster numbers',
                                 metric=elbow_metric,
@@ -1114,7 +1114,9 @@ def clust(clust_n,dist_matrix,df_,id2trace,patients,id_col='ID',
   df_['cluster'] = [cluster_list[df_[id_col][i]] for i in range(len(df_))]
   df_.to_csv(output_csv)
   df_filtered = small_cluster_filter(df_)
-  df_filtered.to_csv(output_csv.replace('.csv','_filtered.csv'))
+  if len(df_filtered)==0:
+    df_filtered = df_.copy()
+  df_filtered.to_csv(output_csv.replace('eventlog','eventlog_filtered'))
   
   df_xes = pm4py.format_dataframe(df_,
                                   case_id=id_col,
@@ -1128,7 +1130,8 @@ def clust(clust_n,dist_matrix,df_,id2trace,patients,id_col='ID',
                                   activity_key=ev_col,
                                   timestamp_key=date_col)
   event_log_filtered = pm4py.convert_to_event_log(df_filtered_xes)
-  pm4py.write_xes(event_log_filtered,output_xes.replace('.xes','_filtered.xes'))
+  pm4py.write_xes(event_log_filtered,output_xes.replace('eventlog',
+                                                        'eventlog_filtered'))
 
 ```
 
@@ -1278,9 +1281,10 @@ def trace_plotter(data_dict,color_dict,acronym, output_file, font_size=10,
   plt.close()
 
 
-def trace_explorer(evlog_file='../../outputs/eventlog.xes',top_k=5, id_col='ID',
+def trace_explorer(evlog_file='../../outputs/eventlog.xes',top_k=5, 
+                   id_col='ID',
                    ev_col='Event',date_col='date',clust_col='cluster',
-                   color_dict={}):
+                   color_dict={},cond_code=''):
   '''Plot each clusters most frequent traces
     
     Args:
@@ -1291,6 +1295,7 @@ def trace_explorer(evlog_file='../../outputs/eventlog.xes',top_k=5, id_col='ID',
       date_col (str): events dates column's name in evlog_file
       clust_col (str): cluster column's name in evlog_file
       color_dict (dict): events as keys and colors as values  
+      cond (str) : predominal clinical condition's code
   '''
                      
   log_ = pm4py.read_xes(evlog_file)
@@ -1303,7 +1308,7 @@ def trace_explorer(evlog_file='../../outputs/eventlog.xes',top_k=5, id_col='ID',
       data_dict = make_data_dict(log,top_k,id_col)
       color_dict = update_color_dict(color_dict, data_dict)
       trace_plotter(data_dict,color_dict,acronym,
-                    '../../outputs/trace_%i.png' % clust)
+                    '../../outputs/t_cluster_%s_%i.png' % (cond_code,clust))
   return color_dict
 
 ```
@@ -1353,13 +1358,14 @@ make_process_map <- function(log,t_freq,output_file){
     rsvg_png (output_file,width=2000)
 }
 
-process_map_by_cluster <- function(evLog,t_freq){
+process_map_by_cluster <- function(evLog,t_freq,cond_code){
   for (clust in unique(evLog$cluster)) {
     log <- evLog %>% 
       filter(cluster == clust)
     make_process_map(log,t_freq,gsub("src/analysis-scripts/",
                                      "",here("outputs",sprintf(
-                                       "evlog_pm_cluster_%d.png", clust) )))
+                                       "pm_cluster_%s_%d.png", 
+                                       cond_code, clust) )))
 
   }
 }
@@ -1367,9 +1373,24 @@ process_map_by_cluster <- function(evLog,t_freq){
 
 ### Conformance checking
 
-Conformance checking is 'A' technique used to check process compliance by comparing event logs for a discovered process with the existing reference model (target model) of the same process. Basing on the DM2 treatment algorithm previous shown, with a software called Carassius , we created the next Petri Net that is going to be useful as treatment guidelines in reference to glycated hemoglobin measures to patients with frailty.
+Conformance checking is 'A' technique used to check process compliance by comparing event logs for a discovered process with the existing reference model (target model) of the same process. Basing on the DM2 treatment algorithm previous shown, with a software called Carassius , we created the next Petri Nets that are going to be useful as treatment guidelines in reference to glycated hemoglobin measures to patients with frailty.
 
-![DM2 Treatment Algorithm's interpretation to patients with frailty in Petri Net format](petri_net.png){#fig-petrinet fig-align="center" style="width:800px;height:350px"}
+![DM2 Treatment Algorithm's interpretation to patients with some CV disease in Petri Net format](PN_ecv.png){#fig-petrinet_ecv fig-align="center" width=100%}
+
+
+![DM2 Treatment Algorithm's interpretation to patients with heart failure in Petri Net format](PN_ic.png){#fig-petrinet_ic fig-align="center" width=100%"}
+
+
+![DM2 Treatment Algorithm's interpretation to patients with some chronic kidney disease in Petri Net format](PN_erc.png){#fig-petrinet_erc fig-align="center" width=100%}
+
+
+![DM2 Treatment Algorithm's interpretation to patients with frailty in Petri Net format](PN_f.png){#fig-petrinet_f fig-align="center" width=100%"}
+
+
+![DM2 Treatment Algorithm's interpretation to patients with obesity in Petri Net format](PN_ob.png){#fig-petrinet_ob fig-align="center" width=100%"}
+
+
+![DM2 Treatment Algorithm's interpretation to patients without predominant clinical condition in Petri Net format](PN_else.png){#fig-petrinet_else fig-align="center" width=100%"}
 
 Fitness is the metric that measures how much a trace is distanced from a given process model, or from the guidelines in this case. There are different methods to calculate this metric but in the code below is used the aligned fitness. Since in this metric the initial marking and the final marking have to be fixed we included the events 'INI' and 'FIN' in the Petri Net and in each trace. Adding this artificial events allows us to compare all traces fitness in the same conditions.
 
@@ -1433,8 +1454,9 @@ In the next function is shown a boxplot function to show clusters' fitness distr
 
 ```{python}
 #| label: Fitness boxplot
-def conformance(xes_file,pn_file,ini_place='place11',fin_place='place10',
-                date_col='date',ev_col='Event',clust_col='cluster',
+def conformance(xes_file,pn_file,pn_png_file,ini_place='place100',
+                fin_place='place111', date_col='date',ev_col='Event',
+                clust_col='cluster',
                 output_png='../../outputs/fitness_by_cluster.png',
                 output_csv='../../outputs/fitness_by_cluster.csv'):
   '''Barplot of the fitness of each cluster
@@ -1462,7 +1484,8 @@ def conformance(xes_file,pn_file,ini_place='place11',fin_place='place10',
   final_marking = Marking()
   final_marking[list(net.places)[[str(p) for p in net.places].index(
     fin_place)]] = 1
-
+  pm4py.save_vis_petri_net(net, initial_marking, final_marking,
+                           pn_png_file)
   df = id2fitness(log,net,initial_marking,final_marking,
                   clust_col,date_col,ev_col)
   df.to_csv(output_csv)
@@ -1492,10 +1515,11 @@ def decision_tree_pn_place(patients_df,
                            col_id = 'patient_id',
                            features_list = ['age','sex','copayment'],
                            event_log_file="../../outputs/eventlog.xes",
-                           pn_file="./FRAG_HBA.pnml",
+                           pn_file="./PN.pnml",
                            place2analyze='place9',
-                           ini_place='place11',
-                           fin_place='place10'):
+                           ini_place='place100',
+                           fin_place='place111',
+                           cond_code=''):
   '''Decision tree and features importances in selected place of PN
     
     Args:
@@ -1507,6 +1531,7 @@ def decision_tree_pn_place(patients_df,
       place2analyze (str): place wanted to analyze in petri net
       ini_place (str): initial place in the petri net
       fin_place (str): final place in the petri net
+      cond_code (str): predominant clinical condition's code
   '''                           
   log = pm4py.read_xes(event_log_file)    
   log = log[log['cycle']=='start']    
@@ -1521,9 +1546,7 @@ def decision_tree_pn_place(patients_df,
         
   log = log.sort_values(['case:concept:name','time:timestamp'])
   log.index = range(len(log))
-  
-  features_list += [col_id]
-  patients_df = patients_df[features_list]
+  patients_df = patients_df[features_list + [col_id]]
   patients_df = patients_df.fillna(2)
   patients_df['copayment'] = patients_df['copayment'].values.astype(int).astype(str)
   log_patients = log.merge(patients_df,left_on='case:concept:name',
@@ -1539,31 +1562,34 @@ def decision_tree_pn_place(patients_df,
   final_marking = Marking()
   final_marking[list(net.places)[[str(p) 
                   for p in net.places].index(fin_place)]] = 1
-    
-  X, y, class_names = decision_mining.apply(log_patients,
+  try:
+    X, y, class_names = decision_mining.apply(log_patients,
                                               net,
                                               initial_marking,
                                               final_marking,
                                               decision_point=place2analyze)
-  clf, feature_names, classes = decision_mining.get_decision_tree(log_patients,
+    clf, feature_names, classes = decision_mining.get_decision_tree(log_patients,
                                                     net,
                                                     initial_marking,
                                                     final_marking, 
                                                     decision_point=place2analyze)
-  gviz = tree_visualizer.apply(clf, feature_names, classes)
-  gviz.save(filename='decision_tree',
-              directory='../../outputs')              
-  visualizer.view(gviz)
+    gviz = tree_visualizer.apply(clf, feature_names, classes)
+    gviz.save(filename='decision_tree_%s' % cond_code,
+                directory='../../outputs')              
+    visualizer.view(gviz)
+      
+    importances = clf.feature_importances_
+    tree_importances = pd.Series(importances, index=feature_names)
     
-  importances = clf.feature_importances_
-  tree_importances = pd.Series(importances, index=feature_names)
-  
-  fig, ax = plt.subplots()
-  tree_importances.plot.bar(ax=ax)
-  ax.set_title("Feature importances using MDI")
-  ax.set_ylabel("Mean decrease in impurity")
-  fig.tight_layout()
-  fig.savefig('../../outputs/barplot_features_importance.png')
+    fig, ax = plt.subplots()
+    tree_importances.plot.bar(ax=ax)
+    ax.set_title("Feature importances using MDI")
+    ax.set_ylabel("Mean decrease in impurity")
+    fig.tight_layout()
+    fig.savefig('../../outputs/barplot_features_importance_%s.png' % cond_code)
+  except ValueError as err:
+    if str(err)!='No objects to concatenate':
+      UNKNOWN_ERROR
 ```
 
 ### Multivariate logistic regression model
@@ -1571,29 +1597,58 @@ def decision_tree_pn_place(patients_df,
 The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. Logistic regression models can be used to predict different outcomes such as probability of hospitalization, treatment complication probability or probability of death, while as the same time a treatment adherence is analyzed. For that a variable that measures treatment adherence is needed for example fitness of patients' traces.
 
 ## Results
+### Patients without predominant clinical condition
 
-### Event log's creation and description
+#### Event log's creation and description
 
 ```{python}
-#| label: Preprocessing of raw event log
+#| label: condition variable in python (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-notnan_p = select_by_condition('f')
+cond = 'else'
+```
+```{r}
+#| label: condition variable in r (else)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond <- 'else'
+```
+
+
+
+```{python}
+#| label: Preprocessing of raw event log (else)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+notnan_p = select_by_condition(cond)
 if notnan_p>0.98:
-  evlog_creation_prescriptions()
+  evlog_creation_prescriptions(
+    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    code2drug_path='./diabetes_drugs.csv',
+    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
 else:
-  evlog_creation_dispensations()                  
+  evlog_creation_dispensations(
+    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    code2drug_path='./diabetes_drugs.csv',
+    nac_path='./Nomenclator_de_Facturacion.csv',
+    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
 ```
 
 ```{python}
-#| label: event log
+#| label: event log (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-df_ = pd.read_csv('../../outputs/eventlog_raw.csv', 
+df_ = pd.read_csv('../../outputs/eventlog_raw_%s.csv' % cond, 
                   index_col=0)[['ID','date','cycle','nid','actins','Event']]
 
 def df2dict(df_,ev_col='Event',id_col ='ID'):
@@ -1637,66 +1692,73 @@ def df2dict(df_,ev_col='Event',id_col ='ID'):
   return df,df_,id2trace_
 
 df,df_, id2trace = df2dict(df_)
-df_.to_csv("../../outputs/eventlog.csv")
+df_.to_csv("../../outputs/eventlog_%s.csv" % cond)
 patients = sorted(id2trace.keys())
 traces = list(id2trace[id] for id in patients)     
 del df
 ```
 
 ```{r}
-#| label: Loading event log in R
+#| label: Loading event log in R (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
 evLog <- load_csv_log(gsub("src/analysis-scripts/","",
-                           here("outputs","eventlog.csv") ))
+                           here("outputs",sprintf("eventlog_%s.csv",
+                                                  cond))))
 ```
 
-These results have been carried out with a set of synthetic data previously generated according to data model. Choosing patients with frailty and after some preprocessing we obtain an event log that can be reproduced in the below process map @fig-pm1. There is shown how the events are connected, the mean number of days patients spent in each event (or treatment), percentage of patients who made each transition and the mean number of days it took to make the transition. However, a spaghetti map is obtained and nothing can be concluded. Therefore, we have to simplify the process map and for example only show the most frequent traces covering 20% of the event log as in @fig-pm06. Moreover, in @fig-activity_presence we show percentage of patients' traces each activity is present.
+These results have been carried out with a set of synthetic data previously generated according to data model. Choosing patients without any predominan clinical condition and after some preprocessing we obtain an event log that can be reproduced in the below process map @fig-pm1_else. There is shown how the events are connected, the mean number of days patients spent in each event (or treatment), percentage of patients who made each transition and the mean number of days it took to make the transition. However, a spaghetti map is obtained and nothing can be concluded. Therefore, we have to simplify the process map and for example only show the most frequent traces covering 20% of the event log as in @fig-pm02_else. Moreover, in @fig-activity_presence_else we show percentage of patients' traces each activity is present.
 
 ```{r}
+#| label: proces map 1 (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
 make_process_map(evLog,1,gsub("src/analysis-scripts/","",
-                              here("outputs","evlog_pm_1.png")))
+                              here("outputs",sprintf("evlog_pm_1_%s.png",
+                                                     cond))))
 ```
 
-![Event log's process maps with all traces](../../outputs/evlog_pm_1.png){#fig-pm1 fig-align="center" width="80%"}
+![Event log's process maps with all traces](../../outputs/evlog_pm_1_else.png){#fig-pm1_else fig-align="center" width="80%"}
 
 ```{r}
+#| label: process map 0.2 (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
 make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
-                                here("outputs","evlog_pm_02.png")))
+                                here("outputs",sprintf("evlog_pm_02_%s.png",
+                                                     cond))))
 ```
 
-![Event log's process maps with most frequent traces covering 20%](../../outputs/evlog_pm_02.png){#fig-pm06 fig-align="center" width="80%"}
+![Event log's process maps with most frequent traces covering 20%](../../outputs/evlog_pm_02_else.png){#fig-pm02_else fig-align="center" width="80%"}
 
 ```{r}
+#| label: activity presence (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
 png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs","activity_presence.png")),
+                  here("outputs",sprintf("activity_presence_%s.png",
+                                         cond))),
     width = 600, height = 750, units = "px")
 plot(evLog %>% activity_presence()  )
 dev.off()
 ```
 
-![Percentage of patients' traces an activity is present](../../outputs/activity_presence.png){#fig-activity_presence fig-align="center" width="80%"}
+![Percentage of patients' traces an activity is present](../../outputs/activity_presence_else.png){#fig-activity_presence_else fig-align="center" width="80%"}
 
-### Clustering traces
+#### Clustering traces
 
 Once the set of traces to analyze are selected, there is a need to choose a distance measure to clustering. In this example Jaccard similarity is chosen to calculate the distance matrix.
 
-```{python}
-#| label: dm calculation
+```{python} 
+#| label: dm calculation (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -1708,31 +1770,36 @@ dm = calculate_dm_ED(traces,measure_f)
 When distance matrix is acquired, we are able to cluster. However, the number of clusters have to be fixed before. With these figures we are able to conclude what could be the optimal number of clusters.
 
 ```{python}
-#| label: dendograms
+#| label: dendograms (else)
 #| eval: TRUE
 #| echo: FALSE
 
-dendogram(dm)
+dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
 
 ```{python}
-#| label: kelbow
+#| label: kelbow (else)
 #| eval: TRUE
 #| echo: FALSE
 #| output: TRUE
-n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
+if len(traces)>25:
+  n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
+else:
+  n_clusters=1
 ```
 
-![Distance matrix's dendogram](../../outputs/dendogram.png){#fig-dendogram fig-align="center" width="80%"}
+![Distance matrix's dendogram](../../outputs/dendogram_else.png){#fig-dendogram_else fig-align="center" width="80%"}
 
 ```{python}
-#| label: clustering
+#| label: clustering (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-clust(n_clusters,dm,df_,id2trace,patients)
+clust(n_clusters,dm,df_,id2trace,patients,
+      output_xes='../../outputs/eventlog_%s.xes' % cond,
+      output_csv='../../outputs/eventlog_%s.csv' % cond)
 del dm
 del df_
 ```
@@ -1740,29 +1807,32 @@ del df_
 Choosing the optimal number of clusters, too small clusters can appear, but we can exclude those of less than 30 traces  to avoid having clusters of low representation. The process map and the most frequent traces of one of these clusters that remain are the followings.
 
 ```{python}
-#| label: trace explorer
+#| label: trace explorer (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-col_dic = trace_explorer(evlog_file='../../outputs/eventlog_filtered.xes')
+col_dic = trace_explorer(
+  evlog_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+  cond_code=cond)
 ```
 
 ```{r}
-#| label: process explorer
+#| label: process explorer (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
 process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
-                                    here("outputs","eventlog_filtered.csv"))),
-                       0.25)
+                                    here("outputs",sprintf(
+                                      "eventlog_filtered_%s.csv",cond)))),
+                       0.25,cond)
 ```
 
-::: {#fig-cluster0 .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/trace_0.png){#fig-traceexplorer0}
+::: {#fig-cluster0_else .column-page layout-ncol="2"}
+![5 most frequent traces](../../outputs/t_cluster_else_0.png){#fig-traceexplorer0_else}
 
-![Process map covering 25% most frequent traces](../../outputs/evlog_pm_cluster_0.png){#fig-processmap0}
+![Process map covering 25% most frequent traces](../../outputs/pm_cluster_else_0.png){#fig-processmap0_else}
 
 Cluster 0
 :::
@@ -1770,44 +1840,1471 @@ Cluster 0
 
 
 
-### Conformace checking
+#### Conformace checking
 
-Once traces are clusterized, with a boxplot is easy to show that each cluster's behavior with respect to the treatment guides is different. Comparing traces with @fig-petrinet, calculating the fitness (1 being perfect match with the petri net and 0 being the lowest possible fitness) of each trace and grouping by cluster results in @fig-fitness_by_cluster.
+Once traces are clusterized, with a boxplot is easy to show that each cluster's behavior with respect to the treatment guides is different. Comparing traces with @fig-petrinet_else, calculating the fitness (1 being perfect match with the petri net and 0 being the lowest possible fitness) of each trace and grouping by cluster results in_ @fig-fitness_by_cluster_else.
 
 ```{python}
-#| label: fitness boxplot
+#| label: fitness boxplot (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-conformance(xes_file='../../outputs/eventlog_filtered.xes',
-            pn_file='./FRAG_HBA.pnml',
-            output_png='../../outputs/fitness_by_cluster.png')
+conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+            pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond,
+            output_csv='../../outputs/fitness_by_cluster_%s.csv' % cond)
 ```
 
-![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster.png){#fig-fitness_by_cluster fig-align="center" width="80%"}
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_else.png){#fig-fitness_by_cluster_else fig-align="center" width="80%"}
 
-### Decision mining
+#### Decision mining
 
-In @fig-decision_tree is shown how patients' age, sex and copayment would influence in prescribing three drugs based treatment. More features could have been added but for simplicity we included those three.
+In @fig-decision_tree_else is shown how patients' age, sex and copayment would influence in prescribing three drugs based treatment. More features could have been added but for simplicity we included those three.
 
 ```{python}
-#| label: create decision tree
+#| label: create decision tree (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
 
-patients_df = pd.read_csv('../../outputs/dm_patients_df.csv')
+patients_df = pd.read_csv('../../outputs/dm_patients_df_%s.csv' % cond)
 patients_df["patient_id"]= patients_df["patient_id"].astype(str)
-decision_tree_pn_place(patients_df)
+decision_tree_pn_place(patients_df,
+  event_log_file="../../outputs/eventlog_%s.xes" % cond,
+  pn_file='./PN_%s.pnml' % cond,
+  cond_code=cond,
+  place2analyze='place1')
 ```
 
-![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree.png){#fig-decision_tree fig-align="center" width="80%"}
+![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_else.png){#fig-decision_tree_else fig-align="center" width="80%"}
 
-Variables relevance in the previous decision tree is indicated in @fig-features_relevance. As we can see, categorical variables are divided into as many parts as the number of categories there are and variables' total relevance is the sum of its categories' values.
+Variables relevance in the previous decision tree is indicated in @fig-features_relevance_else. As we can see, categorical variables are divided into as many parts as the number of categories there are and variables' total relevance is the sum of its categories' values.
 
-![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance.png){#fig-features_relevance fig-align="center" width="80%"}
+![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_else.png){#fig-features_relevance_else fig-align="center" width="80%"}
+
+
+### CV Disease
+
+#### Event log's creation and description
+
+```{python}
+#| label: condition variable in python (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond = 'ecv'
+```
+```{r}
+#| label: condition variable in r (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond <- 'ecv'
+```
+
+
+
+```{python}
+#| label: Preprocessing of raw event log (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+notnan_p = select_by_condition(cond)
+if notnan_p>0.98:
+  evlog_creation_prescriptions(
+    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    code2drug_path='./diabetes_drugs.csv',
+    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+else:
+  evlog_creation_dispensations(
+    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    code2drug_path='./diabetes_drugs.csv',
+    nac_path='./Nomenclator_de_Facturacion.csv',
+    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+```
+
+```{python}
+#| label: event log (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+df_ = pd.read_csv('../../outputs/eventlog_raw_%s.csv' % cond, 
+                  index_col=0)[['ID','date','cycle','nid','actins','Event']]
+
+def df2dict(df_,ev_col='Event',id_col ='ID'):
+  '''Filtering length=2 traces and obtain id2trace dict
+    
+    Args:
+      df_ (dataframe): event log 
+      id_col (str): patients' id column's name in log
+      ev_col (str): events column's name in log
+    Returns:
+      df (dataframe): filtered event log (without cycle sense)
+      df_ (dataframe): filtered event log
+      id2trace_ (dict): patients' ids as keys and their traces (list) as values
+  '''
+  df = df_[df_['cycle']=='start']
+  df.index = range(len(df))
+  id2trace_ = dict()            
+  for id in set(df[id_col]):       
+      id2trace_[id] = list(df[ev_col][df[id_col] == id])
+ 
+  #drop len<=2 traces
+  del_list = []
+  for i in range(len(df)):
+      if  len(id2trace_[df[id_col][i]])<=2 :
+          del_list.append(i)
+  for i in del_list:
+      try:
+          del id2trace_[df[id_col][i]]
+      except:
+          continue
+  df = df.drop(del_list, axis=0)
+  df.index = range(len(df))
+
+  del_list2 = []
+  for id in set(df_[id_col]):
+      if id not in id2trace_:
+          del_list2+= list(df_[df_[id_col]==id].index)
+  df_ = df_.drop(del_list2, axis=0)
+  df_.index = range(len(df_))
+  
+  return df,df_,id2trace_
+
+df,df_, id2trace = df2dict(df_)
+df_.to_csv("../../outputs/eventlog_%s.csv" % cond)
+patients = sorted(id2trace.keys())
+traces = list(id2trace[id] for id in patients)     
+del df
+```
+
+```{r}
+#| label: Loading event log in R (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+evLog <- load_csv_log(gsub("src/analysis-scripts/","",
+                           here("outputs",sprintf("eventlog_%s.csv",
+                                                  cond))))
+```
+
+ Choosing patients with a cardiovascular disease and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
+
+```{r}
+#| label: proces map 1 (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+make_process_map(evLog,1,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_pm_1_%s.png",
+                                                     cond))))
+```
+
+![Event log's process maps with all traces](../../outputs/evlog_pm_1_ecv.png){#fig-pm1_ecv fig-align="center" width="80%"}
+
+```{r}
+#| label: process map 0.2 (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
+                                here("outputs",sprintf("evlog_pm_02_%s.png",
+                                                     cond))))
+```
+
+![Event log's process maps with most frequent traces covering 20%](../../outputs/evlog_pm_02_ecv.png){#fig-pm02_ecv fig-align="center" width="80%"}
+
+```{r}
+#| label: activity presence (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("activity_presence_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+plot(evLog %>% activity_presence()  )
+dev.off()
+```
+
+![Percentage of patients' traces an activity is present](../../outputs/activity_presence_ecv.png){#fig-activity_presence_ecv fig-align="center" width="80%"}
+
+#### Clustering traces
+
+
+```{python} 
+#| label: dm calculation (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+measure_f = textdistance.jaccard
+dm = calculate_dm_ED(traces,measure_f)
+```
+
+
+```{python}
+#| label: dendograms (ecv)
+#| eval: TRUE
+#| echo: FALSE
+
+dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
+```
+
+```{python}
+#| label: kelbow (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| output: TRUE
+if len(traces)>25:
+  n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
+#kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
+else:
+  n_clusters=1
+```
+
+![Distance matrix's dendogram](../../outputs/dendogram_ecv.png){#fig-dendogram_ecv fig-align="center" width="80%"}
+
+```{python}
+#| label: clustering (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+clust(n_clusters,dm,df_,id2trace,patients,
+      output_xes='../../outputs/eventlog_%s.xes' % cond,
+      output_csv='../../outputs/eventlog_%s.csv' % cond)
+del dm
+del df_
+```
+
+
+```{python}
+#| label: trace explorer (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+col_dic = trace_explorer(
+  evlog_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+  cond_code=cond,
+  color_dict=col_dic)
+```
+
+```{r}
+#| label: process explorer (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
+                                    here("outputs",sprintf(
+                                      "eventlog_filtered_%s.csv",cond)))),
+                       0.25,cond)
+```
+
+::: {#fig-cluster0_ecv .column-page layout-ncol="2"}
+![5 most frequent traces](../../outputs/t_cluster_ecv_0.png){#fig-traceexplorer0_ecv}
+
+![Process map covering 25% most frequent traces](../../outputs/pm_cluster_ecv_0.png){#fig-processmap0_ecv}
+
+Cluster 0
+:::
+
+
+
+
+#### Conformace checking
+
+
+```{python}
+#| label: fitness boxplot (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+            pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond,
+            output_csv='../../outputs/fitness_by_cluster_%s.csv' % cond)
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ecv.png){#fig-fitness_by_cluster_ecv fig-align="center" width="80%"}
+
+#### Decision mining
+
+
+```{python}
+#| label: create decision tree (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+
+patients_df = pd.read_csv('../../outputs/dm_patients_df_%s.csv' % cond)
+patients_df["patient_id"]= patients_df["patient_id"].astype(str)
+decision_tree_pn_place(patients_df,
+  event_log_file="../../outputs/eventlog_%s.xes" % cond,
+  pn_file='./PN_%s.pnml' % cond,
+  cond_code=cond,
+  place2analyze='place1')
+```
+
+![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_ecv.png){#fig-decision_tree_ecv fig-align="center" width="80%"}
+
+
+![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ecv.png){#fig-features_relevance_ecv fig-align="center" width="80%"}
+
+### Heart Failure
+
+#### Event log's creation and description
+```{python}
+#| label: condition variable in python (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond = 'ic'
+```
+```{r}
+#| label: condition variable in r (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond <- 'ic'
+```
+
+
+
+```{python}
+#| label: Preprocessing of raw event log (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+notnan_p = select_by_condition(cond)
+if notnan_p>0.98:
+  evlog_creation_prescriptions(
+    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    code2drug_path='./diabetes_drugs.csv',
+    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+else:
+  evlog_creation_dispensations(
+    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    code2drug_path='./diabetes_drugs.csv',
+    nac_path='./Nomenclator_de_Facturacion.csv',
+    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+```
+
+```{python}
+#| label: event log (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+df_ = pd.read_csv('../../outputs/eventlog_raw_%s.csv' % cond, 
+                  index_col=0)[['ID','date','cycle','nid','actins','Event']]
+
+def df2dict(df_,ev_col='Event',id_col ='ID'):
+  '''Filtering length=2 traces and obtain id2trace dict
+    
+    Args:
+      df_ (dataframe): event log 
+      id_col (str): patients' id column's name in log
+      ev_col (str): events column's name in log
+    Returns:
+      df (dataframe): filtered event log (without cycle sense)
+      df_ (dataframe): filtered event log
+      id2trace_ (dict): patients' ids as keys and their traces (list) as values
+  '''
+  df = df_[df_['cycle']=='start']
+  df.index = range(len(df))
+  id2trace_ = dict()            
+  for id in set(df[id_col]):       
+      id2trace_[id] = list(df[ev_col][df[id_col] == id])
+ 
+  #drop len<=2 traces
+  del_list = []
+  for i in range(len(df)):
+      if  len(id2trace_[df[id_col][i]])<=2 :
+          del_list.append(i)
+  for i in del_list:
+      try:
+          del id2trace_[df[id_col][i]]
+      except:
+          continue
+  df = df.drop(del_list, axis=0)
+  df.index = range(len(df))
+
+  del_list2 = []
+  for id in set(df_[id_col]):
+      if id not in id2trace_:
+          del_list2+= list(df_[df_[id_col]==id].index)
+  df_ = df_.drop(del_list2, axis=0)
+  df_.index = range(len(df_))
+  
+  return df,df_,id2trace_
+
+df,df_, id2trace = df2dict(df_)
+df_.to_csv("../../outputs/eventlog_%s.csv" % cond)
+patients = sorted(id2trace.keys())
+traces = list(id2trace[id] for id in patients)     
+del df
+```
+
+```{r}
+#| label: Loading event log in R (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+evLog <- load_csv_log(gsub("src/analysis-scripts/","",
+                           here("outputs",sprintf("eventlog_%s.csv",
+                                                  cond))))
+```
+
+ Choosing patients with heart failure and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
+
+
+```{r}
+#| label: proces map 1 (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+make_process_map(evLog,1,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_pm_1_%s.png",
+                                                     cond))))
+```
+
+![Event log's process maps with all traces](../../outputs/evlog_pm_1_ic.png){#fig-pm1_ic fig-align="center" width="80%"}
+
+```{r}
+#| label: process map 0.2 (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
+                                here("outputs",sprintf("evlog_pm_02_%s.png",
+                                                     cond))))
+```
+
+![Event log's process maps with most frequent traces covering 20%](../../outputs/evlog_pm_02_ic.png){#fig-pm02_ic fig-align="center" width="80%"}
+
+```{r}
+#| label: activity presence (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("activity_presence_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+plot(evLog %>% activity_presence()  )
+dev.off()
+```
+
+![Percentage of patients' traces an activity is present](../../outputs/activity_presence_ic.png){#fig-activity_presence_ic fig-align="center" width="80%"}
+
+#### Clustering traces
+
+
+```{python} 
+#| label: dm calculation (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+measure_f = textdistance.jaccard
+dm = calculate_dm_ED(traces,measure_f)
+```
+
+
+```{python}
+#| label: dendograms (ic)
+#| eval: TRUE
+#| echo: FALSE
+
+dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
+```
+
+```{python}
+#| label: kelbow (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| output: TRUE
+if len(traces)>25:
+  n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
+#kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
+else:
+  n_clusters=1
+```
+
+![Distance matrix's dendogram](../../outputs/dendogram_ic.png){#fig-dendogram_ic fig-align="center" width="80%"}
+
+```{python}
+#| label: clustering (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+clust(n_clusters,dm,df_,id2trace,patients,
+      output_xes='../../outputs/eventlog_%s.xes' % cond,
+      output_csv='../../outputs/eventlog_%s.csv' % cond)
+del dm
+del df_
+```
+
+
+```{python}
+#| label: trace explorer (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+col_dic = trace_explorer(
+  evlog_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+  cond_code=cond,
+  color_dict=col_dic)
+```
+
+```{r}
+#| label: process explorer (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
+                                    here("outputs",sprintf(
+                                      "eventlog_filtered_%s.csv",cond)))),
+                       0.25,cond)
+```
+
+::: {#fig-cluster0_ic .column-page layout-ncol="2"}
+![5 most frequent traces](../../outputs/t_cluster_ic_0.png){#fig-traceexplorer0_ic}
+
+![Process map covering 25% most frequent traces](../../outputs/pm_cluster_ic_0.png){#fig-processmap0_ic}
+
+Cluster 0
+:::
+
+
+
+
+#### Conformace checking
+
+
+```{python}
+#| label: fitness boxplot (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+            pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond,
+            output_csv='../../outputs/fitness_by_cluster_%s.csv' % cond)
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ic.png){#fig-fitness_by_cluster_ic fig-align="center" width="80%"}
+
+#### Decision mining
+
+
+```{python}
+#| label: create decision tree (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+
+patients_df = pd.read_csv('../../outputs/dm_patients_df_%s.csv' % cond)
+patients_df["patient_id"]= patients_df["patient_id"].astype(str)
+decision_tree_pn_place(patients_df,
+  event_log_file="../../outputs/eventlog_%s.xes" % cond,
+  pn_file='./PN_%s.pnml' % cond,
+  cond_code=cond,
+  place2analyze='place3')
+```
+
+![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_ic.png){#fig-decision_tree_ic fig-align="center" width="80%"}
+
+
+![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ic.png){#fig-features_relevance_ic fig-align="center" width="80%"}
+
+### Chronic kidney disease
+
+#### Event log's creation and description
+
+```{python}
+#| label: condition variable in python (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond = 'erc'
+```
+```{r}
+#| label: condition variable in r (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond <- 'erc'
+```
+
+
+
+```{python}
+#| label: Preprocessing of raw event log (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+notnan_p = select_by_condition(cond)
+if notnan_p>0.98:
+  evlog_creation_prescriptions(
+    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    code2drug_path='./diabetes_drugs.csv',
+    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+else:
+  evlog_creation_dispensations(
+    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    code2drug_path='./diabetes_drugs.csv',
+    nac_path='./Nomenclator_de_Facturacion.csv',
+    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+```
+
+```{python}
+#| label: event log (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+df_ = pd.read_csv('../../outputs/eventlog_raw_%s.csv' % cond, 
+                  index_col=0)[['ID','date','cycle','nid','actins','Event']]
+
+def df2dict(df_,ev_col='Event',id_col ='ID'):
+  '''Filtering length=2 traces and obtain id2trace dict
+    
+    Args:
+      df_ (dataframe): event log 
+      id_col (str): patients' id column's name in log
+      ev_col (str): events column's name in log
+    Returns:
+      df (dataframe): filtered event log (without cycle sense)
+      df_ (dataframe): filtered event log
+      id2trace_ (dict): patients' ids as keys and their traces (list) as values
+  '''
+  df = df_[df_['cycle']=='start']
+  df.index = range(len(df))
+  id2trace_ = dict()            
+  for id in set(df[id_col]):       
+      id2trace_[id] = list(df[ev_col][df[id_col] == id])
+ 
+  #drop len<=2 traces
+  del_list = []
+  for i in range(len(df)):
+      if  len(id2trace_[df[id_col][i]])<=2 :
+          del_list.append(i)
+  for i in del_list:
+      try:
+          del id2trace_[df[id_col][i]]
+      except:
+          continue
+  df = df.drop(del_list, axis=0)
+  df.index = range(len(df))
+
+  del_list2 = []
+  for id in set(df_[id_col]):
+      if id not in id2trace_:
+          del_list2+= list(df_[df_[id_col]==id].index)
+  df_ = df_.drop(del_list2, axis=0)
+  df_.index = range(len(df_))
+  
+  return df,df_,id2trace_
+
+df,df_, id2trace = df2dict(df_)
+df_.to_csv("../../outputs/eventlog_%s.csv" % cond)
+patients = sorted(id2trace.keys())
+traces = list(id2trace[id] for id in patients)     
+del df
+```
+
+```{r}
+#| label: Loading event log in R (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+evLog <- load_csv_log(gsub("src/analysis-scripts/","",
+                           here("outputs",sprintf("eventlog_%s.csv",
+                                                  cond))))
+```
+
+ Choosing patients with chronic kidney disease and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
+
+
+```{r}
+#| label: proces map 1 (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+make_process_map(evLog,1,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_pm_1_%s.png",
+                                                     cond))))
+```
+
+![Event log's process maps with all traces](../../outputs/evlog_pm_1_erc.png){#fig-pm1_erc fig-align="center" width="80%"}
+
+```{r}
+#| label: process map 0.2 (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
+                                here("outputs",sprintf("evlog_pm_02_%s.png",
+                                                     cond))))
+```
+
+![Event log's process maps with most frequent traces covering 20%](../../outputs/evlog_pm_02_erc.png){#fig-pm02_erc fig-align="center" width="80%"}
+
+```{r}
+#| label: activity presence (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("activity_presence_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+plot(evLog %>% activity_presence()  )
+dev.off()
+```
+
+![Percentage of patients' traces an activity is present](../../outputs/activity_presence_erc.png){#fig-activity_presence_erc fig-align="center" width="80%"}
+
+#### Clustering traces
+
+
+```{python} 
+#| label: dm calculation (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+measure_f = textdistance.jaccard
+dm = calculate_dm_ED(traces,measure_f)
+```
+
+
+```{python}
+#| label: dendograms (erc)
+#| eval: TRUE
+#| echo: FALSE
+
+dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
+```
+
+```{python}
+#| label: kelbow (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| output: TRUE
+if len(traces)>25:
+  n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
+#kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
+else:
+  n_clusters=1
+```
+
+![Distance matrix's dendogram](../../outputs/dendogram_erc.png){#fig-dendogram_erc fig-align="center" width="80%"}
+
+```{python}
+#| label: clustering (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+clust(n_clusters,dm,df_,id2trace,patients,
+      output_xes='../../outputs/eventlog_%s.xes' % cond,
+      output_csv='../../outputs/eventlog_%s.csv' % cond)
+del dm
+del df_
+```
+
+
+```{python}
+#| label: trace explorer (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+col_dic = trace_explorer(
+  evlog_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+  cond_code=cond,
+  color_dict=col_dic)
+```
+
+```{r}
+#| label: process explorer (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
+                                    here("outputs",sprintf(
+                                      "eventlog_filtered_%s.csv",cond)))),
+                       0.25,cond)
+```
+
+::: {#fig-cluster0_erc .column-page layout-ncol="2"}
+![5 most frequent traces](../../outputs/t_cluster_erc_0.png){#fig-traceexplorer0_erc}
+
+![Process map covering 25% most frequent traces](../../outputs/pm_cluster_erc_0.png){#fig-processmap0_erc}
+
+Cluster 0
+:::
+
+
+
+
+#### Conformace checking
+
+
+```{python}
+#| label: fitness boxplot (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+            pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond,
+            output_csv='../../outputs/fitness_by_cluster_%s.csv' % cond)
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_erc.png){#fig-fitness_by_cluster_erc fig-align="center" width="80%"}
+
+#### Decision mining
+
+
+```{python}
+#| label: create decision tree (erc)
+#| eval: FALSE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+
+patients_df = pd.read_csv('../../outputs/dm_patients_df_%s.csv' % cond)
+patients_df["patient_id"]= patients_df["patient_id"].astype(str)
+decision_tree_pn_place(patients_df,
+  event_log_file="../../outputs/eventlog_%s.xes" % cond,
+  pn_file='./PN_%s.pnml' % cond,
+  cond_code=cond,
+  place2analyze='place1')
+
+```
+
+![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_erc.png){#fig-decision_tree_erc fig-align="center" width="80%"}
+
+
+![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_erc.png){#fig-features_relevance_erc fig-align="center" width="80%"}
+
+### Frailty
+
+#### Event log's creation and description
+
+```{python}
+#| label: condition variable in python (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond = 'f'
+```
+```{r}
+#| label: condition variable in r (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond <- 'f'
+```
+
+
+
+```{python}
+#| label: Preprocessing of raw event log (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+notnan_p = select_by_condition(cond)
+if notnan_p>0.98:
+  evlog_creation_prescriptions(
+    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    code2drug_path='./diabetes_drugs.csv',
+    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+else:
+  evlog_creation_dispensations(
+    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    code2drug_path='./diabetes_drugs.csv',
+    nac_path='./Nomenclator_de_Facturacion.csv',
+    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+```
+
+```{python}
+#| label: event log (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+df_ = pd.read_csv('../../outputs/eventlog_raw_%s.csv' % cond, 
+                  index_col=0)[['ID','date','cycle','nid','actins','Event']]
+
+def df2dict(df_,ev_col='Event',id_col ='ID'):
+  '''Filtering length=2 traces and obtain id2trace dict
+    
+    Args:
+      df_ (dataframe): event log 
+      id_col (str): patients' id column's name in log
+      ev_col (str): events column's name in log
+    Returns:
+      df (dataframe): filtered event log (without cycle sense)
+      df_ (dataframe): filtered event log
+      id2trace_ (dict): patients' ids as keys and their traces (list) as values
+  '''
+  df = df_[df_['cycle']=='start']
+  df.index = range(len(df))
+  id2trace_ = dict()            
+  for id in set(df[id_col]):       
+      id2trace_[id] = list(df[ev_col][df[id_col] == id])
+ 
+  #drop len<=2 traces
+  del_list = []
+  for i in range(len(df)):
+      if  len(id2trace_[df[id_col][i]])<=2 :
+          del_list.append(i)
+  for i in del_list:
+      try:
+          del id2trace_[df[id_col][i]]
+      except:
+          continue
+  df = df.drop(del_list, axis=0)
+  df.index = range(len(df))
+
+  del_list2 = []
+  for id in set(df_[id_col]):
+      if id not in id2trace_:
+          del_list2+= list(df_[df_[id_col]==id].index)
+  df_ = df_.drop(del_list2, axis=0)
+  df_.index = range(len(df_))
+  
+  return df,df_,id2trace_
+
+df,df_, id2trace = df2dict(df_)
+df_.to_csv("../../outputs/eventlog_%s.csv" % cond)
+patients = sorted(id2trace.keys())
+traces = list(id2trace[id] for id in patients)     
+del df
+```
+
+```{r}
+#| label: Loading event log in R (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+evLog <- load_csv_log(gsub("src/analysis-scripts/","",
+                           here("outputs",sprintf("eventlog_%s.csv",
+                                                  cond))))
+```
+
+ Choosing patients with frailty and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
+
+
+```{r}
+#| label: proces map 1 (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+make_process_map(evLog,1,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_pm_1_%s.png",
+                                                     cond))))
+```
+
+![Event log's process maps with all traces](../../outputs/evlog_pm_1_f.png){#fig-pm1_f fig-align="center" width="80%"}
+
+```{r}
+#| label: process map 0.2 (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
+                                here("outputs",sprintf("evlog_pm_02_%s.png",
+                                                     cond))))
+```
+
+![Event log's process maps with most frequent traces covering 20%](../../outputs/evlog_pm_02_f.png){#fig-pm02_f fig-align="center" width="80%"}
+
+```{r}
+#| label: activity presence (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("activity_presence_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+plot(evLog %>% activity_presence()  )
+dev.off()
+```
+
+![Percentage of patients' traces an activity is present](../../outputs/activity_presence_f.png){#fig-activity_presence_f fig-align="center" width="80%"}
+
+#### Clustering traces
+
+
+```{python} 
+#| label: dm calculation (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+measure_f = textdistance.jaccard
+dm = calculate_dm_ED(traces,measure_f)
+```
+
+
+```{python}
+#| label: dendograms (f)
+#| eval: TRUE
+#| echo: FALSE
+
+dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
+```
+
+```{python}
+#| label: kelbow (f)
+#| eval: TRUE
+#| echo: FALSE
+#| output: TRUE
+if len(traces)>25:
+  n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
+#kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
+else:
+  n_clusters=1
+```
+
+![Distance matrix's dendogram](../../outputs/dendogram_f.png){#fig-dendogram fig-align="center" width="80%"}
+
+```{python}
+#| label: clustering (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+clust(n_clusters,dm,df_,id2trace,patients,
+      output_xes='../../outputs/eventlog_%s.xes' % cond,
+      output_csv='../../outputs/eventlog_%s.csv' % cond)
+del dm
+del df_
+```
+
+
+```{python}
+#| label: trace explorer (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+col_dic = trace_explorer(
+  evlog_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+  cond_code=cond,
+  color_dict=col_dic)
+```
+
+```{r}
+#| label: process explorer (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
+                                    here("outputs",sprintf(
+                                      "eventlog_filtered_%s.csv",cond)))),
+                       0.25,cond)
+```
+
+::: {#fig-cluster0_f .column-page layout-ncol="2"}
+![5 most frequent traces](../../outputs/t_cluster_f_0.png){#fig-traceexplorer0}
+
+![Process map covering 25% most frequent traces](../../outputs/pm_cluster_f_0.png){#fig-processmap0}
+
+Cluster 0
+:::
+
+
+
+
+#### Conformace checking
+
+
+```{python}
+#| label: fitness boxplot (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+            pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond,
+            output_csv='../../outputs/fitness_by_cluster_%s.csv' % cond)
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_f.png){#fig-fitness_by_cluster_f fig-align="center" width="80%"}
+
+#### Decision mining
+
+
+```{python}
+#| label: create decision tree (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+
+patients_df = pd.read_csv('../../outputs/dm_patients_df_%s.csv' % cond)
+patients_df["patient_id"]= patients_df["patient_id"].astype(str)
+decision_tree_pn_place(patients_df,
+  event_log_file="../../outputs/eventlog_%s.xes" % cond,
+  pn_file='./PN_%s.pnml' % cond,
+  cond_code=cond,
+  place2analyze='place9')
+```
+
+![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_f.png){#fig-decision_tree_f fig-align="center" width="80%"}
+
+
+![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_f.png){#fig-features_relevance_f fig-align="center" width="80%"}
+
+### Obesity
+
+#### Event log's creation and description
+
+```{python}
+#| label: condition variable in python (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond = 'ob'
+```
+```{r}
+#| label: condition variable in r (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond <- 'ob'
+```
+
+
+
+```{python}
+#| label: Preprocessing of raw event log (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+notnan_p = select_by_condition(cond)
+if notnan_p>0.98:
+  evlog_creation_prescriptions(
+    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    code2drug_path='./diabetes_drugs.csv',
+    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+else:
+  evlog_creation_dispensations(
+    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    code2drug_path='./diabetes_drugs.csv',
+    nac_path='./Nomenclator_de_Facturacion.csv',
+    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+```
+
+```{python}
+#| label: event log (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+df_ = pd.read_csv('../../outputs/eventlog_raw_%s.csv' % cond, 
+                  index_col=0)[['ID','date','cycle','nid','actins','Event']]
+
+def df2dict(df_,ev_col='Event',id_col ='ID'):
+  '''Filtering length=2 traces and obtain id2trace dict
+    
+    Args:
+      df_ (dataframe): event log 
+      id_col (str): patients' id column's name in log
+      ev_col (str): events column's name in log
+    Returns:
+      df (dataframe): filtered event log (without cycle sense)
+      df_ (dataframe): filtered event log
+      id2trace_ (dict): patients' ids as keys and their traces (list) as values
+  '''
+  df = df_[df_['cycle']=='start']
+  df.index = range(len(df))
+  id2trace_ = dict()            
+  for id in set(df[id_col]):       
+      id2trace_[id] = list(df[ev_col][df[id_col] == id])
+ 
+  #drop len<=2 traces
+  del_list = []
+  for i in range(len(df)):
+      if  len(id2trace_[df[id_col][i]])<=2 :
+          del_list.append(i)
+  for i in del_list:
+      try:
+          del id2trace_[df[id_col][i]]
+      except:
+          continue
+  df = df.drop(del_list, axis=0)
+  df.index = range(len(df))
+
+  del_list2 = []
+  for id in set(df_[id_col]):
+      if id not in id2trace_:
+          del_list2+= list(df_[df_[id_col]==id].index)
+  df_ = df_.drop(del_list2, axis=0)
+  df_.index = range(len(df_))
+  
+  return df,df_,id2trace_
+
+df,df_, id2trace = df2dict(df_)
+df_.to_csv("../../outputs/eventlog_%s.csv" % cond)
+patients = sorted(id2trace.keys())
+traces = list(id2trace[id] for id in patients)     
+del df
+```
+
+```{r}
+#| label: Loading event log in R (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+evLog <- load_csv_log(gsub("src/analysis-scripts/","",
+                           here("outputs",sprintf("eventlog_%s.csv",
+                                                  cond))))
+```
+
+ Choosing patients with obesity and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
+
+
+```{r}
+#| label: proces map 1 (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+make_process_map(evLog,1,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_pm_1_%s.png",
+                                                     cond))))
+```
+
+![Event log's process maps with all traces](../../outputs/evlog_pm_1_ob.png){#fig-pm1_ob fig-align="center" width="80%"}
+
+```{r}
+#| label: process map 0.2 (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
+                                here("outputs",sprintf("evlog_pm_02_%s.png",
+                                                     cond))))
+```
+
+![Event log's process maps with most frequent traces covering 20%](../../outputs/evlog_pm_02_ob.png){#fig-pm02_ob fig-align="center" width="80%"}
+
+```{r}
+#| label: activity presence (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("activity_presence_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+plot(evLog %>% activity_presence()  )
+dev.off()
+```
+
+![Percentage of patients' traces an activity is present](../../outputs/activity_presence_ob.png){#fig-activity_presence_ob fig-align="center" width="80%"}
+
+#### Clustering traces
+
+
+```{python} 
+#| label: dm calculation (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+measure_f = textdistance.jaccard
+dm = calculate_dm_ED(traces,measure_f)
+```
+
+
+```{python}
+#| label: dendograms (ob)
+#| eval: TRUE
+#| echo: FALSE
+
+dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
+```
+
+```{python}
+#| label: kelbow (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| output: TRUE
+if len(traces)>25:
+  n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
+#kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
+else:
+  n_clusters=1
+```
+
+![Distance matrix's dendogram](../../outputs/dendogram_f.png){#fig-dendogram fig-align="center" width="80%"}
+
+```{python}
+#| label: clustering (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+clust(n_clusters,dm,df_,id2trace,patients,
+      output_xes='../../outputs/eventlog_%s.xes' % cond,
+      output_csv='../../outputs/eventlog_%s.csv' % cond)
+del dm
+del df_
+```
+
+
+```{python}
+#| label: trace explorer (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+col_dic = trace_explorer(
+  evlog_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+  cond_code=cond,
+  color_dict=col_dic)
+```
+
+```{r}
+#| label: process explorer (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
+                                    here("outputs",sprintf(
+                                      "eventlog_filtered_%s.csv",cond)))),
+                       0.25,cond)
+```
+
+::: {#fig-cluster0_ob .column-page layout-ncol="2"}
+![5 most frequent traces](../../outputs/t_cluster_ob_0.png){#fig-traceexplorer0_ob}
+
+![Process map covering 25% most frequent traces](../../outputs/pm_cluster_ob_0.png){#fig-processmap0_ob}
+
+Cluster 0
+:::
+
+
+
+
+#### Conformace checking
+
+
+```{python}
+#| label: fitness boxplot (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+            pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond,
+            output_csv='../../outputs/fitness_by_cluster_%s.csv' % cond)
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ob.png){#fig-fitness_by_cluster_ob fig-align="center" width="80%"}
+
+#### Decision mining
+
+
+```{python}
+#| label: create decision tree (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+
+patients_df = pd.read_csv('../../outputs/dm_patients_df_%s.csv' % cond)
+patients_df["patient_id"]= patients_df["patient_id"].astype(str)
+decision_tree_pn_place(patients_df,
+  event_log_file="../../outputs/eventlog_%s.xes" % cond,
+  pn_file='./PN_%s.pnml' % cond,
+  cond_code=cond,
+  place2analyze='place1')
+```
+
+![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_ob.png){#fig-decision_tree_ob fig-align="center" width="80%"}
+
+
+![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ob.png){#fig-features_relevance_ob fig-align="center" width="80%"}
+
 
 ### Multivariate logistic regression model with fitness
 
@@ -1818,11 +3315,13 @@ Using fitness as treatment adherence measuring and some static characteristics w
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
-#| output: TRUE
+#| output: FALSE
 df_fitness <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs","fitness_by_cluster.csv")))
+                            here("outputs",sprintf("fitness_by_cluster_%s.csv",
+                                                   cond))))
 df_patient <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs","dm_patients_df.csv")))
+                            here("outputs",sprintf("dm_patients_df_%s.csv",
+                                                   cond))))
 df <- merge(x=df_patient[c('patient_id','age','sex','copayment','death')],
             y=df_fitness[c('ID','aligned_fitness','cluster')],  
             by.x=c("patient_id"), 
