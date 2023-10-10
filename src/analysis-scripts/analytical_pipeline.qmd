@@ -692,6 +692,7 @@ def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
     nac_dict = nac2comprimidos(nac_path,set(treat_df[col_nac]))
     treat_df[col_nac] = treat_df[col_nac].apply(
         lambda x: nac_dict.get(x,days_error))
+    treat_df[col_nac] = treat_df[col_nac]*treat_df['containers_number']
     treat_df = treat_df.sort_values(by = [col_id,col_date ],
                       ascending = [True, True])
     treat_df.rename(columns = {col_date:'date'}, inplace = True)
