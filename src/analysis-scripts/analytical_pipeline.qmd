@@ -1376,22 +1376,22 @@ process_map_by_cluster <- function(evLog,t_freq,cond_code){
 
 Conformance checking is 'A' technique used to check process compliance by comparing event logs for a discovered process with the existing reference model (target model) of the same process. Basing on the DM2 treatment algorithm previous shown, with a software called Carassius , we created the next Petri Nets that are going to be useful as treatment guidelines in reference to glycated hemoglobin measures to patients with frailty.
 
-![DM2 Treatment Algorithm's interpretation to patients with some CV disease in Petri Net format](PN_ecv.png){#fig-petrinet_ecv fig-align="center" width=100%}
+![DM2 Treatment Algorithm's interpretation to patients with some CV disease in Petri Net format](../../outputs/PN_ecv.png){#fig-petrinet_ecv fig-align="center" width=100%}
 
 
-![DM2 Treatment Algorithm's interpretation to patients with heart failure in Petri Net format](PN_ic.png){#fig-petrinet_ic fig-align="center" width=100%"}
+![DM2 Treatment Algorithm's interpretation to patients with heart failure in Petri Net format](../../outputs/PN_ic.png){#fig-petrinet_ic fig-align="center" width=100%"}
 
 
-![DM2 Treatment Algorithm's interpretation to patients with some chronic kidney disease in Petri Net format](PN_erc.png){#fig-petrinet_erc fig-align="center" width=100%}
+![DM2 Treatment Algorithm's interpretation to patients with some chronic kidney disease in Petri Net format](../../outputs/PN_erc.png){#fig-petrinet_erc fig-align="center" width=100%}
 
 
-![DM2 Treatment Algorithm's interpretation to patients with frailty in Petri Net format](PN_f.png){#fig-petrinet_f fig-align="center" width=100%"}
+![DM2 Treatment Algorithm's interpretation to patients with frailty in Petri Net format](../../outputs/PN_f.png){#fig-petrinet_f fig-align="center" width=100%"}
 
 
-![DM2 Treatment Algorithm's interpretation to patients with obesity in Petri Net format](PN_ob.png){#fig-petrinet_ob fig-align="center" width=100%"}
+![DM2 Treatment Algorithm's interpretation to patients with obesity in Petri Net format](../../outputs/PN_ob.png){#fig-petrinet_ob fig-align="center" width=100%"}
 
 
-![DM2 Treatment Algorithm's interpretation to patients without predominant clinical condition in Petri Net format](PN_else.png){#fig-petrinet_else fig-align="center" width=100%"}
+![DM2 Treatment Algorithm's interpretation to patients without predominant clinical condition in Petri Net format](../../outputs/PN_else.png){#fig-petrinet_else fig-align="center" width=100%"}
 
 Fitness is the metric that measures how much a trace is distanced from a given process model, or from the guidelines in this case. There are different methods to calculate this metric but in the code below is used the aligned fitness. Since in this metric the initial marking and the final marking have to be fixed we included the events 'INI' and 'FIN' in the Petri Net and in each trace. Adding this artificial events allows us to compare all traces fitness in the same conditions.
 
