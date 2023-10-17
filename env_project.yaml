@@ -31,3 +31,4 @@ dependencies:
  - r-DiagrammeRsvg=0.1	
  - r-rsvg=2.4.0
  - r-here=1.0.1
+ - r-survival=3.5.7

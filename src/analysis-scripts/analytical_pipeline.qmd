@@ -146,7 +146,7 @@ library(DiagrammeR)
 library(DiagrammeRsvg)
 library(rsvg)
 library(here)
-
+library(survival)
 ```
 
 ### Data preprocessing and event log creation
@@ -318,6 +318,9 @@ def select_by_condition(cond):
     from_f_change_list = from_erc_change_list+to_erc_change_list
     from_ob_change_list = from_f_change_list+['bmi<30']
     from_else_change_list = from_ob_change_list+to_ob_change_list
+    
+    fin_date = dict()
+    death_date = dict(zip(patients_df.patient_id,patients_df.death_date))
     for id in list_cond:
         cmbd_id = cmbd_long[cmbd_long['patient_id']==id]
         
@@ -325,10 +328,13 @@ def select_by_condition(cond):
             date = min(cmbd_id.query(
                 'code in @from_%s_change_list & admission_date>=dx_date' % cond
                 )['admission_date'])
+            if str(death_date[id])!='NaT':
+                date = min([date,death_date[id]])
             if cond in ['ob','else']:
                 turn_75_date = list(patients_df['month_nac'][
                     patients_df['patient_id']==id])[0]+relativedelta(years=75)
                 date = min([date,turn_75_date])
+            fin_date[id] = date
             treat_df.drop(treat_df[((treat_df['dispensing_date']>date) | (
                 treat_df['dispensing_date']<dx_date[id])) & (
                 treat_df['patient_id']==id)].index, inplace=True)
@@ -342,6 +348,8 @@ def select_by_condition(cond):
             param_df.drop(param_df[(param_df['param_date']<dx_date[id]) & (
                 param_df['patient_id']==id)].index, inplace=True)
 
+    patients_df['fin_date'] = patients_df['patient_id'].apply(
+            lambda x: fin_date.get(x,None)).to_list()
     treat_df.index = range(len(treat_df))
     param_df.index = range(len(param_df))
     
@@ -425,6 +433,7 @@ def nac2comprimidos(nac_path,code_set):
 
 def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
                                 param_df_path='../../outputs/dm_param_df.csv',
+                                patients_df_path='../../outputs/dm_patients_df.csv',
                                 code2drug_path='./diabetes_drugs.csv',
                                 output_file='../../outputs/eventlog_raw.csv'):
     '''Preprocessing and event log obtention with prescriptions
@@ -432,6 +441,7 @@ def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
     Args:
       treat_df_path (str): datamodel's treatment table's path
       param_df_path (str): datamodel's parameter table's path
+      patients_df_path (str): datamodel's patients table's path
       code2drug_path (str): drugs' and their codes' info's table's path
   
     ADNI: ANTIDIABETICOS NO INSULINICOS
@@ -457,8 +467,11 @@ def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
     '''
     treat_df = pd.read_csv(treat_df_path)
     param_df = pd.read_csv(param_df_path)
+    patients_df = pd.read_csv(patients_df_path)
     code2drug = pd.read_csv(code2drug_path,index_col=0).to_dict()
     
+    dx_date = dict(zip(patients_df.patient_id,patients_df.dx_date))
+    fin_date = dict(zip(patients_df.patient_id,patients_df.fin_date))
 
     # definir los tipos de medicamentos a analizar
     col_atc = 'atc_code'
@@ -545,8 +558,13 @@ def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
         df_id = df[df['patient_id']==id]
         nid = id_list.index(id)
         actins = set(df_id['actins'])
-        date_min = min(set(df_id['date']))
-        date_max = max(set(df_id['date']))
+        date_min = min([min(set(df_id['date'])),
+                        datetime.strptime(dx_date[id], "%Y-%m-%d")])
+        date_max =  max(set(df_id['date']))
+        if str(fin_date[id])!='nan':
+            date_max = max([date_max,datetime.strptime(fin_date[id], "%Y-%m-%d")])
+        else:
+            date_max = max([date_max,datetime.strptime('2023-01-01', "%Y-%m-%d")])
         dd = [date_min + timedelta(days=x) for x in range(
           (date_max-date_min).days + 1)]
         col = len(dd)
@@ -593,10 +611,12 @@ def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
                                                   range(j+1,j+dif_col[0]+2),0)
 
           
-        col = 0
-        col_0 = 0
+        col = dd.index(datetime.strptime(dx_date[id], "%Y-%m-%d"))
+        col_0 = dd.index(datetime.strptime(dx_date[id], "%Y-%m-%d"))
+        col_max = dd.index(datetime.strptime(fin_date[id], "%Y-%m-%d") 
+                            ) if str(fin_date[id])!='nan' else len(dd)
         min_change_days = 7
-        while col<len(dd)-1:
+        while col<col_max-1:
             if not np.array_equal(ev_status[:,col],ev_status[:,col+1]):
                 ev = col2treat(ev_status,events,col_0)
                 if  ('HBA' not in ev and col-col_0<min_change_days):
@@ -632,6 +652,7 @@ def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
 
 def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
                                 param_df_path='../../outputs/dm_param_df.csv',
+                                patients_df_path='../../outputs/dm_patients_df.csv',
                                 code2drug_path='./diabetes_drugs.csv',
                                 nac_path='./Nomenclator_de_Facturacion.csv',
                                 output_file='../../outputs/eventlog_raw.csv'):
@@ -640,6 +661,7 @@ def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
     Args:
       treat_df_path (str): datamodel's treatment table's path
       param_df_path (str): datamodel's parameter table's path
+      patients_df_path (str): datamodel's patients table's path
       code2drug_path (str): drugs' and their codes' info's table's path
   
     ADNI: ANTIDIABETICOS NO INSULINICOS
@@ -665,7 +687,11 @@ def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
     '''
     treat_df = pd.read_csv(treat_df_path)
     param_df = pd.read_csv(param_df_path)
+    patients_df = pd.read_csv(patients_df_path)
     code2drug = pd.read_csv(code2drug_path,index_col=0).to_dict()
+    
+    dx_date = dict(zip(patients_df.patient_id,patients_df.dx_date))
+    fin_date = dict(zip(patients_df.patient_id,patients_df.fin_date))
 
     treat_min_days = 2
     days_error = 60-treat_min_days
@@ -750,8 +776,13 @@ def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
         df_id = df[df['patient_id']==id]
         nid = id_list.index(id)
         actins = set(df_id['actins'])
-        date_min = min(set(df_id['date']))
-        date_max = max(set(df_id['date']))
+        date_min = min([min(set(df_id['date'])),
+                        datetime.strptime(dx_date[id], "%Y-%m-%d")])
+        date_max =  max(set(df_id['date']))
+        if str(fin_date[id])!='nan':
+            date_max = max([date_max,datetime.strptime(fin_date[id], "%Y-%m-%d")])
+        else:
+            date_max = max([date_max,datetime.strptime('2023-01-01', "%Y-%m-%d")])
         dd = [date_min + timedelta(days=x) for x in range(
           (date_max-date_min).days + 1)]
         col = len(dd)
@@ -833,11 +864,12 @@ def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
             seq = seq.replace('2','0').replace('3','0')
             ev_status[i,:] = eval(seq)               
                 
-          
-        col = 0
-        col_0 = 0
+        col = dd.index(datetime.strptime(dx_date[id], "%Y-%m-%d"))
+        col_0 = dd.index(datetime.strptime(dx_date[id], "%Y-%m-%d"))
+        col_max = dd.index(datetime.strptime(fin_date[id], "%Y-%m-%d") 
+                            ) if str(fin_date[id])!='nan' else len(dd)
         min_change_days = 42
-        while col<len(dd)-1:
+        while col<col_max-1:
             if not np.array_equal(ev_status[:,col],ev_status[:,col+1]):
                 ev = col2treat(ev_status,events,col_0)
                 if  (ev=='_' and col-col_0<min_change_days):
@@ -1594,9 +1626,99 @@ def decision_tree_pn_place(patients_df,
       UNKNOWN_ERROR
 ```
 
-### Multivariate logistic regression model
 
-The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. Logistic regression models can be used to predict different outcomes such as probability of hospitalization, treatment complication probability or probability of death, while as the same time a treatment adherence is analyzed. For that a variable that measures treatment adherence is needed for example fitness of patients' traces.
+### Time dependent Cox model
+
+The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. A Cox model is a statistical technique for exploring the relationship between the survival of a patient and several explanatory variables. One of the strengths of the Cox model is its ability to encompass covariates that change over time, such as treatment adherence. A time dependent Cox model can be made using each patient trace's fitness at different time interval. The function below takes an event log and returns each patients' period's fitness.
+
+```{python}
+def id2fitness_by_interval(xes_file,pn_file,ini_place='place100',fin_place='place111',
+                          date_n_col='date',id_col='ID',fixed_period_time=90,
+                          output_csv='../../outputs/fitness_by_period.csv'):
+    '''Barplot of the fitness of each cluster
+    
+    Args:
+      xes_file (dataframe): event log's path
+      pn_file: petri net's path
+      ini_place: initial place in the petri net
+      fin_place: final place in the petri net
+      date_n_col (str): events dates column's name in log
+      id_col (str): patients identifiers column's name in log
+      output_csv (str): created csv's path
+  '''
+    net, initial_marking, final_marking = pm4py.read_pnml(pn_file)
+    initial_marking = Marking()
+    initial_marking[list(net.places)[[str(p) for p in net.places].index(
+        ini_place)]] = 1
+    final_marking = Marking()
+    final_marking[list(net.places)[[str(p) for p in net.places].index(
+        fin_place)]] = 1
+        
+    event_log = pd.DataFrame(pm4py.read_xes(xes_file))
+    event_log = event_log[event_log['cycle']=='start'] 
+    baseline = datetime.strptime('2017-01-01', "%Y-%m-%d")
+    endline = datetime.strptime('2023-01-01', "%Y-%m-%d")
+    dd = [baseline + timedelta(days=x) for x in range((
+              endline-baseline).days + 1)]
+    dd_INI = dd[0]-timedelta(days=1)
+    dd_FIN = dd[-1]+timedelta(days=1)
+    event_log['time:timestamp'] = event_log['time:timestamp'].dt.tz_localize(None)
+    event_log[date_n_col] = event_log[date_n_col].dt.tz_localize(None)
+    event_log[date_n_col] = event_log[date_n_col].apply(
+        lambda x: dd.index(x))
+    event_log[date_n_col] = event_log.groupby(id_col)[date_n_col].apply(
+        lambda x: x-x.min())
+    
+    period2fitness = pd.DataFrame()
+    id_list_df = []
+    p_start = []
+    p_end = []
+    fitness = []
+    date_0 = []
+    status = []
+    id_list = list(set(event_log[id_col]))
+    for id in tqdm(id_list):
+        event_log_id = event_log[event_log[id_col]==id]
+        date_max = max(event_log_id[date_n_col])
+        date_min = min(event_log_id['time:timestamp'])
+        n_periods = date_max//fixed_period_time
+        if date_max<=fixed_period_time:
+            continue
+        for n in range(1,n_periods+1):
+            event_log_id_n = event_log_id[
+                event_log_id[date_n_col]<n*fixed_period_time]
+            
+            new = event_log_id.copy().iloc[[0, -1]]
+            actins = list(new['actins'])
+            index = list(new['@@index'])
+            new['time:timestamp'] = [dd_INI,dd_FIN]
+            new['concept:name'] = ['INI','FIN']
+            new['@@index'] = [index[0]-1,index[1]+1]
+            new['actins'] = [actins[0]-1,actins[1]+1]
+            event_log_id_n = pd.concat([event_log_id_n,new])
+            aligned_fitness = pm4py.conformance_diagnostics_alignments(
+                             event_log_id_n, net, 
+                             initial_marking, final_marking)[0]['fitness']
+            id_list_df.append(id)
+            p_start.append((n-1)*fixed_period_time)
+            p_end.append(n*fixed_period_time)
+            fitness.append(aligned_fitness)
+            date_0.append(date_min)
+            if n!=n_periods:
+                status.append(0)
+            else:
+                status.append(1)
+    
+    period2fitness[id_col] = id_list_df
+    period2fitness['t_0'] = p_start
+    period2fitness['t_1'] = p_end
+    period2fitness['fitness'] = fitness
+    period2fitness['ini_date'] = date_0
+    period2fitness['status'] = status
+    period2fitness.to_csv(output_csv,index=False)
+
+```
+
 
 ## Results
 ### Patients without predominant clinical condition
@@ -1633,12 +1755,14 @@ if notnan_p>0.98:
   evlog_creation_prescriptions(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
     param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
 else:
   evlog_creation_dispensations(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
@@ -1887,6 +2011,45 @@ Variables relevance in the previous decision tree is indicated in @fig-features_
 
 ![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_else.png){#fig-features_relevance_else fig-align="center" width="80%"}
 
+#### Time dependent Cox model
+
+Using fitness as treatment adherence measuring and some static characteristics we made a time dependent Cox model to predict some interesting outcome. In the next example, for simplicity, we choose fiteness, age, sex and copayment to try to predict mortality or any predominant clinical condition change, and the summary of it is:
+
+```{python}
+#| label: create fitness by period table (else)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+
+id2fitness_by_interval(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+            pn_file='./PN_%s.pnml' % cond,
+            ini_place='place100',fin_place='place111',
+            fixed_period_time=90,
+            output_csv='../../outputs/fitness_by_period_%s.csv' % cond)
+```
+
+```{r}
+#| label: Cox model (else)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+df_fitness <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs",sprintf("fitness_by_period_%s.csv",
+                                                   cond))))
+df_patient <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs",sprintf("dm_patients_df_%s.csv",
+                                                   cond))))
+df <- merge(x=df_patient[c('patient_id','age','sex','copayment')],
+            y=df_fitness[c('ID','t_0','t_1','fitness','status')],  
+            by.x=c("patient_id"), 
+            by.y=c("ID"),
+            all.x=TRUE)
+model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness,
+               data=df)
+summary(model)
+```
 
 ### CV Disease
 
@@ -1922,12 +2085,14 @@ if notnan_p>0.98:
   evlog_creation_prescriptions(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
     param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
 else:
   evlog_creation_dispensations(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
@@ -2171,6 +2336,43 @@ decision_tree_pn_place(patients_df,
 
 ![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ecv.png){#fig-features_relevance_ecv fig-align="center" width="80%"}
 
+#### Time dependent Cox model
+
+```{python}
+#| label: create fitness by period table (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+
+id2fitness_by_interval(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+            pn_file='./PN_%s.pnml' % cond,
+            ini_place='place100',fin_place='place111',
+            fixed_period_time=90,
+            output_csv='../../outputs/fitness_by_period_%s.csv' % cond)
+```
+
+```{r}
+#| label: Cox model (ecv)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+df_fitness <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs",sprintf("fitness_by_period_%s.csv",
+                                                   cond))))
+df_patient <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs",sprintf("dm_patients_df_%s.csv",
+                                                   cond))))
+df <- merge(x=df_patient[c('patient_id','age','sex','copayment')],
+            y=df_fitness[c('ID','t_0','t_1','fitness','status')],  
+            by.x=c("patient_id"), 
+            by.y=c("ID"),
+            all.x=TRUE)
+model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness,
+               data=df)
+summary(model)
+```
 ### Heart Failure
 
 #### Event log's creation and description
@@ -2204,12 +2406,14 @@ if notnan_p>0.98:
   evlog_creation_prescriptions(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
     param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
 else:
   evlog_creation_dispensations(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
@@ -2454,6 +2658,44 @@ decision_tree_pn_place(patients_df,
 
 ![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ic.png){#fig-features_relevance_ic fig-align="center" width="80%"}
 
+#### Time dependent Cox model
+
+```{python}
+#| label: create fitness by period table (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+
+id2fitness_by_interval(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+            pn_file='./PN_%s.pnml' % cond,
+            ini_place='place100',fin_place='place111',
+            fixed_period_time=90,
+            output_csv='../../outputs/fitness_by_period_%s.csv' % cond)
+```
+
+```{r}
+#| label: Cox model (ic)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+df_fitness <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs",sprintf("fitness_by_period_%s.csv",
+                                                   cond))))
+df_patient <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs",sprintf("dm_patients_df_%s.csv",
+                                                   cond))))
+df <- merge(x=df_patient[c('patient_id','age','sex','copayment')],
+            y=df_fitness[c('ID','t_0','t_1','fitness','status')],  
+            by.x=c("patient_id"), 
+            by.y=c("ID"),
+            all.x=TRUE)
+model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness,
+               data=df)
+summary(model)
+```
+
 ### Chronic kidney disease
 
 #### Event log's creation and description
@@ -2488,12 +2730,14 @@ if notnan_p>0.98:
   evlog_creation_prescriptions(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
     param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
 else:
   evlog_creation_dispensations(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
@@ -2739,6 +2983,44 @@ decision_tree_pn_place(patients_df,
 
 ![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_erc.png){#fig-features_relevance_erc fig-align="center" width="80%"}
 
+#### Time dependent Cox model
+
+```{python}
+#| label: create fitness by period table (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+
+id2fitness_by_interval(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+            pn_file='./PN_%s.pnml' % cond,
+            ini_place='place100',fin_place='place111',
+            fixed_period_time=90,
+            output_csv='../../outputs/fitness_by_period_%s.csv' % cond)
+```
+
+```{r}
+#| label: Cox model (erc)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+df_fitness <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs",sprintf("fitness_by_period_%s.csv",
+                                                   cond))))
+df_patient <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs",sprintf("dm_patients_df_%s.csv",
+                                                   cond))))
+df <- merge(x=df_patient[c('patient_id','age','sex','copayment')],
+            y=df_fitness[c('ID','t_0','t_1','fitness','status')],  
+            by.x=c("patient_id"), 
+            by.y=c("ID"),
+            all.x=TRUE)
+model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness,
+               data=df)
+summary(model)
+```
+
 ### Frailty
 
 #### Event log's creation and description
@@ -2773,12 +3055,14 @@ if notnan_p>0.98:
   evlog_creation_prescriptions(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
     param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
 else:
   evlog_creation_dispensations(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
@@ -3023,6 +3307,44 @@ decision_tree_pn_place(patients_df,
 
 ![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_f.png){#fig-features_relevance_f fig-align="center" width="80%"}
 
+#### Time dependent Cox model
+
+```{python}
+#| label: create fitness by period table (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+
+id2fitness_by_interval(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+            pn_file='./PN_%s.pnml' % cond,
+            ini_place='place100',fin_place='place111',
+            fixed_period_time=90,
+            output_csv='../../outputs/fitness_by_period_%s.csv' % cond)
+```
+
+```{r}
+#| label: Cox model (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+df_fitness <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs",sprintf("fitness_by_period_%s.csv",
+                                                   cond))))
+df_patient <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs",sprintf("dm_patients_df_%s.csv",
+                                                   cond))))
+df <- merge(x=df_patient[c('patient_id','age','sex','copayment')],
+            y=df_fitness[c('ID','t_0','t_1','fitness','status')],  
+            by.x=c("patient_id"), 
+            by.y=c("ID"),
+            all.x=TRUE)
+model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness,
+               data=df)
+summary(model)
+```
+
 ### Obesity
 
 #### Event log's creation and description
@@ -3057,12 +3379,14 @@ if notnan_p>0.98:
   evlog_creation_prescriptions(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
     param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
 else:
   evlog_creation_dispensations(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
@@ -3307,29 +3631,42 @@ decision_tree_pn_place(patients_df,
 
 ![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ob.png){#fig-features_relevance_ob fig-align="center" width="80%"}
 
+#### Time dependent Cox model
 
-### Multivariate logistic regression model with fitness
-
-Using fitness as treatment adherence measuring and some static characteristics we made a multivariate logistic regression model to predict some interesting outcome. In the next example, for simplicity, we choose fiteness, age, sex and copayment to try to predict mortality, and the summary of it is:
-
-```{r}
-#| label: Logistic regression model
+```{python}
+#| label: create fitness by period table (ob)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+
+id2fitness_by_interval(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+            pn_file='./PN_%s.pnml' % cond,
+            ini_place='place100',fin_place='place111',
+            fixed_period_time=90,
+            output_csv='../../outputs/fitness_by_period_%s.csv' % cond)
+```
+
+```{r}
+#| label: Cox model (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
 df_fitness <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs",sprintf("fitness_by_cluster_%s.csv",
+                            here("outputs",sprintf("fitness_by_period_%s.csv",
                                                    cond))))
 df_patient <- read.csv(gsub("src/analysis-scripts/","",
                             here("outputs",sprintf("dm_patients_df_%s.csv",
                                                    cond))))
-df <- merge(x=df_patient[c('patient_id','age','sex','copayment','death')],
-            y=df_fitness[c('ID','aligned_fitness','cluster')],  
+df <- merge(x=df_patient[c('patient_id','age','sex','copayment')],
+            y=df_fitness[c('ID','t_0','t_1','fitness','status')],  
             by.x=c("patient_id"), 
             by.y=c("ID"),
             all.x=TRUE)
-model <- glm(death ~ age + sex + copayment + aligned_fitness,
-             data = df, family = binomial)
+model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness,
+               data=df)
 summary(model)
 ```
+
+
