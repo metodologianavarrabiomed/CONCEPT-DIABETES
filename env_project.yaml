@@ -32,3 +32,8 @@ dependencies:
  - r-rsvg=2.4.0
  - r-here=1.0.1
  - r-survival=3.5.7
+ - r-coxme=2.2.18.1
+ - r-muhaz=1.2.6.4
+ - r-ggfortify=0.4.16
+ - r-bayestestR=0.13.1
+ - r-purrr=1.0.1
