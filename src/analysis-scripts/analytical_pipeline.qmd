@@ -146,7 +146,12 @@ library(DiagrammeR)
 library(DiagrammeRsvg)
 library(rsvg)
 library(here)
-
+library(survival)
+library(coxme)
+library(muhaz)
+library(ggfortify)
+library(bayestestR)
+library(purrr)
 ```
 
 ### Data preprocessing and event log creation
@@ -318,6 +323,10 @@ def select_by_condition(cond):
     from_f_change_list = from_erc_change_list+to_erc_change_list
     from_ob_change_list = from_f_change_list+['bmi<30']
     from_else_change_list = from_ob_change_list+to_ob_change_list
+    
+    fin_date = dict()
+    fin_cause = dict()
+    death_date = dict(zip(patients_df.patient_id,patients_df.death_date))
     for id in list_cond:
         cmbd_id = cmbd_long[cmbd_long['patient_id']==id]
         
@@ -325,10 +334,19 @@ def select_by_condition(cond):
             date = min(cmbd_id.query(
                 'code in @from_%s_change_list & admission_date>=dx_date' % cond
                 )['admission_date'])
+            cause = list(cmbd_id[cmbd_id['admission_date']==date]['code'])
+            if str(death_date[id])!='NaT':
+                if death_date[id]<=date:
+                    date = death_date[id]
+                    cause = ['death']
             if cond in ['ob','else']:
                 turn_75_date = list(patients_df['month_nac'][
                     patients_df['patient_id']==id])[0]+relativedelta(years=75)
-                date = min([date,turn_75_date])
+                if turn_75_date<date:
+                    date = turn_75_date
+                    cause = ['turn_75']
+            fin_date[id] = date
+            fin_cause[id] = str(cause)
             treat_df.drop(treat_df[((treat_df['dispensing_date']>date) | (
                 treat_df['dispensing_date']<dx_date[id])) & (
                 treat_df['patient_id']==id)].index, inplace=True)
@@ -337,11 +355,18 @@ def select_by_condition(cond):
                 param_df['patient_id']==id)].index, inplace=True)
             
         except:
+            if str(death_date[id])!='NaT':
+                fin_date[id] = death_date[id]
+                fin_cause[id] = str(['death'])
             treat_df.drop(treat_df[(treat_df['dispensing_date']<dx_date[id]) & (
                 treat_df['patient_id']==id)].index, inplace=True)
             param_df.drop(param_df[(param_df['param_date']<dx_date[id]) & (
                 param_df['patient_id']==id)].index, inplace=True)
 
+    patients_df['fin_date'] = patients_df['patient_id'].apply(
+            lambda x: fin_date.get(x,None)).to_list()
+    patients_df['fin_cause'] = patients_df['patient_id'].apply(
+            lambda x: fin_cause.get(x,None)).to_list()
     treat_df.index = range(len(treat_df))
     param_df.index = range(len(param_df))
     
@@ -425,6 +450,7 @@ def nac2comprimidos(nac_path,code_set):
 
 def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
                                 param_df_path='../../outputs/dm_param_df.csv',
+                                patients_df_path='../../outputs/dm_patients_df.csv',
                                 code2drug_path='./diabetes_drugs.csv',
                                 output_file='../../outputs/eventlog_raw.csv'):
     '''Preprocessing and event log obtention with prescriptions
@@ -432,6 +458,7 @@ def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
     Args:
       treat_df_path (str): datamodel's treatment table's path
       param_df_path (str): datamodel's parameter table's path
+      patients_df_path (str): datamodel's patients table's path
       code2drug_path (str): drugs' and their codes' info's table's path
   
     ADNI: ANTIDIABETICOS NO INSULINICOS
@@ -457,8 +484,11 @@ def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
     '''
     treat_df = pd.read_csv(treat_df_path)
     param_df = pd.read_csv(param_df_path)
+    patients_df = pd.read_csv(patients_df_path)
     code2drug = pd.read_csv(code2drug_path,index_col=0).to_dict()
     
+    dx_date = dict(zip(patients_df.patient_id,patients_df.dx_date))
+    fin_date = dict(zip(patients_df.patient_id,patients_df.fin_date))
 
     # definir los tipos de medicamentos a analizar
     col_atc = 'atc_code'
@@ -545,8 +575,13 @@ def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
         df_id = df[df['patient_id']==id]
         nid = id_list.index(id)
         actins = set(df_id['actins'])
-        date_min = min(set(df_id['date']))
-        date_max = max(set(df_id['date']))
+        date_min = min([min(set(df_id['date'])),
+                        datetime.strptime(dx_date[id], "%Y-%m-%d")])
+        date_max =  max(set(df_id['date']))
+        if str(fin_date[id])!='nan':
+            date_max = max([date_max,datetime.strptime(fin_date[id], "%Y-%m-%d")])
+        else:
+            date_max = max([date_max,datetime.strptime('2023-01-01', "%Y-%m-%d")])
         dd = [date_min + timedelta(days=x) for x in range(
           (date_max-date_min).days + 1)]
         col = len(dd)
@@ -593,10 +628,12 @@ def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
                                                   range(j+1,j+dif_col[0]+2),0)
 
           
-        col = 0
-        col_0 = 0
+        col = dd.index(datetime.strptime(dx_date[id], "%Y-%m-%d"))
+        col_0 = dd.index(datetime.strptime(dx_date[id], "%Y-%m-%d"))
+        col_max = dd.index(datetime.strptime(fin_date[id], "%Y-%m-%d") 
+                            ) if str(fin_date[id])!='nan' else len(dd)
         min_change_days = 7
-        while col<len(dd)-1:
+        while col<col_max-1:
             if not np.array_equal(ev_status[:,col],ev_status[:,col+1]):
                 ev = col2treat(ev_status,events,col_0)
                 if  ('HBA' not in ev and col-col_0<min_change_days):
@@ -632,6 +669,7 @@ def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
 
 def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
                                 param_df_path='../../outputs/dm_param_df.csv',
+                                patients_df_path='../../outputs/dm_patients_df.csv',
                                 code2drug_path='./diabetes_drugs.csv',
                                 nac_path='./Nomenclator_de_Facturacion.csv',
                                 output_file='../../outputs/eventlog_raw.csv'):
@@ -640,6 +678,7 @@ def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
     Args:
       treat_df_path (str): datamodel's treatment table's path
       param_df_path (str): datamodel's parameter table's path
+      patients_df_path (str): datamodel's patients table's path
       code2drug_path (str): drugs' and their codes' info's table's path
   
     ADNI: ANTIDIABETICOS NO INSULINICOS
@@ -665,7 +704,11 @@ def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
     '''
     treat_df = pd.read_csv(treat_df_path)
     param_df = pd.read_csv(param_df_path)
+    patients_df = pd.read_csv(patients_df_path)
     code2drug = pd.read_csv(code2drug_path,index_col=0).to_dict()
+    
+    dx_date = dict(zip(patients_df.patient_id,patients_df.dx_date))
+    fin_date = dict(zip(patients_df.patient_id,patients_df.fin_date))
 
     treat_min_days = 2
     days_error = 60-treat_min_days
@@ -692,6 +735,8 @@ def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
     nac_dict = nac2comprimidos(nac_path,set(treat_df[col_nac]))
     treat_df[col_nac] = treat_df[col_nac].apply(
         lambda x: nac_dict.get(x,days_error))
+    treat_df['containers_number'] = treat_df['containers_number'].fillna(1)
+    treat_df[col_nac] = treat_df[col_nac]*treat_df['containers_number']
     treat_df = treat_df.sort_values(by = [col_id,col_date ],
                       ascending = [True, True])
     treat_df.rename(columns = {col_date:'date'}, inplace = True)
@@ -748,8 +793,13 @@ def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
         df_id = df[df['patient_id']==id]
         nid = id_list.index(id)
         actins = set(df_id['actins'])
-        date_min = min(set(df_id['date']))
-        date_max = max(set(df_id['date']))
+        date_min = min([min(set(df_id['date'])),
+                        datetime.strptime(dx_date[id], "%Y-%m-%d")])
+        date_max =  max(set(df_id['date']))
+        if str(fin_date[id])!='nan':
+            date_max = max([date_max,datetime.strptime(fin_date[id], "%Y-%m-%d")])
+        else:
+            date_max = max([date_max,datetime.strptime('2023-01-01', "%Y-%m-%d")])
         dd = [date_min + timedelta(days=x) for x in range(
           (date_max-date_min).days + 1)]
         col = len(dd)
@@ -831,11 +881,12 @@ def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
             seq = seq.replace('2','0').replace('3','0')
             ev_status[i,:] = eval(seq)               
                 
-          
-        col = 0
-        col_0 = 0
+        col = dd.index(datetime.strptime(dx_date[id], "%Y-%m-%d"))
+        col_0 = dd.index(datetime.strptime(dx_date[id], "%Y-%m-%d"))
+        col_max = dd.index(datetime.strptime(fin_date[id], "%Y-%m-%d") 
+                            ) if str(fin_date[id])!='nan' else len(dd)
         min_change_days = 42
-        while col<len(dd)-1:
+        while col<col_max-1:
             if not np.array_equal(ev_status[:,col],ev_status[:,col+1]):
                 ev = col2treat(ev_status,events,col_0)
                 if  (ev=='_' and col-col_0<min_change_days):
@@ -1375,22 +1426,17 @@ process_map_by_cluster <- function(evLog,t_freq,cond_code){
 
 Conformance checking is 'A' technique used to check process compliance by comparing event logs for a discovered process with the existing reference model (target model) of the same process. Basing on the DM2 treatment algorithm previous shown, with a software called Carassius , we created the next Petri Nets that are going to be useful as treatment guidelines in reference to glycated hemoglobin measures to patients with frailty.
 
-![DM2 Treatment Algorithm's interpretation to patients with some CV disease in Petri Net format](PN_ecv.png){#fig-petrinet_ecv fig-align="center" width=100%}
+![DM2 Treatment Algorithm's interpretation to patients with some CV disease in Petri Net format](../../outputs/PN_ecv.png){#fig-petrinet_ecv fig-align="center" width="100%"}
 
+![DM2 Treatment Algorithm's interpretation to patients with heart failure in Petri Net format](../../outputs/PN_ic.png){#fig-petrinet_ic fig-align="center" width="100%\""}
 
-![DM2 Treatment Algorithm's interpretation to patients with heart failure in Petri Net format](PN_ic.png){#fig-petrinet_ic fig-align="center" width=100%"}
+![DM2 Treatment Algorithm's interpretation to patients with some chronic kidney disease in Petri Net format](../../outputs/PN_erc.png){#fig-petrinet_erc fig-align="center" width="100%"}
 
+![DM2 Treatment Algorithm's interpretation to patients with frailty in Petri Net format](../../outputs/PN_f.png){#fig-petrinet_f fig-align="center" width="100%\""}
 
-![DM2 Treatment Algorithm's interpretation to patients with some chronic kidney disease in Petri Net format](PN_erc.png){#fig-petrinet_erc fig-align="center" width=100%}
+![DM2 Treatment Algorithm's interpretation to patients with obesity in Petri Net format](../../outputs/PN_ob.png){#fig-petrinet_ob fig-align="center" width="100%\""}
 
-
-![DM2 Treatment Algorithm's interpretation to patients with frailty in Petri Net format](PN_f.png){#fig-petrinet_f fig-align="center" width=100%"}
-
-
-![DM2 Treatment Algorithm's interpretation to patients with obesity in Petri Net format](PN_ob.png){#fig-petrinet_ob fig-align="center" width=100%"}
-
-
-![DM2 Treatment Algorithm's interpretation to patients without predominant clinical condition in Petri Net format](PN_else.png){#fig-petrinet_else fig-align="center" width=100%"}
+![DM2 Treatment Algorithm's interpretation to patients without predominant clinical condition in Petri Net format](../../outputs/PN_else.png){#fig-petrinet_else fig-align="center" width="100%\""}
 
 Fitness is the metric that measures how much a trace is distanced from a given process model, or from the guidelines in this case. There are different methods to calculate this metric but in the code below is used the aligned fitness. Since in this metric the initial marking and the final marking have to be fixed we included the events 'INI' and 'FIN' in the Petri Net and in each trace. Adding this artificial events allows us to compare all traces fitness in the same conditions.
 
@@ -1592,11 +1638,103 @@ def decision_tree_pn_place(patients_df,
       UNKNOWN_ERROR
 ```
 
-### Multivariate logistic regression model
+### Time dependent Cox model
 
-The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. Logistic regression models can be used to predict different outcomes such as probability of hospitalization, treatment complication probability or probability of death, while as the same time a treatment adherence is analyzed. For that a variable that measures treatment adherence is needed for example fitness of patients' traces.
+The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. A Cox model is a statistical technique for exploring the relationship between the survival of a patient and several explanatory variables. One of the strengths of the Cox model is its ability to encompass covariates that change over time, such as treatment adherence. A time dependent Cox model can be made using each patient trace's fitness at different time interval. The function below takes an event log and returns each patients' period's fitness.
+
+```{python}
+def id2fitness_by_interval(xes_file,pn_file,ini_place='place100',fin_place='place111',
+                          date_n_col='date',id_col='ID',fixed_period_time=90,
+                          output_csv='../../outputs/fitness_by_period.csv'):
+    '''Barplot of the fitness of each cluster
+    
+    Args:
+      xes_file (dataframe): event log's path
+      pn_file: petri net's path
+      ini_place: initial place in the petri net
+      fin_place: final place in the petri net
+      date_n_col (str): events dates column's name in log
+      id_col (str): patients identifiers column's name in log
+      output_csv (str): created csv's path
+  '''
+    net, initial_marking, final_marking = pm4py.read_pnml(pn_file)
+    initial_marking = Marking()
+    initial_marking[list(net.places)[[str(p) for p in net.places].index(
+        ini_place)]] = 1
+    final_marking = Marking()
+    final_marking[list(net.places)[[str(p) for p in net.places].index(
+        fin_place)]] = 1
+        
+    event_log = pd.DataFrame(pm4py.read_xes(xes_file))
+    event_log = event_log[event_log['cycle']=='start'] 
+    baseline = datetime.strptime('2017-01-01', "%Y-%m-%d")
+    endline = datetime.strptime('2023-01-01', "%Y-%m-%d")
+    dd = [baseline + timedelta(days=x) for x in range((
+              endline-baseline).days + 1)]
+    dd_INI = dd[0]-timedelta(days=1)
+    dd_FIN = dd[-1]+timedelta(days=1)
+    event_log['time:timestamp'] = event_log['time:timestamp'].dt.tz_localize(None)
+    event_log[date_n_col] = event_log[date_n_col].dt.tz_localize(None)
+    event_log[date_n_col] = event_log[date_n_col].apply(
+        lambda x: dd.index(x))
+    event_log[date_n_col] = event_log.groupby(id_col)[date_n_col].apply(
+        lambda x: x-x.min())
+    
+    period2fitness = pd.DataFrame()
+    id_list_df = []
+    p_start = []
+    p_end = []
+    fitness = []
+    date_0 = []
+    status = []
+    id_list = list(set(event_log[id_col]))
+    for id in tqdm(id_list):
+        event_log_id = event_log[event_log[id_col]==id]
+        date_max = max(event_log_id[date_n_col])
+        date_min = min(event_log_id['time:timestamp'])
+        n_periods = date_max//fixed_period_time
+        if date_max<=fixed_period_time:
+            continue
+        for n in range(1,n_periods+2):
+            event_log_id_n = event_log_id[
+                event_log_id[date_n_col]<n*fixed_period_time]
+            
+            new = event_log_id.copy().iloc[[0, -1]]
+            actins = list(new['actins'])
+            index = list(new['@@index'])
+            new['time:timestamp'] = [dd_INI,dd_FIN]
+            new['concept:name'] = ['INI','FIN']
+            new['@@index'] = [index[0]-1,index[1]+1]
+            new['actins'] = [actins[0]-1,actins[1]+1]
+            event_log_id_n = pd.concat([event_log_id_n,new])
+            aligned_fitness = pm4py.conformance_diagnostics_alignments(
+                             event_log_id_n, net, 
+                             initial_marking, final_marking)[0]['fitness']
+            id_list_df.append(id)
+            p_start.append((n-1)*fixed_period_time)
+            p_end_value = n*fixed_period_time
+            if n==n_periods+1:
+                p_end_value = date_max
+            p_end.append(p_end_value)
+            fitness.append(aligned_fitness)
+            date_0.append(date_min)
+            if n!=n_periods+1:
+                status.append(0)
+            else:
+                status.append(1)
+    
+    period2fitness[id_col] = id_list_df
+    period2fitness['t_0'] = p_start
+    period2fitness['t_1'] = p_end
+    period2fitness['fitness'] = fitness
+    period2fitness['ini_date'] = date_0
+    period2fitness['status'] = status
+    period2fitness.to_csv(output_csv,index=False)
+
+```
 
 ## Results
+
 ### Patients without predominant clinical condition
 
 #### Event log's creation and description
@@ -1609,6 +1747,7 @@ The link between guideline adherence, in terms of performed process measures, an
 #| output: FALSE
 cond = 'else'
 ```
+
 ```{r}
 #| label: condition variable in r (else)
 #| eval: TRUE
@@ -1617,8 +1756,6 @@ cond = 'else'
 #| output: FALSE
 cond <- 'else'
 ```
-
-
 
 ```{python}
 #| label: Preprocessing of raw event log (else)
@@ -1631,12 +1768,14 @@ if notnan_p>0.98:
   evlog_creation_prescriptions(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
     param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
 else:
   evlog_creation_dispensations(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
@@ -1757,7 +1896,7 @@ dev.off()
 
 Once the set of traces to analyze are selected, there is a need to choose a distance measure to clustering. In this example Jaccard similarity is chosen to calculate the distance matrix.
 
-```{python} 
+```{python}
 #| label: dm calculation (else)
 #| eval: TRUE
 #| echo: FALSE
@@ -1804,7 +1943,7 @@ del dm
 del df_
 ```
 
-Choosing the optimal number of clusters, too small clusters can appear, but we can exclude those of less than 30 traces  to avoid having clusters of low representation. The process map and the most frequent traces of one of these clusters that remain are the followings.
+Choosing the optimal number of clusters, too small clusters can appear, but we can exclude those of less than 30 traces to avoid having clusters of low representation. The process map and the most frequent traces of one of these clusters that remain are the followings.
 
 ```{python}
 #| label: trace explorer (else)
@@ -1837,12 +1976,9 @@ process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
 Cluster 0
 :::
 
-
-
-
 #### Conformace checking
 
-Once traces are clusterized, with a boxplot is easy to show that each cluster's behavior with respect to the treatment guides is different. Comparing traces with @fig-petrinet_else, calculating the fitness (1 being perfect match with the petri net and 0 being the lowest possible fitness) of each trace and grouping by cluster results in_ @fig-fitness_by_cluster_else.
+Once traces are clusterized, with a boxplot is easy to show that each cluster's behavior with respect to the treatment guides is different. Comparing traces with @fig-petrinet_else, calculating the fitness (1 being perfect match with the petri net and 0 being the lowest possible fitness) of each trace and grouping by cluster results in\_ @fig-fitness_by_cluster_else.
 
 ```{python}
 #| label: fitness boxplot (else)
@@ -1885,6 +2021,87 @@ Variables relevance in the previous decision tree is indicated in @fig-features_
 
 ![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_else.png){#fig-features_relevance_else fig-align="center" width="80%"}
 
+#### Time dependent Cox model
+
+Using fitness as treatment adherence measuring and some static characteristics we made a time dependent Cox model to predict some interesting outcome. In the next example, for simplicity, we choose fiteness, age, sex and copayment to try to predict mortality or any predominant clinical condition change, and the summary of it is:
+
+```{python}
+#| label: create fitness by period table (else)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+
+id2fitness_by_interval(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+            pn_file='./PN_%s.pnml' % cond,
+            ini_place='place100',fin_place='place111',
+            fixed_period_time=90,
+            output_csv='../../outputs/fitness_by_period_%s.csv' % cond)
+```
+
+```{r}
+#| label: Cox model (else)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+df_fitness <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs",sprintf("fitness_by_period_%s.csv",
+                                                   cond))))
+df_patient <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs",sprintf("dm_patients_df_%s.csv",
+                                                   cond))))
+df <- merge(x=df_patient[c('patient_id','age','sex','copayment')],
+            y=df_fitness[c('ID','t_0','t_1','fitness','status')],  
+            by.x=c("patient_id"), 
+            by.y=c("ID"),
+            all.x=FALSE)
+df$sex <- as.factor(df$sex)
+model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness,
+               data=df)
+summary(model)
+```
+
+#### Joint Model
+
+```{r}
+#| eval: TRUE
+## Joint model lmmr
+### Una clase
+
+#datosHBA$edadcent <- datosHBA$Edaddebut-mean(datosstart$Edaddebut)
+library(lcmm)
+df$ID2 <- as.numeric(as.factor(df$patient_id))
+jointm1 <- Jointlcmm(fixed= fitness ~ t_0 ,random=~1, subject="ID2",
+                     survival = Surv(t_1,status)~ age, hazard="Weibull",
+                     hazardtype="PH",ng=1,data=df)
+summary(jointm1)
+
+##### 2 grupos latentes #####   
+
+## Lineal
+
+jointm2 <- Jointlcmm(fixed= fitness ~ t_0 ,random=~1,mixture=~t_0, subject="ID2",
+                     survival = Surv(t_1,status)~ age, hazard="Weibull",
+                     hazardtype="PH",ng=3,data=df,
+                     B=jointm1)
+summary(jointm2)
+postprob(jointm2)
+d1 <- data.frame(t_0=seq(1,1000,length.out=100))
+data.new <-data.frame(d1,age=0)
+jointm2.pred <- predictY(jointm2, data.new , var.time = "t_0")
+
+
+plot(jointm2.pred, bty = "l", ylim = c(0, 1), legend.loc = FALSE,
+     ylab = "fitness", xlab = "days", lwd = 2,col=c("red","navy","green"))
+
+plot(jointm2, which = "survival", lwd = 2, legend.loc = FALSE, bty = "l",
+     xlab = "days", ylab = "event-free probability",col=c("red","navy","green"))
+
+table(jointm2$pprob$class,jointm2$pprobY$class)
+
+
+```
 
 ### CV Disease
 
@@ -1898,6 +2115,7 @@ Variables relevance in the previous decision tree is indicated in @fig-features_
 #| output: FALSE
 cond = 'ecv'
 ```
+
 ```{r}
 #| label: condition variable in r (ecv)
 #| eval: TRUE
@@ -1906,8 +2124,6 @@ cond = 'ecv'
 #| output: FALSE
 cond <- 'ecv'
 ```
-
-
 
 ```{python}
 #| label: Preprocessing of raw event log (ecv)
@@ -1920,12 +2136,14 @@ if notnan_p>0.98:
   evlog_creation_prescriptions(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
     param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
 else:
   evlog_creation_dispensations(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
@@ -1998,7 +2216,7 @@ evLog <- load_csv_log(gsub("src/analysis-scripts/","",
                                                   cond))))
 ```
 
- Choosing patients with a cardiovascular disease and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
+Choosing patients with a cardiovascular disease and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
 
 ```{r}
 #| label: proces map 1 (ecv)
@@ -2044,8 +2262,7 @@ dev.off()
 
 #### Clustering traces
 
-
-```{python} 
+```{python}
 #| label: dm calculation (ecv)
 #| eval: TRUE
 #| echo: FALSE
@@ -2054,7 +2271,6 @@ dev.off()
 measure_f = textdistance.jaccard
 dm = calculate_dm_ED(traces,measure_f)
 ```
-
 
 ```{python}
 #| label: dendograms (ecv)
@@ -2091,7 +2307,6 @@ del dm
 del df_
 ```
 
-
 ```{python}
 #| label: trace explorer (ecv)
 #| eval: TRUE
@@ -2124,11 +2339,7 @@ process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
 Cluster 0
 :::
 
-
-
-
 #### Conformace checking
-
 
 ```{python}
 #| label: fitness boxplot (ecv)
@@ -2146,7 +2357,6 @@ conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ecv.png){#fig-fitness_by_cluster_ecv fig-align="center" width="80%"}
 
 #### Decision mining
-
 
 ```{python}
 #| label: create decision tree (ecv)
@@ -2166,12 +2376,13 @@ decision_tree_pn_place(patients_df,
 
 ![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_ecv.png){#fig-decision_tree_ecv fig-align="center" width="80%"}
 
-
 ![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ecv.png){#fig-features_relevance_ecv fig-align="center" width="80%"}
+
 
 ### Heart Failure
 
 #### Event log's creation and description
+
 ```{python}
 #| label: condition variable in python (ic)
 #| eval: TRUE
@@ -2180,6 +2391,7 @@ decision_tree_pn_place(patients_df,
 #| output: FALSE
 cond = 'ic'
 ```
+
 ```{r}
 #| label: condition variable in r (ic)
 #| eval: TRUE
@@ -2188,8 +2400,6 @@ cond = 'ic'
 #| output: FALSE
 cond <- 'ic'
 ```
-
-
 
 ```{python}
 #| label: Preprocessing of raw event log (ic)
@@ -2202,12 +2412,14 @@ if notnan_p>0.98:
   evlog_creation_prescriptions(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
     param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
 else:
   evlog_creation_dispensations(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
@@ -2280,8 +2492,7 @@ evLog <- load_csv_log(gsub("src/analysis-scripts/","",
                                                   cond))))
 ```
 
- Choosing patients with heart failure and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
-
+Choosing patients with heart failure and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
 
 ```{r}
 #| label: proces map 1 (ic)
@@ -2327,8 +2538,7 @@ dev.off()
 
 #### Clustering traces
 
-
-```{python} 
+```{python}
 #| label: dm calculation (ic)
 #| eval: TRUE
 #| echo: FALSE
@@ -2337,7 +2547,6 @@ dev.off()
 measure_f = textdistance.jaccard
 dm = calculate_dm_ED(traces,measure_f)
 ```
-
 
 ```{python}
 #| label: dendograms (ic)
@@ -2374,7 +2583,6 @@ del dm
 del df_
 ```
 
-
 ```{python}
 #| label: trace explorer (ic)
 #| eval: TRUE
@@ -2407,11 +2615,7 @@ process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
 Cluster 0
 :::
 
-
-
-
 #### Conformace checking
-
 
 ```{python}
 #| label: fitness boxplot (ic)
@@ -2429,7 +2633,6 @@ conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ic.png){#fig-fitness_by_cluster_ic fig-align="center" width="80%"}
 
 #### Decision mining
-
 
 ```{python}
 #| label: create decision tree (ic)
@@ -2449,8 +2652,8 @@ decision_tree_pn_place(patients_df,
 
 ![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_ic.png){#fig-decision_tree_ic fig-align="center" width="80%"}
 
-
 ![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ic.png){#fig-features_relevance_ic fig-align="center" width="80%"}
+
 
 ### Chronic kidney disease
 
@@ -2464,6 +2667,7 @@ decision_tree_pn_place(patients_df,
 #| output: FALSE
 cond = 'erc'
 ```
+
 ```{r}
 #| label: condition variable in r (erc)
 #| eval: TRUE
@@ -2472,8 +2676,6 @@ cond = 'erc'
 #| output: FALSE
 cond <- 'erc'
 ```
-
-
 
 ```{python}
 #| label: Preprocessing of raw event log (erc)
@@ -2486,12 +2688,14 @@ if notnan_p>0.98:
   evlog_creation_prescriptions(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
     param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
 else:
   evlog_creation_dispensations(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
@@ -2564,8 +2768,7 @@ evLog <- load_csv_log(gsub("src/analysis-scripts/","",
                                                   cond))))
 ```
 
- Choosing patients with chronic kidney disease and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
-
+Choosing patients with chronic kidney disease and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
 
 ```{r}
 #| label: proces map 1 (erc)
@@ -2611,8 +2814,7 @@ dev.off()
 
 #### Clustering traces
 
-
-```{python} 
+```{python}
 #| label: dm calculation (erc)
 #| eval: TRUE
 #| echo: FALSE
@@ -2621,7 +2823,6 @@ dev.off()
 measure_f = textdistance.jaccard
 dm = calculate_dm_ED(traces,measure_f)
 ```
-
 
 ```{python}
 #| label: dendograms (erc)
@@ -2658,7 +2859,6 @@ del dm
 del df_
 ```
 
-
 ```{python}
 #| label: trace explorer (erc)
 #| eval: TRUE
@@ -2691,11 +2891,7 @@ process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
 Cluster 0
 :::
 
-
-
-
 #### Conformace checking
-
 
 ```{python}
 #| label: fitness boxplot (erc)
@@ -2713,7 +2909,6 @@ conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_erc.png){#fig-fitness_by_cluster_erc fig-align="center" width="80%"}
 
 #### Decision mining
-
 
 ```{python}
 #| label: create decision tree (erc)
@@ -2734,8 +2929,8 @@ decision_tree_pn_place(patients_df,
 
 ![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_erc.png){#fig-decision_tree_erc fig-align="center" width="80%"}
 
-
 ![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_erc.png){#fig-features_relevance_erc fig-align="center" width="80%"}
+
 
 ### Frailty
 
@@ -2749,6 +2944,7 @@ decision_tree_pn_place(patients_df,
 #| output: FALSE
 cond = 'f'
 ```
+
 ```{r}
 #| label: condition variable in r (f)
 #| eval: TRUE
@@ -2757,8 +2953,6 @@ cond = 'f'
 #| output: FALSE
 cond <- 'f'
 ```
-
-
 
 ```{python}
 #| label: Preprocessing of raw event log (f)
@@ -2771,12 +2965,14 @@ if notnan_p>0.98:
   evlog_creation_prescriptions(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
     param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
 else:
   evlog_creation_dispensations(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
@@ -2849,8 +3045,7 @@ evLog <- load_csv_log(gsub("src/analysis-scripts/","",
                                                   cond))))
 ```
 
- Choosing patients with frailty and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
-
+Choosing patients with frailty and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
 
 ```{r}
 #| label: proces map 1 (f)
@@ -2896,8 +3091,7 @@ dev.off()
 
 #### Clustering traces
 
-
-```{python} 
+```{python}
 #| label: dm calculation (f)
 #| eval: TRUE
 #| echo: FALSE
@@ -2906,7 +3100,6 @@ dev.off()
 measure_f = textdistance.jaccard
 dm = calculate_dm_ED(traces,measure_f)
 ```
-
 
 ```{python}
 #| label: dendograms (f)
@@ -2943,7 +3136,6 @@ del dm
 del df_
 ```
 
-
 ```{python}
 #| label: trace explorer (f)
 #| eval: TRUE
@@ -2976,11 +3168,7 @@ process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
 Cluster 0
 :::
 
-
-
-
 #### Conformace checking
-
 
 ```{python}
 #| label: fitness boxplot (f)
@@ -2998,7 +3186,6 @@ conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_f.png){#fig-fitness_by_cluster_f fig-align="center" width="80%"}
 
 #### Decision mining
-
 
 ```{python}
 #| label: create decision tree (f)
@@ -3018,8 +3205,8 @@ decision_tree_pn_place(patients_df,
 
 ![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_f.png){#fig-decision_tree_f fig-align="center" width="80%"}
 
-
 ![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_f.png){#fig-features_relevance_f fig-align="center" width="80%"}
+
 
 ### Obesity
 
@@ -3033,6 +3220,7 @@ decision_tree_pn_place(patients_df,
 #| output: FALSE
 cond = 'ob'
 ```
+
 ```{r}
 #| label: condition variable in r (ob)
 #| eval: TRUE
@@ -3041,8 +3229,6 @@ cond = 'ob'
 #| output: FALSE
 cond <- 'ob'
 ```
-
-
 
 ```{python}
 #| label: Preprocessing of raw event log (ob)
@@ -3055,12 +3241,14 @@ if notnan_p>0.98:
   evlog_creation_prescriptions(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
     param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
 else:
   evlog_creation_dispensations(
     treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
+    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
+    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
     code2drug_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv',
     output_file='../../outputs/eventlog_raw_%s.csv' % cond)
@@ -3133,8 +3321,7 @@ evLog <- load_csv_log(gsub("src/analysis-scripts/","",
                                                   cond))))
 ```
 
- Choosing patients with obesity and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
-
+Choosing patients with obesity and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
 
 ```{r}
 #| label: proces map 1 (ob)
@@ -3180,8 +3367,7 @@ dev.off()
 
 #### Clustering traces
 
-
-```{python} 
+```{python}
 #| label: dm calculation (ob)
 #| eval: TRUE
 #| echo: FALSE
@@ -3190,7 +3376,6 @@ dev.off()
 measure_f = textdistance.jaccard
 dm = calculate_dm_ED(traces,measure_f)
 ```
-
 
 ```{python}
 #| label: dendograms (ob)
@@ -3212,7 +3397,7 @@ else:
   n_clusters=1
 ```
 
-![Distance matrix's dendogram](../../outputs/dendogram_f.png){#fig-dendogram fig-align="center" width="80%"}
+![Distance matrix's dendogram](../../outputs/dendogram_f.png){fig-align="center" width="80%"}
 
 ```{python}
 #| label: clustering (ob)
@@ -3226,7 +3411,6 @@ clust(n_clusters,dm,df_,id2trace,patients,
 del dm
 del df_
 ```
-
 
 ```{python}
 #| label: trace explorer (ob)
@@ -3260,11 +3444,7 @@ process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
 Cluster 0
 :::
 
-
-
-
 #### Conformace checking
-
 
 ```{python}
 #| label: fitness boxplot (ob)
@@ -3282,7 +3462,6 @@ conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ob.png){#fig-fitness_by_cluster_ob fig-align="center" width="80%"}
 
 #### Decision mining
-
 
 ```{python}
 #| label: create decision tree (ob)
@@ -3302,32 +3481,172 @@ decision_tree_pn_place(patients_df,
 
 ![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_ob.png){#fig-decision_tree_ob fig-align="center" width="80%"}
 
-
 ![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ob.png){#fig-features_relevance_ob fig-align="center" width="80%"}
 
 
-### Multivariate logistic regression model with fitness
-
-Using fitness as treatment adherence measuring and some static characteristics we made a multivariate logistic regression model to predict some interesting outcome. In the next example, for simplicity, we choose fiteness, age, sex and copayment to try to predict mortality, and the summary of it is:
+### Cluster survival analysis
 
 ```{r}
-#| label: Logistic regression model
+#| label: Joint model
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
-#| output: FALSE
-df_fitness <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs",sprintf("fitness_by_cluster_%s.csv",
-                                                   cond))))
-df_patient <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs",sprintf("dm_patients_df_%s.csv",
-                                                   cond))))
-df <- merge(x=df_patient[c('patient_id','age','sex','copayment','death')],
-            y=df_fitness[c('ID','aligned_fitness','cluster')],  
-            by.x=c("patient_id"), 
-            by.y=c("ID"),
-            all.x=TRUE)
-model <- glm(death ~ age + sex + copayment + aligned_fitness,
-             data = df, family = binomial)
-summary(model)
+#| output: TRUE
+df_cluster_else <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs","fitness_by_cluster_else.csv")))
+df_patient_else <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs","dm_patients_df_else.csv")))
+df_else <- merge(x=df_patient_else[c('patient_id','age','sex','copayment',
+                                    'dx_date','fin_date','fin_cause')],
+                 y=df_cluster_else[c('ID','cluster')],  
+                 by.x=c("patient_id"), 
+                 by.y=c("ID"),
+                 all.x=FALSE)
+df_else$cluster <- paste(df_else$cluster,"_else",sep="")
+
+df_cluster_ob <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs","fitness_by_cluster_ob.csv")))
+df_patient_ob <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs","dm_patients_df_ob.csv")))
+df_ob <- merge(x=df_patient_ob[c('patient_id','age','sex','copayment',
+                                   'dx_date','fin_date','fin_cause')],
+                 y=df_cluster_ob[c('ID','cluster')],  
+                 by.x=c("patient_id"), 
+                 by.y=c("ID"),
+                 all.x=FALSE)
+df_ob$cluster <- paste(df_ob$cluster,"_ob",sep="")
+
+df_cluster_f <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs","fitness_by_cluster_f.csv")))
+df_patient_f <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs","dm_patients_df_f.csv")))
+df_f <- merge(x=df_patient_f[c('patient_id','age','sex','copayment',
+                                   'dx_date','fin_date','fin_cause')],
+                 y=df_cluster_f[c('ID','cluster')],  
+                 by.x=c("patient_id"), 
+                 by.y=c("ID"),
+                 all.x=FALSE)
+df_f$cluster <- paste(df_f$cluster,"_f",sep="")
+
+df_cluster_erc <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs","fitness_by_cluster_erc.csv")))
+df_patient_erc <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs","dm_patients_df_erc.csv")))
+df_erc <- merge(x=df_patient_erc[c('patient_id','age','sex','copayment',
+                                   'dx_date','fin_date','fin_cause')],
+                 y=df_cluster_erc[c('ID','cluster')],  
+                 by.x=c("patient_id"), 
+                 by.y=c("ID"),
+                 all.x=FALSE)
+df_erc$cluster <- paste(df_erc$cluster,"_erc",sep="")
+
+df_cluster_ic <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs","fitness_by_cluster_ic.csv")))
+df_patient_ic <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs","dm_patients_df_ic.csv")))
+df_ic <- merge(x=df_patient_ic[c('patient_id','age','sex','copayment',
+                                   'dx_date','fin_date','fin_cause')],
+                 y=df_cluster_ic[c('ID','cluster')],  
+                 by.x=c("patient_id"), 
+                 by.y=c("ID"),
+                 all.x=FALSE)
+df_ic$cluster <- paste(df_ic$cluster,"_ic",sep="")
+
+df_cluster_ecv <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs","fitness_by_cluster_ecv.csv")))
+df_patient_ecv <- read.csv(gsub("src/analysis-scripts/","",
+                            here("outputs","dm_patients_df_ecv.csv")))
+df_ecv <- merge(x=df_patient_ecv[c('patient_id','age','sex','copayment',
+                                   'dx_date','fin_date','fin_cause')],
+                 y=df_cluster_ecv[c('ID','cluster')],  
+                 by.x=c("patient_id"), 
+                 by.y=c("ID"),
+                 all.x=FALSE)
+df_ecv$cluster <- paste(df_ecv$cluster,"_ecv",sep="")
+
+df <- bind_rows(df_else,df_ob,df_f,df_erc,df_ic,df_ecv)
+
+df$sex <- as.factor(df$sex)
+df$cluster <- as.factor(df$cluster)
+df <- df %>%
+  mutate(n_days = as.Date(fin_date) - as.Date(dx_date))
+df$n_days <- as.numeric(df$n_days)
+
+df$status <- ifelse(is.na(df$fin_cause) | df$fin_cause == "", 0, 1)
+
+base_model <- coxph(Surv(n_days, status) ~ age + sex, data=df)
+me_model <- coxme(Surv(n_days, status) ~ age + sex + (1 | cluster), data=df)
+summary(me_model)
+```
+
+```{r}
+#| label: cluster survival model
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+# estimate baseline hazard using muhaz: ---- 
+muhaz_fit <- muhaz(df$n_days, 
+                   df$status, 
+                   n.est.grid = 1000, 
+                   kern = "rectangle"
+)
+hazard_base_vector <- muhaz_fit$haz.est
+times_vector <- muhaz_fit$est.grid
+
+# df with base hazard:
+df_base_haz <- 
+  tibble(hazard_base = hazard_base_vector, 
+         time = times_vector) %>% 
+  mutate(index = row_number())  # used to calculate cumulative hazard 
+
+# df with group-specific hazards: ---- 
+# random effects act as multiples on the baseline hazard:
+df_random_effect_haz <- 
+  df_base_haz %>% 
+  mutate(hazard_center1 = hazard_base * exp(ranef(me_model)$cluster[1]),
+     hazard_center2 = hazard_base * exp(ranef(me_model)$cluster[2]),
+     hazard_center3 = hazard_base * exp(ranef(me_model)$cluster[3]),
+     hazard_center4 = hazard_base * exp(ranef(me_model)$cluster[4]))
+
+
+# df with derived CHFs, hazards, and survival fns for the RE model: ---- 
+# first define functions for getting chf values at time t
+calc_chf <- function(index, hazard_colname, df = df_random_effect_haz){
+  df <- as.data.frame(df)
+  df2 <- df %>% dplyr::select(time, {{hazard_colname}}) %>% slice(1:index)
+  
+  times_vector <- df2[,1]
+  haz_vector <- df2[,2]
+  return(area_under_curve(times_vector, haz_vector))
+}
+
+df_survival <- 
+  df_random_effect_haz  %>%  
+  mutate(cum_hazard_base = map_dbl(index, calc_chf, hazard_colname = "hazard_base"), 
+         cum_hazard_center1 = map_dbl(index, calc_chf, hazard_colname = "hazard_center1"), 
+         cum_hazard_center2 = map_dbl(index, calc_chf, hazard_colname = "hazard_center2"), 
+         cum_hazard_center3 = map_dbl(index, calc_chf, hazard_colname = "hazard_center3"), 
+         cum_hazard_center4 = map_dbl(index, calc_chf, hazard_colname = "hazard_center4"), 
+         
+         surv_base = exp(-cum_hazard_base), 
+         surv_center1 = exp(-cum_hazard_center1),
+         surv_center2 = exp(-cum_hazard_center2),
+         surv_center3 = exp(-cum_hazard_center3),
+         surv_center4 = exp(-cum_hazard_center4)
+  )
+  
+
+# plot the derived survival curves: ----
+df_survival %>% 
+  pivot_longer(cols = c(surv_base, surv_center1, surv_center2, surv_center3, surv_center4), 
+               names_to = "survival") %>% 
+  ggplot(aes(x = time, 
+             y = value, 
+             group = survival, 
+             col = survival)) +
+  geom_point() + 
+  scale_x_continuous(limits = c(0, max(df_random_effect_haz$time))) + 
+  scale_y_continuous(limits = c(0, 1)) + 
+  theme_minimal() 
 ```
