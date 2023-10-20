@@ -35,6 +35,10 @@ ENV RETICULATE_PYTHON=/opt/conda/envs/aspire/bin/python
 
 COPY --chown=$MAMBA_USER:$MAMBA_USER . /home/$MAMBA_USER/projects/concept-stroke
 
+# add concept logo 
+COPY --chown=$MAMBA_USER:$MAMBA_USER main_logo.png /temp/main_logo.png
+RUN cp /temp/main_logo.png $(find front -name main_logo**)
+
 ENV APP_PORT=3000
 ENV APP_HOST=0.0.0.0
 EXPOSE 3000
