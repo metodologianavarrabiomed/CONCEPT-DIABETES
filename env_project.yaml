@@ -1,8 +1,9 @@
 name: aspire
 channels:
  - conda-forge
+ - r
 dependencies:
- - quarto=1.2.475
+ #- quarto=1.2.475
  - more-itertools=8.12.0
  - conda==23.7.4
  - pip=23.0.1 
@@ -37,3 +38,5 @@ dependencies:
  - r-ggfortify=0.4.16
  - r-bayestestR=0.13.1
  - r-purrr=1.0.1
+ - r-lcmm=1.9.5
+
