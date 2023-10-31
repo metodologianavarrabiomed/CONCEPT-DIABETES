@@ -147,6 +147,8 @@ library(DiagrammeRsvg)
 library(rsvg)
 library(here)
 library(survival)
+library(lcmm)
+
 library(coxme)
 library(muhaz)
 library(ggfortify)
@@ -184,7 +186,7 @@ def select_by_condition(cond):
     patients_df_path = '../../outputs/dm_patients_df_%s.csv' % cond
     treat_df_path = '../../outputs/dm_treat_df_%s.csv' % cond
     
-    con = duckdb.connect('../../inputs/data.duckdb')
+    con = duckdb.connect('C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb')
     cmbd_df = con.sql("SELECT * FROM main.cmbd WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
     comorb_df = con.sql("SELECT * FROM main.comorb WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
     param_df = con.sql("SELECT * FROM main.param WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
@@ -1424,7 +1426,7 @@ process_map_by_cluster <- function(evLog,t_freq,cond_code){
 
 ### Conformance checking
 
-Conformance checking is 'A' technique used to check process compliance by comparing event logs for a discovered process with the existing reference model (target model) of the same process. Basing on the DM2 treatment algorithm previous shown, with a software called Carassius , we created the next Petri Nets that are going to be useful as treatment guidelines in reference to glycated hemoglobin measures to patients with frailty.
+Conformance checking is a technique used to check process compliance by comparing event logs for a discovered process with the existing reference model (target model) of the same process. Basing on the DM2 treatment algorithm previous shown, with a software called Carassius , we created the next Petri Nets that are going to be useful as treatment guidelines in reference to glycated hemoglobin measures to patients with frailty.
 
 ![DM2 Treatment Algorithm's interpretation to patients with some CV disease in Petri Net format](../../outputs/PN_ecv.png){#fig-petrinet_ecv fig-align="center" width="100%"}
 
@@ -1494,6 +1496,100 @@ def id2fitness(log ,net, initial_marking, final_marking, clust_col='cluster',
   df = pd.DataFrame(id2fitness).T
   df.index = range(len(df))
   return df
+```
+
+The function below takes an event log and returns each patients' period's fitness.
+
+```{python}
+#| label: Fitness  calculation by intervals
+def id2fitness_by_interval(xes_file,pn_file,ini_place='place100',fin_place='place111',
+                          date_n_col='date',id_col='ID',fixed_period_time=90,
+                          output_csv='../../outputs/fitness_by_period.csv'):
+    '''Barplot of the fitness of each cluster
+    
+    Args:
+      xes_file (dataframe): event log's path
+      pn_file: petri net's path
+      ini_place: initial place in the petri net
+      fin_place: final place in the petri net
+      date_n_col (str): events dates column's name in log
+      id_col (str): patients identifiers column's name in log
+      output_csv (str): created csv's path
+  '''
+    net, initial_marking, final_marking = pm4py.read_pnml(pn_file)
+    initial_marking = Marking()
+    initial_marking[list(net.places)[[str(p) for p in net.places].index(
+        ini_place)]] = 1
+    final_marking = Marking()
+    final_marking[list(net.places)[[str(p) for p in net.places].index(
+        fin_place)]] = 1
+        
+    event_log = pd.DataFrame(pm4py.read_xes(xes_file))
+    event_log = event_log[event_log['cycle']=='start'] 
+    baseline = datetime.strptime('2017-01-01', "%Y-%m-%d")
+    endline = datetime.strptime('2023-01-01', "%Y-%m-%d")
+    dd = [baseline + timedelta(days=x) for x in range((
+              endline-baseline).days + 1)]
+    dd_INI = dd[0]-timedelta(days=1)
+    dd_FIN = dd[-1]+timedelta(days=1)
+    event_log['time:timestamp'] = event_log['time:timestamp'].dt.tz_localize(None)
+    event_log[date_n_col] = event_log[date_n_col].dt.tz_localize(None)
+    event_log[date_n_col] = event_log[date_n_col].apply(
+        lambda x: dd.index(x))
+    event_log[date_n_col] = event_log.groupby(id_col)[date_n_col].apply(
+        lambda x: x-x.min())
+    
+    period2fitness = pd.DataFrame()
+    id_list_df = []
+    p_start = []
+    p_end = []
+    fitness = []
+    date_0 = []
+    status = []
+    id_list = list(set(event_log[id_col]))
+    for id in tqdm(id_list):
+        event_log_id = event_log[event_log[id_col]==id]
+        date_max = max(event_log_id[date_n_col])
+        date_min = min(event_log_id['time:timestamp'])
+        n_periods = date_max//fixed_period_time
+        if date_max<=fixed_period_time:
+            continue
+        for n in range(1,n_periods+2):
+            event_log_id_n = event_log_id[
+                event_log_id[date_n_col]<n*fixed_period_time]
+            
+            new = event_log_id.copy().iloc[[0, -1]]
+            actins = list(new['actins'])
+            index = list(new['@@index'])
+            new['time:timestamp'] = [dd_INI,dd_FIN]
+            new['concept:name'] = ['INI','FIN']
+            new['@@index'] = [index[0]-1,index[1]+1]
+            new['actins'] = [actins[0]-1,actins[1]+1]
+            event_log_id_n = pd.concat([event_log_id_n,new])
+            aligned_fitness = pm4py.conformance_diagnostics_alignments(
+                             event_log_id_n, net, 
+                             initial_marking, final_marking)[0]['fitness']
+            id_list_df.append(id)
+            p_start.append((n-1)*fixed_period_time)
+            p_end_value = n*fixed_period_time
+            if n==n_periods+1:
+                p_end_value = date_max
+            p_end.append(p_end_value)
+            fitness.append(aligned_fitness)
+            date_0.append(date_min)
+            if n!=n_periods+1:
+                status.append(0)
+            else:
+                status.append(1)
+    
+    period2fitness[id_col] = id_list_df
+    period2fitness['t_0'] = p_start
+    period2fitness['t_1'] = p_end
+    period2fitness['fitness'] = fitness
+    period2fitness['ini_date'] = date_0
+    period2fitness['status'] = status
+    period2fitness.to_csv(output_csv,index=False)
+
 ```
 
 In the next function is shown a boxplot function to show clusters' fitness distribution.
@@ -1638,100 +1734,9 @@ def decision_tree_pn_place(patients_df,
       UNKNOWN_ERROR
 ```
 
-### Time dependent Cox model
+### Joint Latent Class Model
 
-The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. A Cox model is a statistical technique for exploring the relationship between the survival of a patient and several explanatory variables. One of the strengths of the Cox model is its ability to encompass covariates that change over time, such as treatment adherence. A time dependent Cox model can be made using each patient trace's fitness at different time interval. The function below takes an event log and returns each patients' period's fitness.
-
-```{python}
-def id2fitness_by_interval(xes_file,pn_file,ini_place='place100',fin_place='place111',
-                          date_n_col='date',id_col='ID',fixed_period_time=90,
-                          output_csv='../../outputs/fitness_by_period.csv'):
-    '''Barplot of the fitness of each cluster
-    
-    Args:
-      xes_file (dataframe): event log's path
-      pn_file: petri net's path
-      ini_place: initial place in the petri net
-      fin_place: final place in the petri net
-      date_n_col (str): events dates column's name in log
-      id_col (str): patients identifiers column's name in log
-      output_csv (str): created csv's path
-  '''
-    net, initial_marking, final_marking = pm4py.read_pnml(pn_file)
-    initial_marking = Marking()
-    initial_marking[list(net.places)[[str(p) for p in net.places].index(
-        ini_place)]] = 1
-    final_marking = Marking()
-    final_marking[list(net.places)[[str(p) for p in net.places].index(
-        fin_place)]] = 1
-        
-    event_log = pd.DataFrame(pm4py.read_xes(xes_file))
-    event_log = event_log[event_log['cycle']=='start'] 
-    baseline = datetime.strptime('2017-01-01', "%Y-%m-%d")
-    endline = datetime.strptime('2023-01-01', "%Y-%m-%d")
-    dd = [baseline + timedelta(days=x) for x in range((
-              endline-baseline).days + 1)]
-    dd_INI = dd[0]-timedelta(days=1)
-    dd_FIN = dd[-1]+timedelta(days=1)
-    event_log['time:timestamp'] = event_log['time:timestamp'].dt.tz_localize(None)
-    event_log[date_n_col] = event_log[date_n_col].dt.tz_localize(None)
-    event_log[date_n_col] = event_log[date_n_col].apply(
-        lambda x: dd.index(x))
-    event_log[date_n_col] = event_log.groupby(id_col)[date_n_col].apply(
-        lambda x: x-x.min())
-    
-    period2fitness = pd.DataFrame()
-    id_list_df = []
-    p_start = []
-    p_end = []
-    fitness = []
-    date_0 = []
-    status = []
-    id_list = list(set(event_log[id_col]))
-    for id in tqdm(id_list):
-        event_log_id = event_log[event_log[id_col]==id]
-        date_max = max(event_log_id[date_n_col])
-        date_min = min(event_log_id['time:timestamp'])
-        n_periods = date_max//fixed_period_time
-        if date_max<=fixed_period_time:
-            continue
-        for n in range(1,n_periods+2):
-            event_log_id_n = event_log_id[
-                event_log_id[date_n_col]<n*fixed_period_time]
-            
-            new = event_log_id.copy().iloc[[0, -1]]
-            actins = list(new['actins'])
-            index = list(new['@@index'])
-            new['time:timestamp'] = [dd_INI,dd_FIN]
-            new['concept:name'] = ['INI','FIN']
-            new['@@index'] = [index[0]-1,index[1]+1]
-            new['actins'] = [actins[0]-1,actins[1]+1]
-            event_log_id_n = pd.concat([event_log_id_n,new])
-            aligned_fitness = pm4py.conformance_diagnostics_alignments(
-                             event_log_id_n, net, 
-                             initial_marking, final_marking)[0]['fitness']
-            id_list_df.append(id)
-            p_start.append((n-1)*fixed_period_time)
-            p_end_value = n*fixed_period_time
-            if n==n_periods+1:
-                p_end_value = date_max
-            p_end.append(p_end_value)
-            fitness.append(aligned_fitness)
-            date_0.append(date_min)
-            if n!=n_periods+1:
-                status.append(0)
-            else:
-                status.append(1)
-    
-    period2fitness[id_col] = id_list_df
-    period2fitness['t_0'] = p_start
-    period2fitness['t_1'] = p_end
-    period2fitness['fitness'] = fitness
-    period2fitness['ini_date'] = date_0
-    period2fitness['status'] = status
-    period2fitness.to_csv(output_csv,index=False)
-
-```
+The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. Joint models are used to analyse simultaneously two related phenomena, the evolution of a variable and the occurence of an event. Joint latent class models (JLCM) consist of a linear mixed model and a proportional hazard model linked by the latent classes. The population is split in several groups, the latent classes, and each class is caracterized by a specific evolution of the dependent variable and an associated risk of event. Using fitness as time dependent treatment adherence measure we can made a joint latent class model.  
 
 ## Results
 
@@ -2021,9 +2026,9 @@ Variables relevance in the previous decision tree is indicated in @fig-features_
 
 ![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_else.png){#fig-features_relevance_else fig-align="center" width="80%"}
 
-#### Time dependent Cox model
+#### Joint Latent Class Model
 
-Using fitness as treatment adherence measuring and some static characteristics we made a time dependent Cox model to predict some interesting outcome. In the next example, for simplicity, we choose fiteness, age, sex and copayment to try to predict mortality or any predominant clinical condition change, and the summary of it is:
+In the next example, for simplicity, we choose fitness, age, sex and copayment to try to predict any predominant clinical condition change, and the summary of it is:
 
 ```{python}
 #| label: create fitness by period table (else)
@@ -2040,7 +2045,7 @@ id2fitness_by_interval(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
 ```
 
 ```{r}
-#| label: Cox model (else)
+#| label: JLCM model (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2048,57 +2053,69 @@ id2fitness_by_interval(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
 df_fitness <- read.csv(gsub("src/analysis-scripts/","",
                             here("outputs",sprintf("fitness_by_period_%s.csv",
                                                    cond))))
+#df_fitness <- read.csv("C:/Users/D463112/Desktop/pruebas/CONCEPT-DIABETES/outputs/fitness_by_period_else.csv")
+#df_patient <- read.csv("C:/Users/D463112/Desktop/pruebas/CONCEPT-DIABETES/outputs/dm_patients_df_else.csv")
 df_patient <- read.csv(gsub("src/analysis-scripts/","",
                             here("outputs",sprintf("dm_patients_df_%s.csv",
                                                    cond))))
-df <- merge(x=df_patient[c('patient_id','age','sex','copayment')],
+df <- merge(x=df_patient[c('patient_id','age','sex','copayment','fin_cause')],
             y=df_fitness[c('ID','t_0','t_1','fitness','status')],  
             by.x=c("patient_id"), 
             by.y=c("ID"),
             all.x=FALSE)
 df$sex <- as.factor(df$sex)
-model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness,
-               data=df)
-summary(model)
-```
-
-#### Joint Model
-
-```{r}
-#| eval: TRUE
-## Joint model lmmr
-### Una clase
-
-#datosHBA$edadcent <- datosHBA$Edaddebut-mean(datosstart$Edaddebut)
-library(lcmm)
 df$ID2 <- as.numeric(as.factor(df$patient_id))
-jointm1 <- Jointlcmm(fixed= fitness ~ t_0 ,random=~1, subject="ID2",
-                     survival = Surv(t_1,status)~ age, hazard="Weibull",
-                     hazardtype="PH",ng=1,data=df)
-summary(jointm1)
-
-##### 2 grupos latentes #####   
-
-## Lineal
-
-jointm2 <- Jointlcmm(fixed= fitness ~ t_0 ,random=~1,mixture=~t_0, subject="ID2",
-                     survival = Surv(t_1,status)~ age, hazard="Weibull",
-                     hazardtype="PH",ng=3,data=df,
-                     B=jointm1)
-summary(jointm2)
-postprob(jointm2)
-d1 <- data.frame(t_0=seq(1,1000,length.out=100))
-data.new <-data.frame(d1,age=0)
-jointm2.pred <- predictY(jointm2, data.new , var.time = "t_0")
+df$t_max <- ave(df$t_1, df$ID2, FUN = max)
+df$t_min <- ave(df$t_0, df$ID2, FUN = min)
+#model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness,
+#               data=df)
 
 
-plot(jointm2.pred, bty = "l", ylim = c(0, 1), legend.loc = FALSE,
+### 1 latent class
+df <- df %>% 
+  mutate(statusCR=case_when(fin_cause=="['death']" ~ 2,
+                                       fin_cause=="" ~ 0,
+                                       TRUE ~ 1)) %>% 
+  filter(statusCR!=2)
+
+
+mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
+                 survival = Surv(t_min,t_max,statusCR) ~ age+sex, hazard="Weibull",
+                     hazardtype="PH",ng=1,data=df, verbose=FALSE)
+### 3 latent class
+mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
+                  Jointlcmm(fixed= fitness ~ t_1 ,mixture =~ t_1,
+                            random=~t_1,subject="ID2",
+                            survival = Surv(t_min,t_max,statusCR)~ age+sex,
+                            hazard="Weibull",hazardtype="PH",
+                            ng=3,data=df, verbose=FALSE))
+
+
+model <- mj3
+summary(model)
+postprob(model)
+
+
+plot(model, which = "fit", var.time = "t_1", marg = F, break.times = 10, bty = "l", 
+     ylab = "fitness", xlab = "Time in days",shades=TRUE)
+
+par(mfrow=c(1,2))
+plot(model, which = "fit", var.time = "t_1", marg = F, break.times = 10, bty = "l", 
+     ylab = "fitness", xlab = "Time in days",subset = statusCR == 0,
+     main="no complication",shades=TRUE)
+plot(model, which = "fit", var.time = "t_1", marg = F, break.times = 10, bty = "l", 
+     ylab = "fitness", xlab = "Time in days",subset = statusCR == 1,
+     main="predominal condition change",shades=TRUE)
+d1 <- data.frame(t_1=seq(1,1000,length.out=100))
+data.new <-data.frame(d1,age=0,sex=0)
+model.pred <- predictY(model, data.new , var.time = "t_1")
+
+
+plot(model.pred, bty = "l", ylim = c(0, 1), legend.loc = FALSE,
      ylab = "fitness", xlab = "days", lwd = 2,col=c("red","navy","green"))
 
-plot(jointm2, which = "survival", lwd = 2, legend.loc = FALSE, bty = "l",
+plot(model, which = "survival", lwd = 2, legend.loc = FALSE, bty = "l",
      xlab = "days", ylab = "event-free probability",col=c("red","navy","green"))
-
-table(jointm2$pprob$class,jointm2$pprobY$class)
 
 
 ```
@@ -3568,11 +3585,14 @@ df <- bind_rows(df_else,df_ob,df_f,df_erc,df_ic,df_ecv)
 
 df$sex <- as.factor(df$sex)
 df$cluster <- as.factor(df$cluster)
+df$status <- ifelse(is.na(df$fin_cause) | df$fin_cause != "", 1, 0)
+df$fin_date [df$fin_date ==""] <- "2023-01-01"
 df <- df %>%
   mutate(n_days = as.Date(fin_date) - as.Date(dx_date))
+
 df$n_days <- as.numeric(df$n_days)
 
-df$status <- ifelse(is.na(df$fin_cause) | df$fin_cause == "", 0, 1)
+
 
 base_model <- coxph(Surv(n_days, status) ~ age + sex, data=df)
 me_model <- coxme(Surv(n_days, status) ~ age + sex + (1 | cluster), data=df)
