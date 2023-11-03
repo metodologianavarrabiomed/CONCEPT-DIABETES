@@ -1114,7 +1114,7 @@ Depending on the results of the clustering we may need to focus our analysis in 
 
 ```{python}
 #| label: small cluster filter
-def small_cluster_filter(log,min_traces=30,col_id='ID',col_clust='cluster'):
+def small_cluster_filter(log,min_traces=25,col_id='ID',col_clust='cluster'):
   '''Filter smallest clusters' traces.
     
     Args:
@@ -1154,6 +1154,8 @@ def clust(clust_n,dist_matrix,df_,id2trace,patients,id_col='ID',
       ev_col (str): events column's name in df_
       date_col (str): events dates column's name in df_
   '''
+  traces = list(id2trace[id] for id in sorted(id2trace.keys()))     
+
 
   model = AgglomerativeClustering(n_clusters=clust_n,
                                   metric = "precomputed",
@@ -3531,6 +3533,7 @@ df_ob <- merge(x=df_patient_ob[c('patient_id','age','sex','copayment',
                  by.x=c("patient_id"), 
                  by.y=c("ID"),
                  all.x=FALSE)
+df_ob$fin_cause <- ifelse(df_ob$fin_cause == "['bmi<30']", "", df_ob$fin_cause)
 df_ob$cluster <- paste(df_ob$cluster,"_ob",sep="")
 
 df_cluster_f <- read.csv(gsub("src/analysis-scripts/","",
@@ -3581,7 +3584,7 @@ df_ecv <- merge(x=df_patient_ecv[c('patient_id','age','sex','copayment',
                  all.x=FALSE)
 df_ecv$cluster <- paste(df_ecv$cluster,"_ecv",sep="")
 
-df <- bind_rows(df_else,df_ob,df_f,df_erc,df_ic,df_ecv)
+df <- bind_rows(df_else,df_ob,df_f,df_erc,df_ic,df_ecv) %>% filter(fin_cause!="['death']")
 
 df$sex <- as.factor(df$sex)
 df$cluster <- as.factor(df$cluster)
@@ -3597,15 +3600,30 @@ df$n_days <- as.numeric(df$n_days)
 base_model <- coxph(Surv(n_days, status) ~ age + sex, data=df)
 me_model <- coxme(Surv(n_days, status) ~ age + sex + (1 | cluster), data=df)
 summary(me_model)
+marginal.model <- coxph(Surv(n_days, status) ~ age + sex, data=df, cluster=cluster)
+summary(marginal.model)
+frailty.model  <- coxph(Surv(n_days, status) ~ age + sex + frailty(cluster), data=df)
+summary(frailty.model)
 ```
 
 ```{r}
 #| label: cluster survival model
-#| eval: TRUE
+#| eval: FALSE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
 # estimate baseline hazard using muhaz: ---- 
+# df with derived CHFs, hazards, and survival fns for the RE model: ---- 
+# first define functions for getting chf values at time t
+calc_chf <- function(index, hazard_colname, df = df_random_effect_haz){
+  df <- as.data.frame(df)
+  df2 <- df %>% dplyr::select(time, {{hazard_colname}}) %>% slice(1:index)
+  
+  times_vector <- df2[,1]
+  haz_vector <- df2[,2]
+  return(area_under_curve(times_vector, haz_vector))
+}
+
 muhaz_fit <- muhaz(df$n_days, 
                    df$status, 
                    n.est.grid = 1000, 
@@ -3622,51 +3640,46 @@ df_base_haz <-
 
 # df with group-specific hazards: ---- 
 # random effects act as multiples on the baseline hazard:
-df_random_effect_haz <- 
-  df_base_haz %>% 
-  mutate(hazard_center1 = hazard_base * exp(ranef(me_model)$cluster[1]),
-     hazard_center2 = hazard_base * exp(ranef(me_model)$cluster[2]),
-     hazard_center3 = hazard_base * exp(ranef(me_model)$cluster[3]),
-     hazard_center4 = hazard_base * exp(ranef(me_model)$cluster[4]))
+names_list <- as.list(names(me_model$frail$cluster))
 
-
-# df with derived CHFs, hazards, and survival fns for the RE model: ---- 
-# first define functions for getting chf values at time t
-calc_chf <- function(index, hazard_colname, df = df_random_effect_haz){
-  df <- as.data.frame(df)
-  df2 <- df %>% dplyr::select(time, {{hazard_colname}}) %>% slice(1:index)
-  
-  times_vector <- df2[,1]
-  haz_vector <- df2[,2]
-  return(area_under_curve(times_vector, haz_vector))
+for (i in c(1:length(names_list))) {
+  df_base_haz <- df_base_haz %>% 
+    mutate(!!paste("hazard_center",names_list[[i]],sep="_") 
+           := df_base_haz[['hazard_base']] * exp(ranef(me_model)$cluster[i]))
 }
-
+df_random_effect_haz <- df_base_haz
 df_survival <- 
   df_random_effect_haz  %>%  
-  mutate(cum_hazard_base = map_dbl(index, calc_chf, hazard_colname = "hazard_base"), 
-         cum_hazard_center1 = map_dbl(index, calc_chf, hazard_colname = "hazard_center1"), 
-         cum_hazard_center2 = map_dbl(index, calc_chf, hazard_colname = "hazard_center2"), 
-         cum_hazard_center3 = map_dbl(index, calc_chf, hazard_colname = "hazard_center3"), 
-         cum_hazard_center4 = map_dbl(index, calc_chf, hazard_colname = "hazard_center4"), 
-         
-         surv_base = exp(-cum_hazard_base), 
-         surv_center1 = exp(-cum_hazard_center1),
-         surv_center2 = exp(-cum_hazard_center2),
-         surv_center3 = exp(-cum_hazard_center3),
-         surv_center4 = exp(-cum_hazard_center4)
-  )
-  
+  mutate(cum_hazard_base = map_dbl(index, calc_chf,
+                                   hazard_colname = "hazard_base"))
+
+for (i in c(1:length(names_list))) {
+  df_survival <- df_survival %>%
+    mutate(!!paste("cum_hazard_center",names_list[[i]],sep="_")
+           := map_dbl(index, calc_chf, hazard_colname = paste("hazard_center",
+                                                              names_list[[i]],
+                                                              sep="_")))
+}
+df_survival <- 
+  df_survival  %>%  
+  mutate(surv_base = exp(-cum_hazard_base))
+
+for (i in c(1:length(names_list))) {
+  df_survival <- df_survival %>% 
+    mutate(!!names_list[[i]] := exp(-df_survival[[4+length(names_list)+i]]))
+}
+
 
 # plot the derived survival curves: ----
 df_survival %>% 
-  pivot_longer(cols = c(surv_base, surv_center1, surv_center2, surv_center3, surv_center4), 
+  pivot_longer(cols = c((5+2*length(names_list)):(5+3*length(names_list))), 
                names_to = "survival") %>% 
   ggplot(aes(x = time, 
              y = value, 
              group = survival, 
              col = survival)) +
   geom_point() + 
-  scale_x_continuous(limits = c(0, max(df_random_effect_haz$time))) + 
+  scale_x_continuous(limits = c(0, max(df_survival$time))) + 
   scale_y_continuous(limits = c(0, 1)) + 
   theme_minimal() 
 ```
