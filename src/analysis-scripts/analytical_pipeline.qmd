@@ -1739,7 +1739,9 @@ def decision_tree_pn_place(patients_df,
 ### Joint Latent Class Model
 
 The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. Joint models are used to analyse simultaneously two related phenomena, the evolution of a variable and the occurence of an event. Joint latent class models (JLCM) consist of a linear mixed model and a proportional hazard model linked by the latent classes. The population is split in several groups, the latent classes, and each class is caracterized by a specific evolution of the dependent variable and an associated risk of event. Using fitness as time dependent treatment adherence measure we can made a joint latent class model.  
+### Cox Regression Model with Mixed Effects
 
+The Cox proportional hazards regression model is frequently used for the analysis of survival data. The inclusion of random effects into a Cox proportional hazards model shares many similarities with methods for the analysis for multilevel data with continuous, binary or count outcomes. A conventional regression model (in this case the Cox proportional hazards model) is enhanced through the incorporation of random effect terms to account for within-cluster homogeneity in outcomes.
 ## Results
 
 ### Patients without predominant clinical condition
@@ -3598,20 +3600,78 @@ df$n_days <- as.numeric(df$n_days)
 
 
 base_model <- coxph(Surv(n_days, status) ~ age + sex, data=df)
+#summary(base_model)
 me_model <- coxme(Surv(n_days, status) ~ age + sex + (1 | cluster), data=df)
 summary(me_model)
-marginal.model <- coxph(Surv(n_days, status) ~ age + sex, data=df, cluster=cluster)
-summary(marginal.model)
-frailty.model  <- coxph(Surv(n_days, status) ~ age + sex + frailty(cluster), data=df)
-summary(frailty.model)
+#marginal.model <- coxph(Surv(n_days, status) ~ age + sex, data=df, cluster=cluster)
+#summary(marginal.model)
+#frailty.model  <- coxph(Surv(n_days, status) ~ age + sex + frailty(cluster), data=df)
+#summary(frailty.model)
+predicted <- predict(me_model, type = "risk")
+
+# Compute the c-index
+library(glmnet)
+c_index <- Cindex(predicted, y = me_model$y)
 ```
+
+
 
 ```{r}
 #| label: cluster survival model
-#| eval: FALSE
+#| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
+#https://cran.r-project.org/web/packages/coxme/vignettes/coxme.pdf
+nchange <- with(df, tapply(status,cluster,sum,na.rm=T))
+pyears <- with(df, tapply(n_days, cluster, sum, na.rm=T))/365.25
+count <- with(df, tapply(status, cluster,function(x) sum(!is.na(x))))
+indx <- match(names(ranef(me_model)[[1]]), names(nchange)) 
+ 
+plot(nchange[indx], exp(ranef(me_model)[[1]]), log='y',
+ xlab="Number of changes per cluster",
+ ylab="Estimated cluster risk")
+abline(h=1, lty=2)
+dev.off()
+
+indx <- match(c(72,165), names(nchange))
+temp <- cbind(nchange, count, pyears, 100*nchange/pyears)[indx,]
+ dimnames(temp) <- list(indx,
+ c("Changes", "N", "Years of FU", "Rate"))
+print(round(temp,2))
+ 
+
+estvar <- seq(.2, .6, length=15)^2 #range of std values
+loglik <- double(15)
+for (i in 1:15) {
+ tfit <- coxme(Surv(n_days, status) ~ age + sex + (1 | cluster),
+               data=df,vfixed=estvar[i])
+ loglik[i] <- 2*diff(tfit$loglik)[1]
+ }
+plot(sqrt(estvar), loglik,
+ xlab="Std of the random effect", ylab="2 * loglik")
+abline(h=2*diff(me_model$loglik)[1] - qchisq(.95, 1), lty=2)
+dev.off()
+                
+temp <- 2*diff(me_model$loglik)[1] - loglik
+approx(temp[1:8], sqrt(estvar[1:8]), 3.84)$y
+
+## Get profile likelihood for variance values to examine, based on
+## observed .486
+s <- seq(0.01, 0.4, length.out = 200)^2
+res <- sapply(s, function(i) {
+    mod <- coxme(Surv(n_days, status) ~ age + sex + 
+        (1 | cluster), data = df, vfixed = i)
+    2 * diff(mod$loglik)[1]
+})
+
+## profile likelihood, horizontal line is 95% CI obviously lower bound
+## includes 0, upper bound looks a little under .8
+
+plot(sqrt(s), res, type = "l", xlab = expression(SD[i]), ylab = "2 * LL")
+abline(h = 2 * diff(me_model$loglik)[1] - qchisq(0.95, 1), lty = 2)
+
+
 # estimate baseline hazard using muhaz: ---- 
 # df with derived CHFs, hazards, and survival fns for the RE model: ---- 
 # first define functions for getting chf values at time t
