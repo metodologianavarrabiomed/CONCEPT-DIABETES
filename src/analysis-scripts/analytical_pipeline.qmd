@@ -95,6 +95,7 @@ from datetime import  datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import duckdb
 import re
+import logging
 ```
 
 ```{python}
@@ -126,7 +127,7 @@ from datetime import  datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import duckdb
 import re
-
+import logging
 ```
 
 The R libraries used are:
@@ -148,27 +149,29 @@ library(rsvg)
 library(here)
 library(survival)
 library(lcmm)
-
 library(coxme)
 library(muhaz)
 library(ggfortify)
 library(bayestestR)
 library(purrr)
+library(duckdb)
+library(logger)
 ```
 
 ### Data preprocessing and event log creation
 
 For using process mining an event log is needed. The sort of functions below take data model's treatment and parameter tables to create an event log of glycated hemoglobin measures and treatment of patients. Glycated hemoglobin measurement events are divided into two different states, those that have a value inferior that 7.5 and the others. Therefore, these events do not have any duration. In the case of treatments on the other hand a duration period exists. For treatments events definition it is based on drugs dispensing and a fixed time period after the dispensing date of the last dispensing date of the same drug if the dispensing is regularly produced . Functions below make an event log taking some assumptions. However the analysis of this document is thought to do by the predominant clinical condition of patients according to DM2 treatment algorithm. In other words, patients are grouped by their predominant clinical condition and the analysis is realized independently to each group.
 
+
 ```{python, warning: FALSE}
 #| label: Preprocessing functions
 #| warning: FALSE
-
-def select_by_condition(cond):
+logging.basicConfig(level=logging.INFO)
+def select_by_condition(con):
     '''
     Filtering data by predominant clinical condition according to redGDPS
     Args:
-        cond (str): condition wanted to analyze
+        con : db connector variable
     Return:
         presc_data_p (float): percentage of not null data in prescription dates
         
@@ -180,94 +183,147 @@ def select_by_condition(cond):
      or peripheral arterial disease), CKD (defined as eGFR < 60 ml/min/
      1.73 m2 and/or UACR ≥ 30 mg/g) and HF. 
     '''
-    cmbd_df_path = '../../outputs/dm_cmbd_df_%s.csv' % cond
-    comorb_df_path = '../../outputs/dm_comorb_df_%s.csv' % cond
-    param_df_path = '../../outputs/dm_param_df_%s.csv' % cond
-    patients_df_path = '../../outputs/dm_patients_df_%s.csv' % cond
-    treat_df_path = '../../outputs/dm_treat_df_%s.csv' % cond
-    
-    con = duckdb.connect('C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb')
-    cmbd_df = con.sql("SELECT * FROM main.cmbd WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
-    comorb_df = con.sql("SELECT * FROM main.comorb WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
-    param_df = con.sql("SELECT * FROM main.param WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
-    patients_df = con.sql("SELECT * FROM main.patient WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()
-    treat_df = con.sql("SELECT * FROM main.treat WHERE patient_id IN (SELECT patient_id FROM main.patient WHERE dx_date >='2017-01-01')").df()    
-    con.close()
     ecv_code_list = ['K76','K75','K76','K91','K92']
     ic = 'K77'
     erc = 'U99.01'
-    ob = 'T82'
-    cie9_df = pd.read_csv('./CIE9.csv')
-    cie10_df = pd.read_csv('./CIE10.csv')
-    cie9 = dict(zip(cie9_df.CIE9,cie9_df.BDCAP))
-    cie10 = dict(zip(cie10_df.CIE10,cie10_df.BDCAP))
-    comorb_df = comorb_df[comorb_df['comorb_date_end'].isna()]
-    comorb_df['ciap2'] = comorb_df['comorb_code']
-    comorb_df.index = range(len(comorb_df))
-    for n in range(len(comorb_df)):
-        if comorb_df['comorb_codif'][n]=='ICD9':
-            comorb_df['ciap2'][n] = cie9.get(comorb_df['comorb_code'][n],None)
-        elif comorb_df['comorb_codif'][n]=='ICD10':
-            comorb_df['ciap2'][n] = cie10.get(comorb_df['comorb_code'][n],None)
-        
-    # Which is the predominal clinical condition at baseline?         
-    baseline = datetime.strptime('2017-01-01', "%Y-%m-%d")
-    patients_df['age'] = [(baseline-
-                             patients_df['month_nac'][n]).days//365  
-                             for n in  range(len(patients_df))]
-    ob_list = set(comorb_df['patient_id'][comorb_df['ciap2']==ob])
-    f_list = set(patients_df['patient_id'][patients_df['age']>75])
-    erc_list = set(comorb_df['patient_id'][comorb_df['ciap2']==erc])
-    ic_list =  set(comorb_df['patient_id'][comorb_df['ciap2']==ic])    
-    ecv_list = set(comorb_df['patient_id'][n] for n in range(len(comorb_df))
-                        if comorb_df['ciap2'][n] in ecv_code_list)
-    
-    # Which is the predominal clinical condition at dx_date?
-    dx_date = dict(zip(patients_df.patient_id,patients_df.dx_date))
-    cmbd_long = pd.concat(
-        [cmbd_df[['patient_id','admission_date','diagnosis1_code']
-                 ].rename(columns = {'diagnosis1_code':'code'}),
-        cmbd_df[['patient_id','admission_date','diagnosis2_code']
-                 ].rename(columns = {'diagnosis2_code':'code'}).dropna(),
-        cmbd_df[['patient_id','admission_date','diagnosis3_code']
-                 ].rename(columns = {'diagnosis3_code':'code'}).dropna()])
-    cmbd_long['code'] = cmbd_long['code'].apply(
-        lambda x: str(x).replace('E66.3','sobrepeso').split('.')[0])
+    ob = "T82"
 
-    to_ecv_change_list = ['I2%i' %i for i in range(6)]+[
-                             'I6%i' %i for i in range(10)]+[
-                                'I7%i' %i for i in [0,3,4]]
+    to_list = lambda l: "('"+"','".join(l)+"')"     
+    con.sql("DROP VIEW IF EXISTS cmbd_incidents_view;")
+    con.sql("DROP VIEW IF EXISTS comorb_incidents_view;")    
+    con.sql("DROP VIEW IF EXISTS ss_use_incidents_view;")
+    con.sql("DROP VIEW IF EXISTS param_incidents_view_;")
+    con.sql("DROP VIEW IF EXISTS param_incidents_view;")
+    con.sql("DROP VIEW IF EXISTS patient_incidents_view;")
+    con.sql("DROP VIEW IF EXISTS treat_incidents_view;")   
+    con.sql("DROP VIEW IF EXISTS comorb_incidents_ciap_view;")    
+    con.sql("DROP VIEW IF EXISTS comorb_incidents_active_view;")    
+    con.sql("DROP VIEW IF EXISTS param_incidents_predx_view;")
+    con.sql("DROP VIEW IF EXISTS param_incidents_predx_last_view;")
+    con.sql("DROP VIEW IF EXISTS cmbd_incidents_long_view;")
+    con.sql("DROP VIEW IF EXISTS ob_events;")
+    con.sql("DROP VIEW IF EXISTS cmbd_incidents_long_view_dx")
+    con.sql("DROP TABLE IF EXISTS patient_condition;")
+
+    con.sql("CREATE VIEW cmbd_incidents_view AS SELECT * FROM main.cmbd \
+            WHERE patient_id IN (SELECT patient_id FROM main.patient \
+                                 WHERE dx_date >='2017-01-01')")
+    con.sql("CREATE VIEW ss_use_incidents_view AS SELECT * FROM main.ss_use \
+            WHERE patient_id IN (SELECT patient_id FROM main.patient \
+                                 WHERE dx_date >='2017-01-01')")
+    con.sql("CREATE VIEW comorb_incidents_view AS SELECT * FROM main.comorb \
+            WHERE patient_id IN (SELECT patient_id FROM main.patient \
+                                 WHERE dx_date >='2017-01-01')")
+    con.sql("CREATE VIEW param_incidents_view_ AS SELECT DISTINCT * FROM main.param \
+            WHERE patient_id IN (SELECT patient_id FROM main.patient \
+                                 WHERE dx_date >='2017-01-01') \
+                AND (param_value!=0 OR param_name!='bmi')")
+    con.sql("CREATE VIEW param_incidents_view AS \
+            SELECT patient_id,param_name,MAX(param_value) AS param_value,param_date\
+        FROM param_incidents_view_ GROUP BY patient_id,param_name,param_date")
+    con.sql("CREATE VIEW patient_incidents_view AS SELECT *,\
+            FLOOR(DATEDIFF('day',month_nac,DATE '2017-01-01') / 365.25) \
+                AS 'age', \
+            FLOOR(DATEDIFF('day',month_nac,DATE '2017-01-01') / 365.25) \
+                AS 'age_dx', \
+            DATE_ADD(month_nac, INTERVAL 75 YEAR) AS 'turn_to_75' \
+                FROM main.patient WHERE patient_id IN (SELECT patient_id \
+                        FROM main.patient WHERE dx_date >='2017-01-01')")
+    con.sql("CREATE VIEW treat_incidents_view AS SELECT * FROM main.treat \
+            WHERE patient_id IN (SELECT patient_id FROM main.patient \
+                                 WHERE dx_date >='2017-01-01')")
+
+    presc_data_p = con.sql(f" SELECT (COUNT(prescription_date_ini)) / COUNT(*) \
+                           AS p FROM treat_incidents_view").fetchall()[0][0]
+    cie9_df = pd.read_csv('./CIE9.csv').rename(columns={'CIE9':'CIE',
+                                                        'BDCAP':'CIAP'})
+    cie9_df['comorb_codif'] = 'ICD9'
+    cie10_df = pd.read_csv('./CIE10.csv').rename(columns={'CIE10':'CIE',
+                                                          'BDCAP':'CIAP'})
+    cie10_df['comorb_codif'] = 'ICD10'
+    cie2ciap = pd.concat([cie9_df[['comorb_codif','CIE','CIAP']],
+                          cie10_df[['comorb_codif','CIE','CIAP']]])
+    con.sql("CREATE VIEW comorb_incidents_ciap_view AS \
+            SELECT * FROM comorb_incidents_view \
+                LEFT JOIN cie2ciap \
+                    ON comorb_incidents_view.comorb_codif = cie2ciap.comorb_codif \
+                        AND comorb_incidents_view.comorb_code = cie2ciap.CIAP")
+    con.sql("CREATE VIEW comorb_incidents_active_view AS SELECT *, \
+            CASE WHEN comorb_codif = 'CIAP2' THEN comorb_code ELSE CIAP END AS CIAP2 \
+                FROM comorb_incidents_ciap_view WHERE comorb_date_end IS NULL;")
+
+    # Which is the predominal clinical condition at baseline?
+    f_list = set()
+    ob_list = set(con.sql(f"SELECT DISTINCT patient_id \
+                          FROM comorb_incidents_active_view WHERE CIAP2 = '{ob}'"
+                          ).df()['patient_id'])        
+    erc_list = set(con.sql(f"SELECT DISTINCT patient_id \
+                           FROM comorb_incidents_active_view WHERE CIAP2 = '{erc}'"
+                           ).df()['patient_id'])        
+    ic_list = set(con.sql(f"SELECT DISTINCT patient_id \
+                          FROM comorb_incidents_active_view WHERE CIAP2 = '{ic}'"
+                          ).df()['patient_id'])        
+    ecv_list = set(con.sql(f"SELECT DISTINCT patient_id \
+                           FROM comorb_incidents_active_view \
+                               WHERE CIAP2 IN {to_list(ecv_code_list)}"
+                               ).df()['patient_id'])        
+
+    # Which is the predominal clinical condition at dx_date?
     # ENFERMEDADES ISQUÉMICAS CARDIACAS (I20-I25)
     # ENFERMEDADES CEREBROVASCULARES (I60-I69)
     # ATEROESCLEROSIS (ENFERMEDADES VASCULARES PERIFÉRICAS) (I70)
     # OTRAS ENFERMEDADES VASCULARES PERIFÉRICAS (I73)
     # EMBOLIA Y TROMBOSIS ARTERIAL (ENFERMEDADES VASCULARES PERIFÉRICAS) (I74)
-    to_ic_change_list = ['I50','I13']
+    to_ecv_change_prelist = ['I2%i' %i for i in range(6)]+[
+                             'I6%i' %i for i in [1,3,4,5,6,7,8,9]]+[
+                                'I7%i' %i for i in [0,3,4]]
+    to_ecv_change_list = []
+    for code in to_ecv_change_prelist:
+     for c in cie10_df['CIE']:
+      if code in c and c not in ['I51.4','I60','I62','I67.1','I68.2','I67.5']:
+                to_ecv_change_list.append(c)
     # INSUFICIENCIA CARDÍACA (I50)
     # ENFERMEDAD CARDÍACA Y RENAL CRÓNICA HIPERTENSIVA (I13)
-    to_erc_change_list = ['N18','I12','filtglom']
+    to_ic_change_list = ['I09.81', 'I11.0', 'I13.0', 'I13.2', 'I50', 'I50.0',
+                         'I50.1', 'I50.9']
     # ENFERMEDAD RENAL CRÓNICA (N18)
     # ENFERMEDAD RENAL CRÓNICA HIPERTENSIVA (I12)
-    to_f_change_list = []
-    to_ob_change_list = ['E66']
+    to_erc_change_list = ['N18','N18.1','N18.2','N18.3','N18.30','N18.31',
+                          'N18.32','N18.4','N18.5','N18.6','N18.9','I12',
+                          'I12.0','I12.9','filtglom']
+    to_f_change_list = ['f_date']
+    to_ob_change_list = ['bmi>=30','E66.01','E66.09','E66.1','E66.2',
+                         'E66.8','E66.9']
     # SOBREPESO Y OBESIDAD (E66)
-    to_else_change_list = []
+    from_ecv_change_list = ['death']
+    from_ic_change_list = from_ecv_change_list+to_ecv_change_list
+    from_erc_change_list = from_ic_change_list+to_ic_change_list
+    from_f_change_list = from_erc_change_list+to_erc_change_list
+    from_ob_change_list = from_f_change_list+to_f_change_list+['bmi<30']
+    from_else_change_list = from_ob_change_list[:-1]+to_ob_change_list
+    
+    relevance_order = pd.DataFrame()
+    relevance_order['code'] = from_ob_change_list+to_ob_change_list+['end']
+    relevance_order['order'] = range(len(relevance_order))
+
+    
+    
+    con.sql("CREATE VIEW param_incidents_predx_view AS SELECT * FROM (\
+            SELECT * FROM (SELECT patient_id, param_name, param_value, param_date \
+                            FROM param_incidents_view) sub \
+                WHERE param_date <= (SELECT dx_date FROM patient_incidents_view \
+                    WHERE patient_incidents_view.patient_id = sub.patient_id));")
+    con.sql("CREATE VIEW param_incidents_predx_last_view AS \
+            SELECT patient_id, param_name, param_date, param_value \
+                FROM (SELECT patient_id, param_name, param_date, param_value,\
+                      ROW_NUMBER() OVER(PARTITION BY patient_id, param_name \
+                                        ORDER BY param_date DESC) AS rn \
+                          FROM param_incidents_predx_view) t WHERE rn = 1;")    
     # https://ukkidney.org/health-professionals/information-resources/uk-eckd-guide/ckd-stages
-    # Include obesity and kcd detection by parameters values
-    cmbd_bmi = param_df[param_df['param_name']=='bmi']
-    cmbd_bmi['param_value'] = cmbd_bmi['param_value'].apply( 
-        lambda x: 'bmi>30' if x>30 else 'bmi<30')
-    cmbd_bmi['dx_date'] = cmbd_bmi['patient_id'].apply(
-        lambda x: dx_date[x]).to_list()
-    dx_previous_bmi = (cmbd_bmi[cmbd_bmi['param_date'] <= cmbd_bmi['dx_date']]
-                       ).groupby('patient_id')['param_date'].max().to_dict() 
-    cmbd_bmi = cmbd_bmi[['patient_id','param_date','param_value']
-                             ].rename(columns={
-                                   'param_value':'code',
-                                   'param_date':'admission_date'})                                 
-    param_filt = param_df[(param_df['param_name']=='filtglom') & 
-                          (param_df['param_value']>60)
-                          ].sort_values(['patient_id','param_date'])
+    # Include obesity and kcd detection by parameters values                             
+    param_filt = con.sql("SELECT * FROM param_incidents_view \
+                         WHERE param_name = 'filtglom' AND param_value<60;"
+                         ).df().sort_values(['patient_id','param_date'])
     param_filt['time_diff'] = param_filt.groupby(
         'patient_id')['param_date'].diff()
     cmbd_filt = param_filt[param_filt['time_diff'] < pd.Timedelta(days=90)
@@ -276,191 +332,125 @@ def select_by_condition(cond):
                                ].rename(columns={
                                    'param_name':'code',
                                    'param_date':'admission_date'})
+    con.sql("CREATE VIEW cmbd_incidents_long_view AS SELECT *,\
+            COALESCE(t.order, 404) AS relevance FROM\
+            (SELECT patient_id, admission_date, diagnosis1_code AS code \
+                FROM cmbd_incidents_view WHERE diagnosis1_code IS NOT NULL \
+            UNION ALL SELECT patient_id, admission_date, diagnosis2_code AS code \
+                FROM cmbd_incidents_view WHERE diagnosis2_code IS NOT NULL \
+            UNION ALL SELECT patient_id, admission_date, diagnosis3_code AS code \
+                FROM cmbd_incidents_view WHERE diagnosis3_code IS NOT NULL \
+            UNION ALL SELECT patient_id, admission_date, code FROM cmbd_filt \
+            UNION ALL SELECT patient_id, turn_to_75 AS admission_date, 'f_date' \
+                AS code FROM patient_incidents_view WHERE turn_to_75<'2023-01-01'\
+            UNION ALL SELECT patient_id, death_date AS admission_date, 'death' \
+                AS code FROM patient_incidents_view WHERE death_date IS NOT NULL\
+            UNION ALL SELECT patient_id, DATE '2023-01-01' AS admission_date, 'end' \
+                AS code FROM patient_incidents_view\
+            UNION ALL SELECT patient_id,param_date AS admission_date, \
+        CASE WHEN param_value < 30 THEN 'bmi<30' ELSE 'bmi>=30' END AS code \
+            FROM param_incidents_predx_last_view WHERE param_name = 'bmi' \
+            UNION ALL SELECT patient_id, param_date AS admission_date, \
+        CASE WHEN param_value < 30 THEN 'bmi<30' ELSE 'bmi>=30' END AS code \
+            FROM param_incidents_view sub WHERE param_name = 'bmi' \
+                AND  param_date > (SELECT dx_date FROM patient_incidents_view \
+                                   WHERE patient_incidents_view.patient_id = sub.patient_id)) v \
+                LEFT JOIN relevance_order t ON v.code=t.code;")
     
-    cmbd_long = pd.concat([cmbd_long,cmbd_filt,cmbd_bmi])
-    cmbd_long.index = range(len(cmbd_long))    
-    cmbd_long['dx_date'] = cmbd_long['patient_id'].apply(
-        lambda x: dx_date[x]).to_list()
-    ob_list.update( 
-        set(cmbd_long.query(
-        "code in @to_ob_change_list & admission_date<dx_date")['patient_id']))
-    ob_list.update(
-        set([cmbd_long['patient_id'][n] for n in range(len(cmbd_long)) if
-             cmbd_long['code'][n]=='bmi>30' and 
-             dx_previous_bmi.get(cmbd_long['patient_id'][n],
-                                 '')==cmbd_long['admission_date'][n]]))    
-    erc_list.update( 
-        set(cmbd_long.query(
-        "code in @to_erc_change_list & admission_date<dx_date")['patient_id']))
-    ic_list.update( 
-        set(cmbd_long.query(
-        "code in @to_ic_change_list & admission_date<dx_date")['patient_id']))
-    ecv_list.update( 
-        set(cmbd_long.query(
-        "code in @to_ecv_change_list & admission_date<dx_date")['patient_id']))
-
+    f_list.update(set(con.sql("SELECT DISTINCT patient_id \
+                              FROM patient_incidents_view WHERE turn_to_75<=dx_date"
+                              ).df()['patient_id']))
+    con.sql(f"CREATE VIEW ob_events AS SELECT * \
+            FROM cmbd_incidents_long_view sub \
+                WHERE code IN {to_list(to_ob_change_list)} \
+                    AND admission_date <= (SELECT dx_date \
+                    FROM patient_incidents_view \
+                        WHERE patient_incidents_view.patient_id = sub.patient_id);"
+                            )
+    ob_list.update(set(con.sql("SELECT DISTINCT patient_id \
+                           FROM ob_events").df()['patient_id']))
+        
+    ob_list = ob_list - set(con.sql(f"SELECT DISTINCT patient_id \
+                           FROM cmbd_incidents_long_view sub \
+                               WHERE code='bmi<30' \
+                                   AND admission_date <= (SELECT dx_date \
+                        FROM patient_incidents_view \
+                            WHERE patient_incidents_view.patient_id = sub.patient_id) \
+                                   AND admission_date > (SELECT MAX(admission_date)\
+                        FROM ob_events \
+                            WHERE ob_events.patient_id  = sub.patient_id);"
+                                   ).df()['patient_id'])
+    erc_list.update(set(con.sql(f"SELECT DISTINCT patient_id \
+                           FROM cmbd_incidents_long_view sub \
+                               WHERE code IN {to_list(to_erc_change_list)} \
+                                   AND admission_date <= (SELECT dx_date \
+                        FROM patient_incidents_view \
+                            WHERE patient_incidents_view.patient_id = sub.patient_id);"
+                            ).df()['patient_id']))        
+    ic_list.update(set(con.sql(f"SELECT DISTINCT patient_id \
+                           FROM cmbd_incidents_long_view sub \
+                               WHERE code IN {to_list(to_ic_change_list)} \
+                                   AND admission_date <= (SELECT dx_date \
+                        FROM patient_incidents_view \
+                            WHERE patient_incidents_view.patient_id = sub.patient_id);"
+                            ).df()['patient_id']))        
+    ecv_list.update(set(con.sql(f"SELECT DISTINCT patient_id \
+                           FROM cmbd_incidents_long_view sub \
+                               WHERE code IN {to_list(to_ecv_change_list)} \
+                                   AND admission_date <= (SELECT dx_date \
+                        FROM patient_incidents_view \
+                            WHERE patient_incidents_view.patient_id = sub.patient_id);"
+                            ).df()['patient_id']))        
+      
     
     ecv_list = list(ecv_list)
     ic_list = list(ic_list.difference(ecv_list))
     erc_list = list(erc_list.difference(ecv_list+ic_list))
     f_list = list(f_list.difference(ecv_list+ic_list+erc_list))
     ob_list = list(ob_list.difference(ecv_list+ic_list+erc_list+f_list))
-    else_list = list(set(patients_df['patient_id']
+    else_list = list(set(con.sql("SELECT DISTINCT patient_id \
+                                 FROM patient_incidents_view"
+                                 ).df()['patient_id']
                          ).difference(ecv_list+ic_list+erc_list+f_list+ob_list))
                
-    list_cond = eval('%s_list' % cond)                  
-    patients_df = patients_df[patients_df['patient_id'].isin(list_cond)]
-    patients_df.index = range(len(patients_df))
-    param_df = param_df[param_df['patient_id'].isin(list_cond)]
-    treat_df = treat_df[treat_df['patient_id'].isin(list_cond)]
-    comorb_df = comorb_df[comorb_df['patient_id'].isin(list_cond)]
-    comorb_df.index = range(len(comorb_df))
-    cmbd_df = cmbd_df[cmbd_df['patient_id'].isin(list_cond)]
-    cmbd_df.index = range(len(cmbd_df))    
-    
     # When is a change on predominant clinical condition made?   
-    from_ecv_change_list = []
-    from_ic_change_list = to_ecv_change_list
-    from_erc_change_list = from_ic_change_list+to_ic_change_list
-    from_f_change_list = from_erc_change_list+to_erc_change_list
-    from_ob_change_list = from_f_change_list+['bmi<30']
-    from_else_change_list = from_ob_change_list+to_ob_change_list
-    
-    fin_date = dict()
-    fin_cause = dict()
-    death_date = dict(zip(patients_df.patient_id,patients_df.death_date))
-    for id in list_cond:
-        cmbd_id = cmbd_long[cmbd_long['patient_id']==id]
-        
-        try:
-            date = min(cmbd_id.query(
-                'code in @from_%s_change_list & admission_date>=dx_date' % cond
-                )['admission_date'])
-            cause = list(cmbd_id[cmbd_id['admission_date']==date]['code'])
-            if str(death_date[id])!='NaT':
-                if death_date[id]<=date:
-                    date = death_date[id]
-                    cause = ['death']
-            if cond in ['ob','else']:
-                turn_75_date = list(patients_df['month_nac'][
-                    patients_df['patient_id']==id])[0]+relativedelta(years=75)
-                if turn_75_date<date:
-                    date = turn_75_date
-                    cause = ['turn_75']
-            fin_date[id] = date
-            fin_cause[id] = str(cause)
-            treat_df.drop(treat_df[((treat_df['dispensing_date']>date) | (
-                treat_df['dispensing_date']<dx_date[id])) & (
-                treat_df['patient_id']==id)].index, inplace=True)
-            param_df.drop(param_df[((param_df['param_date']>date) | (
-                param_df['param_date']<dx_date[id])) & (
-                param_df['patient_id']==id)].index, inplace=True)
-            
-        except:
-            if str(death_date[id])!='NaT':
-                fin_date[id] = death_date[id]
-                fin_cause[id] = str(['death'])
-            treat_df.drop(treat_df[(treat_df['dispensing_date']<dx_date[id]) & (
-                treat_df['patient_id']==id)].index, inplace=True)
-            param_df.drop(param_df[(param_df['param_date']<dx_date[id]) & (
-                param_df['patient_id']==id)].index, inplace=True)
+    con.sql(f"CREATE VIEW cmbd_incidents_long_view_dx AS SELECT * \
+            FROM cmbd_incidents_long_view sub \
+                WHERE admission_date > (SELECT dx_date \
+                    FROM patient_incidents_view \
+                        WHERE patient_incidents_view.patient_id = sub.patient_id);")
 
-    patients_df['fin_date'] = patients_df['patient_id'].apply(
-            lambda x: fin_date.get(x,None)).to_list()
-    patients_df['fin_cause'] = patients_df['patient_id'].apply(
-            lambda x: fin_cause.get(x,None)).to_list()
-    treat_df.index = range(len(treat_df))
-    param_df.index = range(len(param_df))
-    
-    patients_df.to_csv(patients_df_path,index=False)
-    param_df.to_csv(param_df_path,index=False)
-    treat_df.to_csv(treat_df_path,index=False)
-    comorb_df.to_csv(comorb_df_path,index=False)
-    cmbd_df.to_csv(cmbd_df_path,index=False)
-    
-    presc_data_p = treat_df['prescription_date_ini'].notna().sum()/len(treat_df)
+    query_function =  lambda cond: "(WITH rankedevents_*** AS (\
+        SELECT patient_id,code,admission_date,ROW_NUMBER() \
+          OVER(PARTITION BY patient_id ORDER BY admission_date,relevance) AS event_rank \
+              FROM cmbd_incidents_long_view_dx WHERE  patient_id IN {to_list(***_list)} \
+                  AND code IN {to_list(from_***_change_list)} ) \
+            SELECT patient_id, '***' AS type,code, admission_date AS date \
+                FROM rankedevents_*** WHERE  event_rank=1 AND date<'2023-01-01') \
+                                    UNION ALL (WITH rankedevents__*** AS (\
+        SELECT patient_id,code,admission_date,ROW_NUMBER() \
+          OVER(PARTITION BY patient_id ORDER BY admission_date) AS event_rank \
+              FROM cmbd_incidents_long_view_dx WHERE  patient_id IN {to_list(***_list)} \
+                  AND code IN {to_list(['end']+from_***_change_list)} ) \
+            SELECT patient_id, '***' AS type,code, admission_date AS date \
+                FROM rankedevents__*** WHERE  event_rank=1 AND code='end')\
+                ".replace('***',cond)
+     
+    con.sql(eval('f"CREATE TABLE patient_condition AS {}"'.format(' UNION ALL '.join(
+        [query_function(cond) for cond in ['ecv','ic','erc','f','ob','else']]))))    
     return presc_data_p
-  
-def change_matrix_values(matrix,list_rows,list_cols, new_value=0):
-    '''change selected rows' and columns' matrix`s values
-    Args:
-      matrix (array): matrix wanted to modify
-      list_rows (list): matrix's rows wanted to modify
-      list_cols (list): matrix's columns wanted to modify
-      new_value (int): new wanted value
-      
-    Output:
-      matrix (array): modified matrix
-    '''
-    pos = list(itertools.product(list_rows,list_cols))
-    for i,j in pos:
-        matrix[i,j] = new_value
-    return matrix
-
-def col2treat(matrix,rows,col):
-    '''translate treatments from a binary vector
-  
-    Args:
-      matrix (array): events calendary in binary information
-      rows (str): events list
-      col (int): column of matrix wanted to translate
-    
-    Output:
-      treatment (str):
-    '''
-    treatment = '+'.join(sorted([rows[ev
-                            ] for ev in range(len(rows)) 
-                                 if matrix[ev,col]!=0]))
-    if treatment!='':
-        return treatment
-    else:
-        return '_'
-    
-def nac2comprimidos(nac_path,code_set):
-    '''Creating dictionary of nac drugs container's number of tablets
-  
-    Args:
-      nac_path (str): nac table's path
-      code_set (set): nac code list
-      code2drug_path (str): drugs' and their codes' info's table's path
-    Outputs:
-        nac_dict (dic): nac codes as keys and their number of tablets as values
-    '''
-
-    nac = pd.read_csv(nac_path)
-    nac['Código Nacional'] = nac['Código Nacional'].astype(str)
-    nac_dict = {}
-
-    for n in range(len(nac)):
-        if nac['Código Nacional'][n] in code_set:
-            text = nac['Nombre del producto farmacéutico'][n].lower()
-            if re.search(r'\d+(?=\s*comprim)', text)!=None:
-                nac_dict[nac['Código Nacional'][n]
-                         ] = int(re.search(r'\d+(?=\s*comprim)', text).group())
-            elif re.search(r'\d+(?=\s*comprim)', 
-                           re.sub(r'\([^()]*\)', '', text))!=None:
-                nac_dict[nac['Código Nacional'][n]
-                         ] = int(re.search(r'\d+(?=\s*comprim)', 
-                                re.sub(r'\([^()]*\)', '', text)).group())          
-            elif re.search(r'con pelicula (\d+)', text)!=None:
-                nac_dict[nac['Código Nacional'][n]
-                         ] = int(re.search(r'con pelicula (\d+)',
-                                    text).group().split()[-1])
-    return nac_dict
 
 
+                
 
-def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
-                                param_df_path='../../outputs/dm_param_df.csv',
-                                patients_df_path='../../outputs/dm_patients_df.csv',
-                                code2drug_path='./diabetes_drugs.csv',
-                                output_file='../../outputs/eventlog_raw.csv'):
+def evlog_creation_prescriptions(con,
+                                 cond,
+                                 code2drug_path='./diabetes_drugs.csv'):
     '''Preprocessing and event log obtention with prescriptions
   
     Args:
-      treat_df_path (str): datamodel's treatment table's path
-      param_df_path (str): datamodel's parameter table's path
-      patients_df_path (str): datamodel's patients table's path
+      con : db connector variable
+      cond (str): predominal clinical condition's code
       code2drug_path (str): drugs' and their codes' info's table's path
   
     ADNI: ANTIDIABETICOS NO INSULINICOS
@@ -484,80 +474,68 @@ def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
         o SGLT-2 inhibitors (iSGLP-2)
 
     '''
-    treat_df = pd.read_csv(treat_df_path)
-    param_df = pd.read_csv(param_df_path)
-    patients_df = pd.read_csv(patients_df_path)
+    con.sql(f"DROP TABLE IF EXISTS evlog_raw_{cond}")
+    fin_date = con.sql(f"SELECT patient_id,date FROM patient_condition \
+                       WHERE type = '{cond}'").df()
+    dx_date = con.sql(f"SELECT patient_id, dx_date FROM  patient_incidents_view \
+                      WHERE patient_id IN (SELECT patient_id \
+                         FROM patient_condition \
+                             WHERE patient_condition.type = '{cond}')").df()
+    dx_date = dict(zip(dx_date.patient_id,dx_date.dx_date))
+    fin_date = dict(zip(fin_date.patient_id,fin_date.date))
     code2drug = pd.read_csv(code2drug_path,index_col=0).to_dict()
-    
-    dx_date = dict(zip(patients_df.patient_id,patients_df.dx_date))
-    fin_date = dict(zip(patients_df.patient_id,patients_df.fin_date))
-
-    # definir los tipos de medicamentos a analizar
-    col_atc = 'atc_code'
-    col_id = 'patient_id'
-    col_date_start = 'prescription_date_ini'
-    col_date_end = 'prescription_date_end'
-    col_name = 'Event'
-    treat_df.index = range(len(treat_df))
-    treat_df[col_name] = [code2drug.get(treat_df[col_atc][c],{'class' : 'ERROR'}
-                                    ).get('class','ERROR2').replace('+','&'
-                                    ) if treat_df[col_atc][c].startswith('A'
-                                    ) else None for c in range(
-                                      len(treat_df[col_atc]))  ]
-    treat_df = treat_df.drop(labels=[i for i in range(len(treat_df)
-                        ) if treat_df[col_name][i] in [None,'ERROR','ERROR2']],
-                        axis=0).drop_duplicates(subset=[col_id,
-                                                        col_date_start,
-                                                        col_date_end,
-                                                        col_name])
+    code2drug_f = lambda atc: code2drug.get(atc,{'class':'NONE'}
+                                           ).get('class','NONE2'
+                                                 ).replace('+','&')
+    treat_df = con.sql(f"SELECT * FROM treat_incidents_view \
+                       WHERE patient_id IN (SELECT patient_id \
+                                            FROM patient_condition \
+                                                WHERE patient_condition.type = '{cond}') \
+                           AND substring(atc_code,1,3) = 'A10'").df()
+    treat_df['Event'] = treat_df['atc_code'].apply(code2drug_f)
+    treat_df = treat_df[~treat_df['Event'].isin(['NONE','NONE2'])
+                        ].drop_duplicates(subset=['patient_id',
+                                                  'prescription_date_ini',
+                                                  'prescription_date_end',
+                                                  'Event'])
     treat_df['actins'] = range(len(treat_df))
-    treat_df_start = treat_df[[col_id,col_date_start,col_name,'actins']
-                              ].rename(columns = {col_date_start:'date'})
-    treat_df_start['date'] = pd.to_datetime(treat_df_start['date'],
-                                            format='%Y-%m-%d')
-    treat_df_end = treat_df[[col_id,col_date_end,col_name,'actins']
-                              ].rename(columns = {col_date_end:'date'})
+    treat_df_start = treat_df[['patient_id','prescription_date_ini',
+                              'Event','actins']].rename(columns = 
+                                       {'prescription_date_ini':'date'})
+    treat_df_end = treat_df[['patient_id','prescription_date_end',
+                              'Event','actins']].rename(columns = 
+                                       {'prescription_date_end':'date'})
     treat_df_start['cycle'] = 'start'
     treat_df_end['cycle'] = 'end'
-    treat_df_end['date'] = treat_df_end['date'].fillna('2022-12-31').apply(
-        lambda x: min([x,'2023-01-01']))
-    treat_df_end['date'] = pd.to_datetime(treat_df_end['date'],
-                                          format='%Y-%m-%d').apply(
+    treat_df_end['date'] = treat_df_end['date'].fillna(
+        datetime.strptime('2022-12-31', "%Y-%m-%d")).apply(
+        lambda x: min([x,datetime.strptime('2023-01-01', "%Y-%m-%d")])).apply(
                                               lambda x: x-timedelta(days=1))
-    
-    col_param = 'param_name'
-    col_value = 'param_value'
-    col_date = 'param_date'
-    param_df = param_df.drop(labels=[i for i in range(len(param_df)
-                              ) if param_df[col_param][i]!='hba1c'],
-               axis=0)
-    param_df.index = range(len(param_df))
-    param_df[col_value] = ['HBA<75' if i<7.5  else 'HBA>75'  for i in list(
-      param_df[col_value])]
-    param_df.rename(columns = {col_value: col_name,col_date:'date'},
-                    inplace = True)
-    param_df['actins'] = param_df.index+[max(treat_df['actins'])+1]*len(param_df)
-    param_df = param_df[[col_id,'date',col_name,'actins']]
-    param_df['date'] = pd.to_datetime(param_df['date'],
-                                      format='%Y-%m-%d')
+    act_n = max(treat_df['actins'])
+            
+    param_df = con.sql(f"SELECT patient_id,param_date AS date, \
+                       CASE WHEN param_value < {7.5} THEN 'HBA<75' \
+                           ELSE 'HBA>75' END AS Event,\
+                       ROW_NUMBER() OVER (ORDER BY param_date) + {act_n} AS actins\
+                           FROM param_incidents_view \
+                               WHERE patient_id IN (SELECT patient_id \
+                                FROM patient_condition \
+                                    WHERE patient_condition.type = '{cond}') \
+                                AND param_name = 'hba1c' \
+                                AND param_value IS NOT NULL").df()
     param_df_start = param_df.copy()
     param_df_start['cycle'] = 'start'
     param_df_end = param_df.copy()
     param_df_end['cycle'] = 'end'
-    
-    
+
     df = pd.concat([param_df_start,treat_df_start,param_df_end,treat_df_end]
                    ).drop_duplicates()
     
-    df = df.sort_values(by = [col_id,'date',col_name,'cycle'],
+    df = df.sort_values(by = ['patient_id','date','Event','cycle'],
                         ascending = [True,True,True,False])
     df.index = range(len(df))
-    patient_list = list(set(df[col_id]))
-    df['nid'] = [patient_list.index(df[col_id][n]) for n in range(len(df))]
-    
-    df = df.sort_values(by = [col_id, 'date','cycle'],
-                        ascending = [True, True, False])
-    df.index = range(len(df))
+    patient_list = list(set(df['patient_id']))
+    df['nid'] = [patient_list.index(df['patient_id'][n]) for n in range(len(df))]
 
     #####################################################################
     
@@ -577,11 +555,10 @@ def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
         df_id = df[df['patient_id']==id]
         nid = id_list.index(id)
         actins = set(df_id['actins'])
-        date_min = min([min(set(df_id['date'])),
-                        datetime.strptime(dx_date[id], "%Y-%m-%d")])
+        date_min = min([min(set(df_id['date'])),dx_date[id]])
         date_max =  max(set(df_id['date']))
         if str(fin_date[id])!='nan':
-            date_max = max([date_max,datetime.strptime(fin_date[id], "%Y-%m-%d")])
+            date_max = max([date_max,fin_date[id]])
         else:
             date_max = max([date_max,datetime.strptime('2023-01-01', "%Y-%m-%d")])
         dd = [date_min + timedelta(days=x) for x in range(
@@ -630,10 +607,9 @@ def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
                                                   range(j+1,j+dif_col[0]+2),0)
 
           
-        col = dd.index(datetime.strptime(dx_date[id], "%Y-%m-%d"))
-        col_0 = dd.index(datetime.strptime(dx_date[id], "%Y-%m-%d"))
-        col_max = dd.index(datetime.strptime(fin_date[id], "%Y-%m-%d") 
-                            ) if str(fin_date[id])!='nan' else len(dd)
+        col = dd.index(dx_date[id])
+        col_0 = dd.index(dx_date[id])
+        col_max = dd.index(fin_date[id]) if str(fin_date[id])!='nan' else len(dd)
         min_change_days = 7
         while col<col_max-1:
             if not np.array_equal(ev_status[:,col],ev_status[:,col+1]):
@@ -667,24 +643,22 @@ def evlog_creation_prescriptions(treat_df_path='../../outputs/dm_treat_df.csv',
     evlog.index = range(len(evlog))
     evlog['cycle'] = ['start','end']*int(0.5*len(evlog))
     evlog['actins'] = [n//2 for n in range(len(evlog))]
-    evlog.to_csv(output_file)
-
-def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
-                                param_df_path='../../outputs/dm_param_df.csv',
-                                patients_df_path='../../outputs/dm_patients_df.csv',
-                                code2drug_path='./diabetes_drugs.csv',
-                                nac_path='./Nomenclator_de_Facturacion.csv',
-                                output_file='../../outputs/eventlog_raw.csv'):
+    con.sql(f"CREATE TABLE evlog_raw_{cond} AS SELECT * FROM evlog")
+ 
+def evlog_creation_dispensations(con, 
+                              cond,
+                              code2drug_path='./diabetes_drugs.csv',
+                              nac_path='./Nomenclator_de_Facturacion.csv'):
     '''Preprocessing and event log obtention with dispensations
-  
+
     Args:
-      treat_df_path (str): datamodel's treatment table's path
-      param_df_path (str): datamodel's parameter table's path
-      patients_df_path (str): datamodel's patients table's path
+      con : db connector variable
+      cond (str): predominal clinical condition's code
       code2drug_path (str): drugs' and their codes' info's table's path
-  
+      nac_path (str): drugs' and their containers' info's table's path
+    
     ADNI: ANTIDIABETICOS NO INSULINICOS
-  
+    
     The treatment of type 2 diabetes mellitus with ADNI includes a wide range of 
     drugs which, depending on their drugs which, according to their mechanisms of 
     action, can be grouped as follows: 
@@ -702,83 +676,77 @@ def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
         o GLP-1 analogues (aGLP-1).
      Inhibitors of renal glucose reuptake
         o SGLT-2 inhibitors (iSGLP-2)
-
-    '''
-    treat_df = pd.read_csv(treat_df_path)
-    param_df = pd.read_csv(param_df_path)
-    patients_df = pd.read_csv(patients_df_path)
-    code2drug = pd.read_csv(code2drug_path,index_col=0).to_dict()
     
-    dx_date = dict(zip(patients_df.patient_id,patients_df.dx_date))
-    fin_date = dict(zip(patients_df.patient_id,patients_df.fin_date))
+    '''
 
+    con.sql(f"DROP TABLE IF EXISTS evlog_raw_{cond}")
     treat_min_days = 2
     days_error = 60-treat_min_days
     days_after_m = 7
-    
-
-    # definir los tipos de medicamentos a analizar
-    col_atc = 'atc_code'
-    col_nac = 'nac_code'
-    col_id = 'patient_id'
-    col_date = 'dispensing_date'
-    col_name = 'Event'
-    treat_df.index = range(len(treat_df))
-    treat_df[col_name] = [code2drug.get(treat_df[col_atc][c],{'class' : 'ERROR'}
-                                    ).get('class','ERROR2').replace('+','&'
-                                    ) if treat_df[col_atc][c].startswith('A'
-                                    ) else None for c in range(
-                                      len(treat_df[col_atc]))  ]
-    treat_df = treat_df.drop(labels=[i for i in range(len(treat_df)
-                        ) if treat_df[col_name][i] in [None,'ERROR','ERROR2']],
-                        axis=0)
-    treat_df.index = range(len(treat_df))
-    treat_df[col_nac] = treat_df[col_nac].astype(str)
-    nac_dict = nac2comprimidos(nac_path,set(treat_df[col_nac]))
-    treat_df[col_nac] = treat_df[col_nac].apply(
+    fin_date = con.sql(f"SELECT patient_id,date FROM patient_condition \
+                       WHERE type = '{cond}'").df()
+    dx_date = con.sql(f"SELECT patient_id, dx_date FROM  patient_incidents_view \
+                      WHERE patient_id IN (SELECT patient_id \
+                         FROM patient_condition \
+                             WHERE patient_condition.type = '{cond}')").df()
+    dx_date = dict(zip(dx_date.patient_id,dx_date.dx_date))
+    fin_date = dict(zip(fin_date.patient_id,fin_date.date))
+    code2drug = pd.read_csv(code2drug_path,index_col=0).to_dict()
+    code2drug_f = lambda atc: code2drug.get(atc,{'class':'NONE'}
+                                           ).get('class','NONE2'
+                                                 ).replace('+','&')
+    treat_df = con.sql(f"SELECT * FROM treat_incidents_view \
+                       WHERE patient_id IN (SELECT patient_id \
+                                            FROM patient_condition \
+                                                WHERE patient_condition.type = '{cond}') \
+                           AND substring(atc_code,1,3) = 'A10'").df()
+    treat_df['Event'] = treat_df['atc_code'].apply(code2drug_f)
+    treat_df = treat_df[~treat_df['Event'].isin(['NONE','NONE2'])]
+    nac_dict = nac2comprimidos(nac_path,set(treat_df['nac_code']))
+    treat_df['nac_code'] = treat_df['nac_code'].apply(
         lambda x: nac_dict.get(x,days_error))
     treat_df['containers_number'] = treat_df['containers_number'].fillna(1)
-    treat_df[col_nac] = treat_df[col_nac]*treat_df['containers_number']
-    treat_df = treat_df.sort_values(by = [col_id,col_date ],
+    treat_df['nac_code'] = treat_df['nac_code']*treat_df['containers_number']
+    treat_df = treat_df[['patient_id','dispensing_date','Event','nac_code']
+                        ].rename(columns = {'dispensing_date':'date'}
+                                 ).sort_values(by = ['patient_id','date' ],
                       ascending = [True, True])
-    treat_df.rename(columns = {col_date:'date'}, inplace = True)
-    treat_df = treat_df[[col_id,'date',col_name,col_nac]]
-    
-    col_param = 'param_name'
-    col_value = 'param_value'
-    col_date = 'param_date'
-    param_df = param_df.drop(labels=[i for i in range(len(param_df)
-                              ) if param_df[col_param][i]!='hba1c'],
-               axis=0)
-    param_df[col_value] = ['HBA<75' if i<7.5  else 'HBA>75'  for i in list(
-      param_df[col_value])]
-    param_df.rename(columns = {col_value: col_name,col_date:'date'},
-                    inplace = True)
-    param_df = param_df[[col_id,'date',col_name]]
-    df = pd.concat([param_df,treat_df])
-    
-    df = df.sort_values(by = [col_id, 'date'], ascending = [True, True])
-    df.index = range(len(df))
-    df['cycle'] = 'start'
-    df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d')
-    df['actins'] = list(df.index)
-    patient_list = list(set(df[col_id]))
-    df['nid'] = [patient_list.index(df[col_id][n]) for n in range(len(df))]
-    
-    df_ = df.copy()
-    df_['cycle'] = 'end'
-    for n in range(len(df_)):
-        if 'HBA' in df_[col_name][n]:
-            continue
-        df_['date'][n] += timedelta(days=treat_min_days)
-    
-    df = pd.concat([df,df_])
-    df = df.sort_values(by = [col_id, 'actins','cycle'],
+                                
+    df = con.sql(f"SELECT *, 'start' AS cycle,\
+                 ROW_NUMBER() OVER (ORDER BY patient_id, date) AS actins \
+                     FROM (SELECT patient_id,param_date AS date, \
+                       CASE WHEN param_value < {7.5} THEN 'HBA<75' \
+                           ELSE 'HBA>75' END AS Event, 0 AS nac_code\
+                           FROM param_incidents_view \
+                               WHERE patient_id IN (SELECT patient_id \
+                                FROM patient_condition \
+                                    WHERE patient_condition.type = '{cond}') \
+                                   AND param_name = 'hba1c' \
+                                AND param_value IS NOT NULL \
+                            UNION ALL SELECT * FROM treat_df) \
+                UNION ALL SELECT patient_id, date, Event, nac_code, 'end' AS cycle,\
+                 ROW_NUMBER() OVER (ORDER BY patient_id, param_date) AS actins \
+                     FROM (SELECT patient_id,param_date AS date, param_date,\
+                       CASE WHEN param_value < {7.5} THEN 'HBA<75' \
+                           ELSE 'HBA>75' END AS Event, 0 AS nac_code\
+                           FROM param_incidents_view \
+                               WHERE patient_id IN (SELECT patient_id \
+                                FROM patient_condition \
+                                    WHERE patient_condition.type = '{cond}') \
+                                   AND param_name = 'hba1c' \
+                                AND param_value IS NOT NULL \
+                            UNION ALL SELECT patient_id,\
+                            CAST(date AS TIMESTAMP)+INTERVAL {treat_min_days} DAYS AS date, \
+                                date AS param_date, \
+                                    Event, nac_code FROM treat_df)").df()
+    patient_list = list(set(df['patient_id']))
+    df['nid'] = [patient_list.index(df['patient_id'][n]) for n in range(len(df))] 
+    df = df.sort_values(by = ['patient_id', 'actins','cycle'],
                         ascending = [True, True, False])
     df.index = range(len(df))
-    df[col_nac].fillna(0,inplace=True)
-    #####################################################################
     
+    #####################################################################
+
     event_log = dict()
     event_log['patient_id'] = []
     event_log['date'] = []
@@ -795,18 +763,17 @@ def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
         df_id = df[df['patient_id']==id]
         nid = id_list.index(id)
         actins = set(df_id['actins'])
-        date_min = min([min(set(df_id['date'])),
-                        datetime.strptime(dx_date[id], "%Y-%m-%d")])
+        date_min = min([min(set(df_id['date'])),dx_date[id]])
         date_max =  max(set(df_id['date']))
         if str(fin_date[id])!='nan':
-            date_max = max([date_max,datetime.strptime(fin_date[id], "%Y-%m-%d")])
+            date_max = max([date_max,fin_date[id]])
         else:
             date_max = max([date_max,datetime.strptime('2023-01-01', "%Y-%m-%d")])
         dd = [date_min + timedelta(days=x) for x in range(
           (date_max-date_min).days + 1)]
         col = len(dd)
         ev_status = np.zeros((row,col))
-        max_nac = int(max(df_id[col_nac])*1.2)
+        max_nac = int(max(df_id['nac_code'])*1.2)
         #event matrix where columns are days and rows treatments
         #0:no treatment, 1:treatment, 2:posible treatment,
         #3:after measuring period
@@ -883,10 +850,9 @@ def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
             seq = seq.replace('2','0').replace('3','0')
             ev_status[i,:] = eval(seq)               
                 
-        col = dd.index(datetime.strptime(dx_date[id], "%Y-%m-%d"))
-        col_0 = dd.index(datetime.strptime(dx_date[id], "%Y-%m-%d"))
-        col_max = dd.index(datetime.strptime(fin_date[id], "%Y-%m-%d") 
-                            ) if str(fin_date[id])!='nan' else len(dd)
+        col = dd.index(dx_date[id])
+        col_0 = dd.index(dx_date[id])
+        col_max = dd.index(fin_date[id]) if str(fin_date[id])!='nan' else len(dd)
         min_change_days = 42
         while col<col_max-1:
             if not np.array_equal(ev_status[:,col],ev_status[:,col+1]):
@@ -920,8 +886,73 @@ def evlog_creation_dispensations(treat_df_path='../../outputs/dm_treat_df.csv',
     evlog.index = range(len(evlog))
     evlog['cycle'] = ['start','end']*int(0.5*len(evlog))
     evlog['actins'] = [n//2 for n in range(len(evlog))]
-    evlog.to_csv(output_file)
+    con.sql(f"CREATE TABLE evlog_raw_{cond} AS SELECT * FROM evlog")
+  
+def change_matrix_values(matrix,list_rows,list_cols, new_value=0):
+    '''change selected rows' and columns' matrix`s values
+    Args:
+      matrix (array): matrix wanted to modify
+      list_rows (list): matrix's rows wanted to modify
+      list_cols (list): matrix's columns wanted to modify
+      new_value (int): new wanted value
+      
+    Output:
+      matrix (array): modified matrix
+    '''
+    pos = list(itertools.product(list_rows,list_cols))
+    for i,j in pos:
+        matrix[i,j] = new_value
+    return matrix
+
+def col2treat(matrix,rows,col):
+    '''translate treatments from a binary vector
+  
+    Args:
+      matrix (array): events calendary in binary information
+      rows (str): events list
+      col (int): column of matrix wanted to translate
     
+    Output:
+      treatment (str):
+    '''
+    treatment = '+'.join(sorted([rows[ev
+                            ] for ev in range(len(rows)) 
+                                 if matrix[ev,col]!=0]))
+    if treatment!='':
+        return treatment
+    else:
+        return '_'
+    
+def nac2comprimidos(nac_path,code_set):
+    '''Creating dictionary of nac drugs container's number of tablets
+  
+    Args:
+      nac_path (str): nac table's path
+      code_set (set): nac code list
+    Outputs:
+        nac_dict (dic): nac codes as keys and their number of tablets as values
+    '''
+
+    nac = pd.read_csv(nac_path)
+    nac['Código Nacional'] = nac['Código Nacional'].astype(str)
+    nac_dict = {}
+
+    for n in range(len(nac)):
+        if nac['Código Nacional'][n] in code_set:
+            text = nac['Nombre del producto farmacéutico'][n].lower()
+            if re.search(r'\d+(?=\s*comprim)', text)!=None:
+                nac_dict[nac['Código Nacional'][n]
+                         ] = int(re.search(r'\d+(?=\s*comprim)', text).group())
+            elif re.search(r'\d+(?=\s*comprim)', 
+                           re.sub(r'\([^()]*\)', '', text))!=None:
+                nac_dict[nac['Código Nacional'][n]
+                         ] = int(re.search(r'\d+(?=\s*comprim)', 
+                                re.sub(r'\([^()]*\)', '', text)).group())          
+            elif re.search(r'con pelicula (\d+)', text)!=None:
+                nac_dict[nac['Código Nacional'][n]
+                         ] = int(re.search(r'con pelicula (\d+)',
+                                    text).group().split()[-1])
+    return nac_dict
 ```
 
 ### Distances
@@ -937,7 +968,7 @@ def calculate_dm_ED(traces,measure_f):
     
     Args:
       traces (list): patients' traces
-      measure: some edit distance function
+      measure_f: some edit distance function
       
     Returns:
       dm: distance matrix
@@ -1046,7 +1077,7 @@ def calculate_dm_LDA(traces,T=10):
 
 ### Clustering
 
-Once the distance matrix is obtained, we can proceed with the clustering. Each clustering method has its characteristics and its peculiarities, so we cannot choose whatever method we want. For example, we have to consider that our distances do not comply with the triangle inequality so they cannot be considered metrics. Another consideration is that we have a distance matrix and not a data frame in which we apply directly the method. A hierarchical clustering algorithm seems to be a good choice in our case because in addition to the above it allows to choose the optimal number of clusters.
+Once the distance matrix is obtained, we can proceed with the clustering. Each clustering method has its characteristics and its peculiarities, so we cannot choose whatever method we want. For example, we have to consider we have a distance matrix and not a data frame in which we apply directly the method. A hierarchical clustering algorithm seems to be a good choice in our case because in addition to the above it allows to choose the optimal number of clusters.
 
 The next code box contains two different functions to choose the optimal number of clusters:
 
@@ -1076,7 +1107,9 @@ def dendogram(dm,output_png='../../outputs/dendogram.png'):
   plt.savefig(output_png)
   plt.clf()
 
-def kelbow(dm,elbow_metric='distortion',locate_elbow=False,
+def kelbow(dm,
+           elbow_metric='distortion',
+           locate_elbow=False,
            output_path='../../outputs/'):
   
   '''Plots to choose optimal clusters.
@@ -1110,50 +1143,22 @@ def kelbow(dm,elbow_metric='distortion',locate_elbow=False,
     return k_opt
 ```
 
-Depending on the results of the clustering we may need to focus our analysis in the biggest clusters and forget those clusters that contains too less traces. The next function is made for that:
+Depending on the results of the clustering we may need to focus our analysis in the biggest clusters and forget those clusters that contains too less traces. The function to clust takes into account that to clusterize the patients by their traces:
 
 ```{python}
-#| label: small cluster filter
-def small_cluster_filter(log,min_traces=25,col_id='ID',col_clust='cluster'):
-  '''Filter smallest clusters' traces.
-    
-    Args:
-      log (dataframe): event log 
-      min_traces (int): minimum number of traces in the resulted clusters 
-      col_id (str): patients id column's name in df_
-      col_clust (str): clusters column's name in df_
-    Returns:
-      filtered_log (dataframe): event log without clusters with les than 
-                                min_traces number of traces
-  '''
-
-  drop_clust = [i for i in set(log[col_clust]) if 
-                len(set(log[col_id][log[col_clust]==i]))<min_traces]
-  filtered_log = log.drop(log[log[col_clust].isin(drop_clust) == True].index)
-  filtered_log.index = range(len(filtered_log))
-  return filtered_log
-  
-
-```
-
-The function to clust is shown in the code below:
-
-```{python}
-def clust(clust_n,dist_matrix,df_,id2trace,patients,id_col='ID',
-          ev_col='Event',date_col='date',output_xes='../../outputs/eventlog.xes',
-          output_csv='../../outputs/eventlog.csv'):
+def clust(con,cond,clust_n,dist_matrix,df_,id2trace,patients):
   '''clusterize distance matrix.
     
     Args:
+      con : db connector variable
+      cond (str): predominal clinical condition's code
       clust_n (int): number of clusters obtained
       dist_matrix (array): distance matrix
       df_ (dataframe): event log
       id2trace (dict): patient ids as keys and their traces as values
       patients (list): patients' ids in same order as in dm
-      id_col (str): patients id column's name in df_
-      ev_col (str): events column's name in df_
-      date_col (str): events dates column's name in df_
   '''
+  min_traces = 25
   traces = list(id2trace[id] for id in sorted(id2trace.keys()))     
 
 
@@ -1166,28 +1171,23 @@ def clust(clust_n,dist_matrix,df_,id2trace,patients,id_col='ID',
   cluster_list ={id: labels[traces.index(id2trace[id])
                             ] for id in patients}
 
-  df_['cluster'] = [cluster_list[df_[id_col][i]] for i in range(len(df_))]
-  df_.to_csv(output_csv)
-  df_filtered = small_cluster_filter(df_)
-  if len(df_filtered)==0:
-    df_filtered = df_.copy()
-  df_filtered.to_csv(output_csv.replace('eventlog','eventlog_filtered'))
-  
-  df_xes = pm4py.format_dataframe(df_,
-                                  case_id=id_col,
-                                  activity_key=ev_col,
-                                  timestamp_key=date_col)
-  event_log = pm4py.convert_to_event_log(df_xes)
-  pm4py.write_xes(event_log, output_xes)
-  
-  df_filtered_xes = pm4py.format_dataframe(df_filtered,
-                                  case_id=id_col,
-                                  activity_key=ev_col,
-                                  timestamp_key=date_col)
-  event_log_filtered = pm4py.convert_to_event_log(df_filtered_xes)
-  pm4py.write_xes(event_log_filtered,output_xes.replace('eventlog',
-                                                        'eventlog_filtered'))
-
+  df_['cluster'] = [cluster_list[df_['ID'][i]] for i in range(len(df_))]
+  con.sql(f"DROP TABLE IF EXISTS clust_{cond}")
+  con.sql(f"CREATE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
+  con.sql(f"DROP VIEW IF EXISTS eventlog_{cond}_clust")
+  con.sql(f"CREATE VIEW eventlog_{cond}_clust AS SELECT \
+  eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
+  LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
+  con.sql(f"DROP VIEW IF EXISTS cluster_histogram_{cond}")
+  con.sql(f"CREATE VIEW cluster_histogram_{cond} AS\
+  SELECT cluster, COUNT(DISTINCT ID) AS freq \
+  FROM eventlog_{cond}_clust GROUP BY cluster")
+  con.sql(f"DROP VIEW IF EXISTS eventlog_{cond}_clust_filtered")
+  con.sql(f"CREATE VIEW eventlog_{cond}_clust_filtered AS \
+   SELECT * FROM eventlog_{cond}_clust \
+  WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
+  WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
+  FROM cluster_histogram_{cond}))")
 ```
 
 ### Descriptive analysis
@@ -1246,8 +1246,13 @@ def update_color_dict(color_dict,data_dict):
   return color_dict 
 
 
-def trace_plotter(data_dict,color_dict,acronym, output_file, font_size=10,
-                  percentage_box_width=0.8,size=(15,9)):
+def trace_plotter(data_dict,
+                  color_dict,
+                  acronym,
+                  output_file,
+                  font_size=10,
+                  percentage_box_width=0.8,
+                  size=(15,9)):
   '''configuration of the trace_explorer plot
     
     Args:
@@ -1336,24 +1341,30 @@ def trace_plotter(data_dict,color_dict,acronym, output_file, font_size=10,
   plt.close()
 
 
-def trace_explorer(evlog_file='../../outputs/eventlog.xes',top_k=5, 
+def trace_explorer(con,
+                   cond,
+                   top_k=5,
                    id_col='ID',
-                   ev_col='Event',date_col='date',clust_col='cluster',
-                   color_dict={},cond_code=''):
+                   ev_col='Event',
+                   date_col='date',
+                   clust_col='cluster',
+                   color_dict={}):
   '''Plot each clusters most frequent traces
     
     Args:
-      evlog_file (str): events as keys and colors as values 
+      con : db connector variable
+      cond (str): predominal clinical condition's code
       top_k (int):  traces as keys and their statistics as values
       id_col (str): patients id column's name in evlog_file
       ev_col (str): events column's name in evlog_file
       date_col (str): events dates column's name in evlog_file
       clust_col (str): cluster column's name in evlog_file
       color_dict (dict): events as keys and colors as values  
-      cond (str) : predominal clinical condition's code
   '''
-                     
-  log_ = pm4py.read_xes(evlog_file)
+  log_ = pm4py.format_dataframe(con.sql(f"SELECT * FROM eventlog_{cond}_clust_filtered").df(),
+                                case_id=id_col,
+                                activity_key=ev_col,
+                                timestamp_key=date_col)                  
   log_ = log_.sort_values([id_col,date_col])
   log_ = log_[log_['cycle']=='start'] 
   for clust in set(log_[clust_col]):
@@ -1363,7 +1374,7 @@ def trace_explorer(evlog_file='../../outputs/eventlog.xes',top_k=5,
       data_dict = make_data_dict(log,top_k,id_col)
       color_dict = update_color_dict(color_dict, data_dict)
       trace_plotter(data_dict,color_dict,acronym,
-                    '../../outputs/t_cluster_%s_%i.png' % (cond_code,clust))
+                    '../../outputs/t_cluster_%s_%i.png' % (cond,clust))
   return color_dict
 
 ```
@@ -1373,13 +1384,16 @@ To get the process maps of each cluster next R functions can be used:
 ```{r}
 #| label: Process maps in R
 
-load_csv_log <- function(evlog_csv,case_id="ID",activity_id="Event", 
-                         lifecycle_id="cycle", activity_instance_id="actins",
-                         timestamp="date"){
-  eventlog = read.csv(evlog_csv, header=TRUE, sep = ",")
+load_log <- function(con,
+                     query,case_id="ID",
+                     activity_id="Event", 
+                     lifecycle_id="cycle",
+                     activity_instance_id="actins",
+                     timestamp="date"){
   
+  eventlog <- dbGetQuery(con,query)  
   eventlog = eventlog[order(eventlog$ID),]
-  #Para transformar fecha a un formato con el que podemos trabajar
+  #To transform date to a format we can work with
   eventlog$date = as.POSIXct(eventlog$date, tz = "", format="%Y-%m-%d" ,
                                    tryFormats = c("%Y/%m/%d",
                                                   "%Y/%m/%d"),
@@ -1389,7 +1403,9 @@ load_csv_log <- function(evlog_csv,case_id="ID",activity_id="Event",
   
   evLog = eventlog %>%
     mutate(resource = NA) %>%
-    mutate(cycle = fct_recode(cycle,  "start" = "start","complete" = "end")) %>%
+    mutate(cycle = fct_recode(cycle,
+                              "start" = "start",
+                              "complete" = "end")) %>%
     eventlog(
       case_id = case_id,
       activity_id = activity_id, 
@@ -1446,8 +1462,13 @@ Fitness is the metric that measures how much a trace is distanced from a given p
 
 ```{python}
 #| label: Fitness  calculation
-def id2fitness(log ,net, initial_marking, final_marking, clust_col='cluster',
-               date_col='date',ev_col='Event'):
+def id2fitness(log ,
+               net, 
+               initial_marking, 
+               final_marking, 
+               clust_col='cluster',
+               date_col='date',
+               ev_col='Event'):
   '''Obtain traces fitness
     
     Args:
@@ -1504,19 +1525,23 @@ The function below takes an event log and returns each patients' period's fitnes
 
 ```{python}
 #| label: Fitness  calculation by intervals
-def id2fitness_by_interval(xes_file,pn_file,ini_place='place100',fin_place='place111',
-                          date_n_col='date',id_col='ID',fixed_period_time=90,
-                          output_csv='../../outputs/fitness_by_period.csv'):
+def id2fitness_by_interval(con,
+                           cond,
+                           pn_file,
+                           ini_place='place100',
+                           fin_place='place111',
+                           date_n_col='date',
+                           fixed_period_time=90):
     '''Barplot of the fitness of each cluster
     
     Args:
-      xes_file (dataframe): event log's path
-      pn_file: petri net's path
-      ini_place: initial place in the petri net
-      fin_place: final place in the petri net
+      con: db connector variable
+      cond (str): predominal clinical condition's code
+      pn_file (str): petri net's path
+      ini_place (str): initial place in the petri net
+      fin_place (str): final place in the petri net
       date_n_col (str): events dates column's name in log
       id_col (str): patients identifiers column's name in log
-      output_csv (str): created csv's path
   '''
     net, initial_marking, final_marking = pm4py.read_pnml(pn_file)
     initial_marking = Marking()
@@ -1525,8 +1550,11 @@ def id2fitness_by_interval(xes_file,pn_file,ini_place='place100',fin_place='plac
     final_marking = Marking()
     final_marking[list(net.places)[[str(p) for p in net.places].index(
         fin_place)]] = 1
-        
-    event_log = pd.DataFrame(pm4py.read_xes(xes_file))
+    event_log = pm4py.format_dataframe(con.sql(f"SELECT * FROM eventlog_{cond}_clust \
+    WHERE cycle = 'start'").df(),
+                                case_id='ID',
+                                activity_key='Event',
+                                timestamp_key=date_n_col) 
     event_log = event_log[event_log['cycle']=='start'] 
     baseline = datetime.strptime('2017-01-01', "%Y-%m-%d")
     endline = datetime.strptime('2023-01-01', "%Y-%m-%d")
@@ -1538,7 +1566,7 @@ def id2fitness_by_interval(xes_file,pn_file,ini_place='place100',fin_place='plac
     event_log[date_n_col] = event_log[date_n_col].dt.tz_localize(None)
     event_log[date_n_col] = event_log[date_n_col].apply(
         lambda x: dd.index(x))
-    event_log[date_n_col] = event_log.groupby(id_col)[date_n_col].apply(
+    event_log[date_n_col] = event_log.groupby('ID')[date_n_col].apply(
         lambda x: x-x.min())
     
     period2fitness = pd.DataFrame()
@@ -1548,9 +1576,9 @@ def id2fitness_by_interval(xes_file,pn_file,ini_place='place100',fin_place='plac
     fitness = []
     date_0 = []
     status = []
-    id_list = list(set(event_log[id_col]))
+    id_list = list(set(event_log['ID']))
     for id in tqdm(id_list):
-        event_log_id = event_log[event_log[id_col]==id]
+        event_log_id = event_log[event_log['ID']==id]
         date_max = max(event_log_id[date_n_col])
         date_min = min(event_log_id['time:timestamp'])
         n_periods = date_max//fixed_period_time
@@ -1584,13 +1612,14 @@ def id2fitness_by_interval(xes_file,pn_file,ini_place='place100',fin_place='plac
             else:
                 status.append(1)
     
-    period2fitness[id_col] = id_list_df
+    period2fitness['ID'] = id_list_df
     period2fitness['t_0'] = p_start
     period2fitness['t_1'] = p_end
     period2fitness['fitness'] = fitness
     period2fitness['ini_date'] = date_0
     period2fitness['status'] = status
-    period2fitness.to_csv(output_csv,index=False)
+    con.sql(f"DROP TABLE IF EXISTS period2fitness_{cond}")
+    con.sql(f"CREATE TABLE period2fitness_{cond} AS SELECT * FROM period2fitness")
 
 ```
 
@@ -1598,15 +1627,21 @@ In the next function is shown a boxplot function to show clusters' fitness distr
 
 ```{python}
 #| label: Fitness boxplot
-def conformance(xes_file,pn_file,pn_png_file,ini_place='place100',
-                fin_place='place111', date_col='date',ev_col='Event',
+def conformance(con,
+                cond,
+                pn_file,
+                pn_png_file,
+                ini_place='place100',
+                fin_place='place111',
+                date_col='date',
+                ev_col='Event',
                 clust_col='cluster',
-                output_png='../../outputs/fitness_by_cluster.png',
-                output_csv='../../outputs/fitness_by_cluster.csv'):
+                output_png='../../outputs/fitness_by_cluster.png'):
   '''Barplot of the fitness of each cluster
     
     Args:
-      xes_file (dataframe): event log's path
+      con: db connector variable
+      cond (str): predominant clinical condition
       pn_file: petri net's path
       ini_marking: initial place in the petri net
       fin_marking: final place in the petri net
@@ -1614,11 +1649,13 @@ def conformance(xes_file,pn_file,pn_png_file,ini_place='place100',
       clust_col (str): cluster column's name in log
       ev_col (str): events column's name in log
       output_png (str): created figure's path
-      output_csv (str): created csv's path
   '''
-  
-  log = pd.DataFrame(pm4py.read_xes(xes_file))
-  log = log[log['cycle']=='start']    
+  log = pm4py.format_dataframe(con.sql(f"SELECT * FROM eventlog_{cond}_clust_filtered \
+  WHERE cycle = 'start'").df(),
+                                case_id='ID',
+                                activity_key=ev_col,
+                                timestamp_key=date_col)                  
+
   log = log.sort_values(date_col)
   log.index = range(len(log))
   net, initial_marking, final_marking = pm4py.read_pnml(pn_file)
@@ -1628,11 +1665,15 @@ def conformance(xes_file,pn_file,pn_png_file,ini_place='place100',
   final_marking = Marking()
   final_marking[list(net.places)[[str(p) for p in net.places].index(
     fin_place)]] = 1
-  pm4py.save_vis_petri_net(net, initial_marking, final_marking,
-                           pn_png_file)
+  pm4py.save_vis_petri_net(net, initial_marking, final_marking,pn_png_file)
   df = id2fitness(log,net,initial_marking,final_marking,
                   clust_col,date_col,ev_col)
-  df.to_csv(output_csv)
+  df['aligned_fitness'] = pd.to_numeric(df['aligned_fitness'])
+  df['cluster'] = pd.to_numeric(df['cluster'])
+  df['ID'] = df['ID'].astype("string")
+  con.sql(f"DROP TABLE IF EXISTS eventlog_{cond}_byclust")                
+  con.sql(f"CREATE TABLE eventlog_{cond}_byclust AS \
+  SELECT * FROM df")
   data = [list(df['aligned_fitness'][df[clust_col]==i])
           for i in sorted(set(df[clust_col]))]
    
@@ -1655,29 +1696,29 @@ Decision mining allows to analyze the event transitions in different part of pro
 
 ```{python}
 #| label: Decision mining
-def decision_tree_pn_place(patients_df,
-                           col_id = 'patient_id',
+def decision_tree_pn_place(con,
+                           cond,
                            features_list = ['age','sex','copayment'],
-                           event_log_file="../../outputs/eventlog.xes",
                            pn_file="./PN.pnml",
                            place2analyze='place9',
                            ini_place='place100',
-                           fin_place='place111',
-                           cond_code=''):
+                           fin_place='place111'):
   '''Decision tree and features importances in selected place of PN
     
     Args:
-      patients_df (dataframe): patients data wanted to analyze
-      col_id (str): patients id column's name in df
+      con : db connector variable
+      cond (str): predominant clinical condition's 
       features_list (list): features wanted to analyze
       event_log_file (str): event log's path
       pn_file (str): petri net's path
       place2analyze (str): place wanted to analyze in petri net
       ini_place (str): initial place in the petri net
       fin_place (str): final place in the petri net
-      cond_code (str): predominant clinical condition's code
+      
   '''                           
-  log = pm4py.read_xes(event_log_file)    
+  log = pm4py.format_dataframe(con.sql(f"SELECT * FROM eventlog_{cond} WHERE \
+  ID in (SELECT ID FROM eventlog_{cond}_clust)").df(), case_id='ID',
+                               activity_key='Event',timestamp_key='date')  
   log = log[log['cycle']=='start']    
   log = log[['concept:name','time:timestamp','case:concept:name']]
   ini = min(list(log['time:timestamp']))-timedelta(days=1)
@@ -1690,11 +1731,11 @@ def decision_tree_pn_place(patients_df,
         
   log = log.sort_values(['case:concept:name','time:timestamp'])
   log.index = range(len(log))
-  patients_df = patients_df[features_list + [col_id]]
+  patients_df = con.sql("SELECT patient_id,age,sex,copayment FROM patient_incidents_view").df()
   patients_df = patients_df.fillna(2)
   patients_df['copayment'] = patients_df['copayment'].values.astype(int).astype(str)
   log_patients = log.merge(patients_df,left_on='case:concept:name',
-                             right_on=col_id,how='left')
+                             right_on='patient_id',how='left')
   log_patients = log_patients[['concept:name', 'time:timestamp',
                                  'case:concept:name', 'age',
                                  'sex','copayment']]
@@ -1718,7 +1759,7 @@ def decision_tree_pn_place(patients_df,
                                                     final_marking, 
                                                     decision_point=place2analyze)
     gviz = tree_visualizer.apply(clf, feature_names, classes)
-    gviz.save(filename='decision_tree_%s' % cond_code,
+    gviz.save(filename='decision_tree_%s' % cond,
                 directory='../../outputs')              
     visualizer.view(gviz)
       
@@ -1730,20 +1771,43 @@ def decision_tree_pn_place(patients_df,
     ax.set_title("Feature importances using MDI")
     ax.set_ylabel("Mean decrease in impurity")
     fig.tight_layout()
-    fig.savefig('../../outputs/barplot_features_importance_%s.png' % cond_code)
+    fig.savefig('../../outputs/barplot_features_importance_%s.png' % cond)
   except ValueError as err:
+    logging.basicConfig(level=logging.INFO)
+    logging.info('Error in decidsion making: %s', str(err))
     if str(err)!='No objects to concatenate':
       UNKNOWN_ERROR
 ```
 
 ### Joint Latent Class Model
 
-The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. Joint models are used to analyse simultaneously two related phenomena, the evolution of a variable and the occurence of an event. Joint latent class models (JLCM) consist of a linear mixed model and a proportional hazard model linked by the latent classes. The population is split in several groups, the latent classes, and each class is caracterized by a specific evolution of the dependent variable and an associated risk of event. Using fitness as time dependent treatment adherence measure we can made a joint latent class model.  
+The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. Joint models are used to analyse simultaneously two related phenomena, the evolution of a variable and the occurence of an event. Joint latent class models (JLCM) consist of a linear mixed model and a proportional hazard model linked by the latent classes. The population is split in several groups, the latent classes, and each class is caracterized by a specific evolution of the dependent variable and an associated risk of event. Using fitness as time dependent treatment adherence measure we can made a joint latent class model.
+
 ### Cox Regression Model with Mixed Effects
 
 The Cox proportional hazards regression model is frequently used for the analysis of survival data. The inclusion of random effects into a Cox proportional hazards model shares many similarities with methods for the analysis for multilevel data with continuous, binary or count outcomes. A conventional regression model (in this case the Cox proportional hazards model) is enhanced through the incorporation of random effect terms to account for within-cluster homogeneity in outcomes.
 ## Results
+```{python}
+#| label: preprocessing of the initial dataframes
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info('Preprocess of the initial dataframes')
+db_path = '../../inputs/data.duckdb'
+con = duckdb.connect(db_path)
+notnan_p = select_by_condition(con)
+con.close()
+```
 
+```{r}
+#| label: fixing db pathway
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+db_path <- '../../inputs/data.duckdb'
+```
 ### Patients without predominant clinical condition
 
 #### Event log's creation and description
@@ -1772,22 +1836,20 @@ cond <- 'else'
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-notnan_p = select_by_condition(cond)
+con = duckdb.connect(db_path)
 if notnan_p>0.98:
+  logging.info("Generate event log of %s patients from prescriptions", cond)
   evlog_creation_prescriptions(
-    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
-    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
-    code2drug_path='./diabetes_drugs.csv',
-    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+    con=con,
+    cond=cond,
+    code2drug_path='./diabetes_drugs.csv')
 else:
+  logging.info("Generate event log of %s patients from dispensations", cond)
   evlog_creation_dispensations(
-    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
-    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
+    con=con,
+    cond=cond,
     code2drug_path='./diabetes_drugs.csv',
-    nac_path='./Nomenclator_de_Facturacion.csv',
-    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+    nac_path='./Nomenclator_de_Facturacion.csv')
 ```
 
 ```{python}
@@ -1796,16 +1858,14 @@ else:
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-df_ = pd.read_csv('../../outputs/eventlog_raw_%s.csv' % cond, 
-                  index_col=0)[['ID','date','cycle','nid','actins','Event']]
+logging.info("Filter event log of %s patients", cond)
+df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
 
-def df2dict(df_,ev_col='Event',id_col ='ID'):
+def df2dict(df_):
   '''Filtering length=2 traces and obtain id2trace dict
     
     Args:
       df_ (dataframe): event log 
-      id_col (str): patients' id column's name in log
-      ev_col (str): events column's name in log
     Returns:
       df (dataframe): filtered event log (without cycle sense)
       df_ (dataframe): filtered event log
@@ -1814,36 +1874,37 @@ def df2dict(df_,ev_col='Event',id_col ='ID'):
   df = df_[df_['cycle']=='start']
   df.index = range(len(df))
   id2trace_ = dict()            
-  for id in set(df[id_col]):       
-      id2trace_[id] = list(df[ev_col][df[id_col] == id])
+  for id in set(df['ID']):       
+      id2trace_[id] = list(df['Event'][df['ID'] == id])
  
   #drop len<=2 traces
   del_list = []
   for i in range(len(df)):
-      if  len(id2trace_[df[id_col][i]])<=2 :
+      if  len(id2trace_[df['ID'][i]])<=2 :
           del_list.append(i)
   for i in del_list:
       try:
-          del id2trace_[df[id_col][i]]
+          del id2trace_[df['ID'][i]]
       except:
           continue
   df = df.drop(del_list, axis=0)
   df.index = range(len(df))
 
   del_list2 = []
-  for id in set(df_[id_col]):
+  for id in set(df_['ID']):
       if id not in id2trace_:
-          del_list2+= list(df_[df_[id_col]==id].index)
+          del_list2+= list(df_[df_['ID']==id].index)
   df_ = df_.drop(del_list2, axis=0)
   df_.index = range(len(df_))
   
-  return df,df_,id2trace_
+  return df_,id2trace_
 
-df,df_, id2trace = df2dict(df_)
-df_.to_csv("../../outputs/eventlog_%s.csv" % cond)
+df_, id2trace = df2dict(df_)
+con.sql(f"DROP TABLE IF EXISTS eventlog_{cond}")
+con.sql(f"CREATE TABLE eventlog_{cond} AS SELECT * FROM df_")
 patients = sorted(id2trace.keys())
 traces = list(id2trace[id] for id in patients)     
-del df
+con.close()
 ```
 
 ```{r}
@@ -1852,9 +1913,10 @@ del df
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-evLog <- load_csv_log(gsub("src/analysis-scripts/","",
-                           here("outputs",sprintf("eventlog_%s.csv",
-                                                  cond))))
+log_info('Load {cond} eventlog')
+con <- dbConnect(duckdb(), dbdir = db_path)
+evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
+dbDisconnect(con, shutdown = TRUE)
 ```
 
 These results have been carried out with a set of synthetic data previously generated according to data model. Choosing patients without any predominan clinical condition and after some preprocessing we obtain an event log that can be reproduced in the below process map @fig-pm1_else. There is shown how the events are connected, the mean number of days patients spent in each event (or treatment), percentage of patients who made each transition and the mean number of days it took to make the transition. However, a spaghetti map is obtained and nothing can be concluded. Therefore, we have to simplify the process map and for example only show the most frequent traces covering 20% of the event log as in @fig-pm02_else. Moreover, in @fig-activity_presence_else we show percentage of patients' traces each activity is present.
@@ -1865,6 +1927,7 @@ These results have been carried out with a set of synthetic data previously gene
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+log_info('Make {cond} process map')
 make_process_map(evLog,1,gsub("src/analysis-scripts/","",
                               here("outputs",sprintf("evlog_pm_1_%s.png",
                                                      cond))))
@@ -1891,6 +1954,7 @@ make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+log_info('Make activity presence of {cond} patients')
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("activity_presence_%s.png",
                                          cond))),
@@ -1911,6 +1975,7 @@ Once the set of traces to analyze are selected, there is a need to choose a dist
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+logging.info("Make distance matrix of %s patients", cond)
 measure_f = textdistance.jaccard
 dm = calculate_dm_ED(traces,measure_f)
 ```
@@ -1921,7 +1986,7 @@ When distance matrix is acquired, we are able to cluster. However, the number of
 #| label: dendograms (else)
 #| eval: TRUE
 #| echo: FALSE
-
+logging.info("Make dendogram of %s patients", cond)
 dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
 
@@ -1930,6 +1995,7 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| eval: TRUE
 #| echo: FALSE
 #| output: TRUE
+logging.info("Make k-elbow figure of %s patients", cond)
 if len(traces)>25:
   n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
@@ -1945,9 +2011,9 @@ else:
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-clust(n_clusters,dm,df_,id2trace,patients,
-      output_xes='../../outputs/eventlog_%s.xes' % cond,
-      output_csv='../../outputs/eventlog_%s.csv' % cond)
+logging.info("Make clustering of %s patients", cond)
+con = duckdb.connect(db_path)
+clust(con,cond,n_clusters,dm,df_,id2trace,patients)
 del dm
 del df_
 ```
@@ -1960,9 +2026,9 @@ Choosing the optimal number of clusters, too small clusters can appear, but we c
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-col_dic = trace_explorer(
-  evlog_file='../../outputs/eventlog_filtered_%s.xes' % cond,
-  cond_code=cond)
+logging.info("Make trace explorer figures of %s patients", cond)
+col_dic = trace_explorer(con,cond)
+con.close()
 ```
 
 ```{r}
@@ -1971,10 +2037,13 @@ col_dic = trace_explorer(
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
-                                    here("outputs",sprintf(
-                                      "eventlog_filtered_%s.csv",cond)))),
-                       0.25,cond)
+log_info('Make process maps figures of different clusters of {cond} patients')
+con <- dbConnect(duckdb(), dbdir = db_path)
+process_map_by_cluster(
+  load_log(con,
+           paste0("SELECT * FROM eventlog_",cond,"_clust_filtered")),
+  0.25,cond)
+dbDisconnect(con, shutdown = TRUE)
 ```
 
 ::: {#fig-cluster0_else .column-page layout-ncol="2"}
@@ -1995,11 +2064,12 @@ Once traces are clusterized, with a boxplot is easy to show that each cluster's 
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+logging.info("Make conformance checking analysis of %s patients", cond)
+con = duckdb.connect(db_path)
+conformance(con,cond,
             pn_file='./PN_%s.pnml' % cond,
             pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond,
-            output_csv='../../outputs/fitness_by_cluster_%s.csv' % cond)
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
 ```
 
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_else.png){#fig-fitness_by_cluster_else fig-align="center" width="80%"}
@@ -2014,14 +2084,16 @@ In @fig-decision_tree_else is shown how patients' age, sex and copayment would i
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-
-patients_df = pd.read_csv('../../outputs/dm_patients_df_%s.csv' % cond)
-patients_df["patient_id"]= patients_df["patient_id"].astype(str)
-decision_tree_pn_place(patients_df,
-  event_log_file="../../outputs/eventlog_%s.xes" % cond,
-  pn_file='./PN_%s.pnml' % cond,
-  cond_code=cond,
-  place2analyze='place1')
+logging.info("Make decision making analysis of %s patients", cond)
+try:
+  decision_tree_pn_place(con,cond,
+    pn_file='./PN_%s.pnml' % cond,
+    place2analyze='place1')
+except Exception as Argument:
+  logging.warning(
+    "Error occurred when executing decision mining: %s",str(Argument))
+  pass
+con.close()
 ```
 
 ![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_else.png){#fig-decision_tree_else fig-align="center" width="80%"}
@@ -2036,37 +2108,36 @@ In the next example, for simplicity, we choose fitness, age, sex and copayment t
 
 ```{python}
 #| label: create fitness by period table (else)
-#| eval: TRUE
+#| eval: FALSE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-
-id2fitness_by_interval(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+con = duckdb.connect(db_path)
+id2fitness_by_interval(con, cond,
             pn_file='./PN_%s.pnml' % cond,
             ini_place='place100',fin_place='place111',
-            fixed_period_time=90,
-            output_csv='../../outputs/fitness_by_period_%s.csv' % cond)
+            fixed_period_time=90)
+con.close()
 ```
 
 ```{r}
 #| label: JLCM model (else)
-#| eval: TRUE
+#| eval: FALSE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-df_fitness <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs",sprintf("fitness_by_period_%s.csv",
-                                                   cond))))
-#df_fitness <- read.csv("C:/Users/D463112/Desktop/pruebas/CONCEPT-DIABETES/outputs/fitness_by_period_else.csv")
-#df_patient <- read.csv("C:/Users/D463112/Desktop/pruebas/CONCEPT-DIABETES/outputs/dm_patients_df_else.csv")
-df_patient <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs",sprintf("dm_patients_df_%s.csv",
-                                                   cond))))
-df <- merge(x=df_patient[c('patient_id','age','sex','copayment','fin_cause')],
-            y=df_fitness[c('ID','t_0','t_1','fitness','status')],  
-            by.x=c("patient_id"), 
-            by.y=c("ID"),
-            all.x=FALSE)
+con <- dbConnect(duckdb(), dbdir = db_path)
+
+#df_fitness <- con.sql(f"SELECT * FROM period2fitness_{cond}")
+#df_patient <- read.csv(gsub("src/analysis-scripts/","",
+#                            here("outputs",sprintf("dm_patients_df_%s.csv",
+#                                                   cond))))
+#df <- merge(x=df_patient[c('patient_id','age','sex','copayment','fin_cause')],
+#            y=df_fitness[c('ID','t_0','t_1','fitness','status')],  
+#            by.x=c("patient_id"), 
+#            by.y=c("ID"),
+#            all.x=FALSE)
+df <- dbExecute(con, paste0("SELECT period2fitness_",cond,".ID,period2fitness_",cond,".t_0,period2fitness_",cond,".t_1,period2fitness_",cond,".fitness,period2fitness_",cond,".status,patient_incidents_view.age,patient_incidents_view.sex,patient_incidents_view.copayment,patient_incidents_view.fin_cause FROM period2fitness_",cond," LEFT JOIN patient_incidents_view ON period2fitness_",cond,".ID=patient_incidents_view.patient_id"))
 df$sex <- as.factor(df$sex)
 df$ID2 <- as.numeric(as.factor(df$patient_id))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
@@ -2121,6 +2192,7 @@ plot(model.pred, bty = "l", ylim = c(0, 1), legend.loc = FALSE,
 plot(model, which = "survival", lwd = 2, legend.loc = FALSE, bty = "l",
      xlab = "days", ylab = "event-free probability",col=c("red","navy","green"))
 
+dbDisconnect(con, shutdown = TRUE)
 
 ```
 
@@ -2152,22 +2224,20 @@ cond <- 'ecv'
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-notnan_p = select_by_condition(cond)
+con = duckdb.connect(db_path)
 if notnan_p>0.98:
+  logging.info("Generate event log of %s patients from prescriptions", cond)
   evlog_creation_prescriptions(
-    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
-    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
-    code2drug_path='./diabetes_drugs.csv',
-    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+    con=con,
+    cond=cond,
+    code2drug_path='./diabetes_drugs.csv')
 else:
+  logging.info("Generate event log of %s patients from dispensations", cond)
   evlog_creation_dispensations(
-    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
-    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
+    con=con,
+    cond=cond,
     code2drug_path='./diabetes_drugs.csv',
-    nac_path='./Nomenclator_de_Facturacion.csv',
-    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+    nac_path='./Nomenclator_de_Facturacion.csv')
 ```
 
 ```{python}
@@ -2176,54 +2246,15 @@ else:
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-df_ = pd.read_csv('../../outputs/eventlog_raw_%s.csv' % cond, 
-                  index_col=0)[['ID','date','cycle','nid','actins','Event']]
+logging.info("Filter event log of %s patients", cond)
+df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
 
-def df2dict(df_,ev_col='Event',id_col ='ID'):
-  '''Filtering length=2 traces and obtain id2trace dict
-    
-    Args:
-      df_ (dataframe): event log 
-      id_col (str): patients' id column's name in log
-      ev_col (str): events column's name in log
-    Returns:
-      df (dataframe): filtered event log (without cycle sense)
-      df_ (dataframe): filtered event log
-      id2trace_ (dict): patients' ids as keys and their traces (list) as values
-  '''
-  df = df_[df_['cycle']=='start']
-  df.index = range(len(df))
-  id2trace_ = dict()            
-  for id in set(df[id_col]):       
-      id2trace_[id] = list(df[ev_col][df[id_col] == id])
- 
-  #drop len<=2 traces
-  del_list = []
-  for i in range(len(df)):
-      if  len(id2trace_[df[id_col][i]])<=2 :
-          del_list.append(i)
-  for i in del_list:
-      try:
-          del id2trace_[df[id_col][i]]
-      except:
-          continue
-  df = df.drop(del_list, axis=0)
-  df.index = range(len(df))
-
-  del_list2 = []
-  for id in set(df_[id_col]):
-      if id not in id2trace_:
-          del_list2+= list(df_[df_[id_col]==id].index)
-  df_ = df_.drop(del_list2, axis=0)
-  df_.index = range(len(df_))
-  
-  return df,df_,id2trace_
-
-df,df_, id2trace = df2dict(df_)
-df_.to_csv("../../outputs/eventlog_%s.csv" % cond)
+df_, id2trace = df2dict(df_)
+con.sql(f"DROP TABLE IF EXISTS eventlog_{cond}")
+con.sql(f"CREATE TABLE eventlog_{cond} AS SELECT * FROM df_")
 patients = sorted(id2trace.keys())
 traces = list(id2trace[id] for id in patients)     
-del df
+con.close()
 ```
 
 ```{r}
@@ -2232,9 +2263,10 @@ del df
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-evLog <- load_csv_log(gsub("src/analysis-scripts/","",
-                           here("outputs",sprintf("eventlog_%s.csv",
-                                                  cond))))
+log_info('Load {cond} eventlog')
+con <- dbConnect(duckdb(), dbdir = db_path)
+evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
+dbDisconnect(con, shutdown = TRUE)
 ```
 
 Choosing patients with a cardiovascular disease and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
@@ -2245,6 +2277,7 @@ Choosing patients with a cardiovascular disease and after some preprocessing we 
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+log_info('Make {cond} process map')
 make_process_map(evLog,1,gsub("src/analysis-scripts/","",
                               here("outputs",sprintf("evlog_pm_1_%s.png",
                                                      cond))))
@@ -2271,6 +2304,7 @@ make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+log_info('Make activity presence of {cond} patients')
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("activity_presence_%s.png",
                                          cond))),
@@ -2289,6 +2323,7 @@ dev.off()
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+logging.info("Make distance matrix of %s patients", cond)
 measure_f = textdistance.jaccard
 dm = calculate_dm_ED(traces,measure_f)
 ```
@@ -2297,7 +2332,7 @@ dm = calculate_dm_ED(traces,measure_f)
 #| label: dendograms (ecv)
 #| eval: TRUE
 #| echo: FALSE
-
+logging.info("Make dendogram of %s patients", cond)
 dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
 
@@ -2306,6 +2341,7 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| eval: TRUE
 #| echo: FALSE
 #| output: TRUE
+logging.info("Make k-elbow figure of %s patients", cond)
 if len(traces)>25:
   n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
@@ -2321,9 +2357,9 @@ else:
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-clust(n_clusters,dm,df_,id2trace,patients,
-      output_xes='../../outputs/eventlog_%s.xes' % cond,
-      output_csv='../../outputs/eventlog_%s.csv' % cond)
+logging.info("Make clustering of %s patients", cond)
+con = duckdb.connect(db_path)
+clust(con,cond,n_clusters,dm,df_,id2trace,patients)
 del dm
 del df_
 ```
@@ -2334,10 +2370,9 @@ del df_
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-col_dic = trace_explorer(
-  evlog_file='../../outputs/eventlog_filtered_%s.xes' % cond,
-  cond_code=cond,
-  color_dict=col_dic)
+logging.info("Make trace explorer figures of %s patients", cond)
+col_dic = trace_explorer(con,cond,color_dict=col_dic)
+con.close()
 ```
 
 ```{r}
@@ -2346,10 +2381,13 @@ col_dic = trace_explorer(
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
-                                    here("outputs",sprintf(
-                                      "eventlog_filtered_%s.csv",cond)))),
-                       0.25,cond)
+log_info('Make process maps figures of different clusters of {cond} patients')
+con <- dbConnect(duckdb(), dbdir = db_path)
+process_map_by_cluster(
+  load_log(con,
+           paste0("SELECT * FROM eventlog_",cond,"_clust_filtered")),
+  0.25,cond)
+dbDisconnect(con, shutdown = TRUE)
 ```
 
 ::: {#fig-cluster0_ecv .column-page layout-ncol="2"}
@@ -2368,11 +2406,12 @@ Cluster 0
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+logging.info("Make conformance checking analysis of %s patients", cond)
+con = duckdb.connect(db_path)
+conformance(con,cond,
             pn_file='./PN_%s.pnml' % cond,
             pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond,
-            output_csv='../../outputs/fitness_by_cluster_%s.csv' % cond)
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
 ```
 
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ecv.png){#fig-fitness_by_cluster_ecv fig-align="center" width="80%"}
@@ -2385,14 +2424,16 @@ conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-
-patients_df = pd.read_csv('../../outputs/dm_patients_df_%s.csv' % cond)
-patients_df["patient_id"]= patients_df["patient_id"].astype(str)
-decision_tree_pn_place(patients_df,
-  event_log_file="../../outputs/eventlog_%s.xes" % cond,
-  pn_file='./PN_%s.pnml' % cond,
-  cond_code=cond,
-  place2analyze='place1')
+logging.info("Make decision making analysis of %s patients", cond)
+try:
+  decision_tree_pn_place(con,cond,
+    pn_file='./PN_%s.pnml' % cond,
+    place2analyze='place1')
+except Exception as Argument:
+  logging.warning(
+    "Error occurred when executing decision mining: %s",str(Argument))
+  pass
+con.close()
 ```
 
 ![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_ecv.png){#fig-decision_tree_ecv fig-align="center" width="80%"}
@@ -2428,22 +2469,20 @@ cond <- 'ic'
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-notnan_p = select_by_condition(cond)
+con = duckdb.connect(db_path)
 if notnan_p>0.98:
+  logging.info("Generate event log of %s patients from prescriptions", cond)
   evlog_creation_prescriptions(
-    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
-    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
-    code2drug_path='./diabetes_drugs.csv',
-    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+    con=con,
+    cond=cond,
+    code2drug_path='./diabetes_drugs.csv')
 else:
+  logging.info("Generate event log of %s patients from dispensations", cond)
   evlog_creation_dispensations(
-    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
-    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
+    con=con,
+    cond=cond,
     code2drug_path='./diabetes_drugs.csv',
-    nac_path='./Nomenclator_de_Facturacion.csv',
-    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+    nac_path='./Nomenclator_de_Facturacion.csv')
 ```
 
 ```{python}
@@ -2452,54 +2491,15 @@ else:
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-df_ = pd.read_csv('../../outputs/eventlog_raw_%s.csv' % cond, 
-                  index_col=0)[['ID','date','cycle','nid','actins','Event']]
+logging.info("Filter event log of %s patients", cond)
+df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
 
-def df2dict(df_,ev_col='Event',id_col ='ID'):
-  '''Filtering length=2 traces and obtain id2trace dict
-    
-    Args:
-      df_ (dataframe): event log 
-      id_col (str): patients' id column's name in log
-      ev_col (str): events column's name in log
-    Returns:
-      df (dataframe): filtered event log (without cycle sense)
-      df_ (dataframe): filtered event log
-      id2trace_ (dict): patients' ids as keys and their traces (list) as values
-  '''
-  df = df_[df_['cycle']=='start']
-  df.index = range(len(df))
-  id2trace_ = dict()            
-  for id in set(df[id_col]):       
-      id2trace_[id] = list(df[ev_col][df[id_col] == id])
- 
-  #drop len<=2 traces
-  del_list = []
-  for i in range(len(df)):
-      if  len(id2trace_[df[id_col][i]])<=2 :
-          del_list.append(i)
-  for i in del_list:
-      try:
-          del id2trace_[df[id_col][i]]
-      except:
-          continue
-  df = df.drop(del_list, axis=0)
-  df.index = range(len(df))
-
-  del_list2 = []
-  for id in set(df_[id_col]):
-      if id not in id2trace_:
-          del_list2+= list(df_[df_[id_col]==id].index)
-  df_ = df_.drop(del_list2, axis=0)
-  df_.index = range(len(df_))
-  
-  return df,df_,id2trace_
-
-df,df_, id2trace = df2dict(df_)
-df_.to_csv("../../outputs/eventlog_%s.csv" % cond)
+df_, id2trace = df2dict(df_)
+con.sql(f"DROP TABLE IF EXISTS eventlog_{cond}")
+con.sql(f"CREATE TABLE eventlog_{cond} AS SELECT * FROM df_")
 patients = sorted(id2trace.keys())
 traces = list(id2trace[id] for id in patients)     
-del df
+con.close()
 ```
 
 ```{r}
@@ -2508,9 +2508,10 @@ del df
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-evLog <- load_csv_log(gsub("src/analysis-scripts/","",
-                           here("outputs",sprintf("eventlog_%s.csv",
-                                                  cond))))
+log_info('Load {cond} eventlog')
+con <- dbConnect(duckdb(), dbdir = db_path)
+evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
+dbDisconnect(con, shutdown = TRUE)
 ```
 
 Choosing patients with heart failure and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
@@ -2521,6 +2522,7 @@ Choosing patients with heart failure and after some preprocessing we obtain a ne
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+log_info('Make {cond} process map')
 make_process_map(evLog,1,gsub("src/analysis-scripts/","",
                               here("outputs",sprintf("evlog_pm_1_%s.png",
                                                      cond))))
@@ -2547,6 +2549,7 @@ make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+log_info('Make activity presence of {cond} patients')
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("activity_presence_%s.png",
                                          cond))),
@@ -2565,6 +2568,7 @@ dev.off()
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+logging.info("Make distance matrix of %s patients", cond)
 measure_f = textdistance.jaccard
 dm = calculate_dm_ED(traces,measure_f)
 ```
@@ -2573,7 +2577,7 @@ dm = calculate_dm_ED(traces,measure_f)
 #| label: dendograms (ic)
 #| eval: TRUE
 #| echo: FALSE
-
+logging.info("Make dendogram of %s patients", cond)
 dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
 
@@ -2582,6 +2586,7 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| eval: TRUE
 #| echo: FALSE
 #| output: TRUE
+logging.info("Make k-elbow figure of %s patients", cond)
 if len(traces)>25:
   n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
@@ -2597,9 +2602,9 @@ else:
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-clust(n_clusters,dm,df_,id2trace,patients,
-      output_xes='../../outputs/eventlog_%s.xes' % cond,
-      output_csv='../../outputs/eventlog_%s.csv' % cond)
+logging.info("Make clustering of %s patients", cond)
+con = duckdb.connect(db_path)
+clust(con,cond,n_clusters,dm,df_,id2trace,patients)
 del dm
 del df_
 ```
@@ -2610,10 +2615,9 @@ del df_
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-col_dic = trace_explorer(
-  evlog_file='../../outputs/eventlog_filtered_%s.xes' % cond,
-  cond_code=cond,
-  color_dict=col_dic)
+logging.info("Make trace explorer figures of %s patients", cond)
+col_dic = trace_explorer(con,cond,color_dict=col_dic)
+con.close()
 ```
 
 ```{r}
@@ -2622,10 +2626,13 @@ col_dic = trace_explorer(
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
-                                    here("outputs",sprintf(
-                                      "eventlog_filtered_%s.csv",cond)))),
-                       0.25,cond)
+log_info('Make process maps figures of different clusters of {cond} patients')
+con <- dbConnect(duckdb(), dbdir = db_path)
+process_map_by_cluster(
+  load_log(con,
+           paste0("SELECT * FROM eventlog_",cond,"_clust_filtered")),
+  0.25,cond)
+dbDisconnect(con, shutdown = TRUE)
 ```
 
 ::: {#fig-cluster0_ic .column-page layout-ncol="2"}
@@ -2644,11 +2651,12 @@ Cluster 0
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+logging.info("Make conformance checking analysis of %s patients", cond)
+con = duckdb.connect(db_path)
+conformance(con,cond,
             pn_file='./PN_%s.pnml' % cond,
             pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond,
-            output_csv='../../outputs/fitness_by_cluster_%s.csv' % cond)
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
 ```
 
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ic.png){#fig-fitness_by_cluster_ic fig-align="center" width="80%"}
@@ -2661,14 +2669,16 @@ conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-
-patients_df = pd.read_csv('../../outputs/dm_patients_df_%s.csv' % cond)
-patients_df["patient_id"]= patients_df["patient_id"].astype(str)
-decision_tree_pn_place(patients_df,
-  event_log_file="../../outputs/eventlog_%s.xes" % cond,
-  pn_file='./PN_%s.pnml' % cond,
-  cond_code=cond,
-  place2analyze='place3')
+logging.info("Make decision making analysis of %s patients", cond)
+try:
+  decision_tree_pn_place(con,cond,
+    pn_file='./PN_%s.pnml' % cond,
+    place2analyze='place1')
+except Exception as Argument:
+  logging.warning(
+    "Error occurred when executing decision mining: %s",str(Argument))
+  pass
+con.close()
 ```
 
 ![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_ic.png){#fig-decision_tree_ic fig-align="center" width="80%"}
@@ -2704,22 +2714,20 @@ cond <- 'erc'
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-notnan_p = select_by_condition(cond)
+con = duckdb.connect(db_path)
 if notnan_p>0.98:
+  logging.info("Generate event log of %s patients from prescriptions", cond)
   evlog_creation_prescriptions(
-    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
-    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
-    code2drug_path='./diabetes_drugs.csv',
-    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+    con=con,
+    cond=cond,
+    code2drug_path='./diabetes_drugs.csv')
 else:
+  logging.info("Generate event log of %s patients from dispensations", cond)
   evlog_creation_dispensations(
-    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
-    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
+    con=con,
+    cond=cond,
     code2drug_path='./diabetes_drugs.csv',
-    nac_path='./Nomenclator_de_Facturacion.csv',
-    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+    nac_path='./Nomenclator_de_Facturacion.csv')
 ```
 
 ```{python}
@@ -2728,54 +2736,15 @@ else:
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-df_ = pd.read_csv('../../outputs/eventlog_raw_%s.csv' % cond, 
-                  index_col=0)[['ID','date','cycle','nid','actins','Event']]
+logging.info("Filter event log of %s patients", cond)
+df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
 
-def df2dict(df_,ev_col='Event',id_col ='ID'):
-  '''Filtering length=2 traces and obtain id2trace dict
-    
-    Args:
-      df_ (dataframe): event log 
-      id_col (str): patients' id column's name in log
-      ev_col (str): events column's name in log
-    Returns:
-      df (dataframe): filtered event log (without cycle sense)
-      df_ (dataframe): filtered event log
-      id2trace_ (dict): patients' ids as keys and their traces (list) as values
-  '''
-  df = df_[df_['cycle']=='start']
-  df.index = range(len(df))
-  id2trace_ = dict()            
-  for id in set(df[id_col]):       
-      id2trace_[id] = list(df[ev_col][df[id_col] == id])
- 
-  #drop len<=2 traces
-  del_list = []
-  for i in range(len(df)):
-      if  len(id2trace_[df[id_col][i]])<=2 :
-          del_list.append(i)
-  for i in del_list:
-      try:
-          del id2trace_[df[id_col][i]]
-      except:
-          continue
-  df = df.drop(del_list, axis=0)
-  df.index = range(len(df))
-
-  del_list2 = []
-  for id in set(df_[id_col]):
-      if id not in id2trace_:
-          del_list2+= list(df_[df_[id_col]==id].index)
-  df_ = df_.drop(del_list2, axis=0)
-  df_.index = range(len(df_))
-  
-  return df,df_,id2trace_
-
-df,df_, id2trace = df2dict(df_)
-df_.to_csv("../../outputs/eventlog_%s.csv" % cond)
+df_, id2trace = df2dict(df_)
+con.sql(f"DROP TABLE IF EXISTS eventlog_{cond}")
+con.sql(f"CREATE TABLE eventlog_{cond} AS SELECT * FROM df_")
 patients = sorted(id2trace.keys())
 traces = list(id2trace[id] for id in patients)     
-del df
+con.close()
 ```
 
 ```{r}
@@ -2784,9 +2753,10 @@ del df
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-evLog <- load_csv_log(gsub("src/analysis-scripts/","",
-                           here("outputs",sprintf("eventlog_%s.csv",
-                                                  cond))))
+log_info('Load {cond} eventlog')
+con <- dbConnect(duckdb(), dbdir = db_path)
+evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
+dbDisconnect(con, shutdown = TRUE)
 ```
 
 Choosing patients with chronic kidney disease and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
@@ -2797,6 +2767,7 @@ Choosing patients with chronic kidney disease and after some preprocessing we ob
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+log_info('Make {cond} process map')
 make_process_map(evLog,1,gsub("src/analysis-scripts/","",
                               here("outputs",sprintf("evlog_pm_1_%s.png",
                                                      cond))))
@@ -2823,6 +2794,7 @@ make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+log_info('Make activity presence of {cond} patients')
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("activity_presence_%s.png",
                                          cond))),
@@ -2841,6 +2813,7 @@ dev.off()
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+logging.info("Make distance matrix of %s patients", cond)
 measure_f = textdistance.jaccard
 dm = calculate_dm_ED(traces,measure_f)
 ```
@@ -2849,7 +2822,7 @@ dm = calculate_dm_ED(traces,measure_f)
 #| label: dendograms (erc)
 #| eval: TRUE
 #| echo: FALSE
-
+logging.info("Make dendogram of %s patients", cond)
 dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
 
@@ -2858,6 +2831,7 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| eval: TRUE
 #| echo: FALSE
 #| output: TRUE
+logging.info("Make k-elbow figure of %s patients", cond)
 if len(traces)>25:
   n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
@@ -2873,9 +2847,9 @@ else:
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-clust(n_clusters,dm,df_,id2trace,patients,
-      output_xes='../../outputs/eventlog_%s.xes' % cond,
-      output_csv='../../outputs/eventlog_%s.csv' % cond)
+logging.info("Make clustering of %s patients", cond)
+con = duckdb.connect(db_path)
+clust(con,cond,n_clusters,dm,df_,id2trace,patients)
 del dm
 del df_
 ```
@@ -2886,10 +2860,9 @@ del df_
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-col_dic = trace_explorer(
-  evlog_file='../../outputs/eventlog_filtered_%s.xes' % cond,
-  cond_code=cond,
-  color_dict=col_dic)
+logging.info("Make trace explorer figures of %s patients", cond)
+col_dic = trace_explorer(con,cond,color_dict=col_dic)
+con.close()
 ```
 
 ```{r}
@@ -2898,10 +2871,13 @@ col_dic = trace_explorer(
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
-                                    here("outputs",sprintf(
-                                      "eventlog_filtered_%s.csv",cond)))),
-                       0.25,cond)
+log_info('Make process maps figures of different clusters of {cond} patients')
+con <- dbConnect(duckdb(), dbdir = db_path)
+process_map_by_cluster(
+  load_log(con,
+           paste0("SELECT * FROM eventlog_",cond,"_clust_filtered")),
+  0.25,cond)
+dbDisconnect(con, shutdown = TRUE)
 ```
 
 ::: {#fig-cluster0_erc .column-page layout-ncol="2"}
@@ -2920,11 +2896,12 @@ Cluster 0
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+logging.info("Make conformance checking analysis of %s patients", cond)
+con = duckdb.connect(db_path)
+conformance(con,cond,
             pn_file='./PN_%s.pnml' % cond,
             pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond,
-            output_csv='../../outputs/fitness_by_cluster_%s.csv' % cond)
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
 ```
 
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_erc.png){#fig-fitness_by_cluster_erc fig-align="center" width="80%"}
@@ -2937,14 +2914,16 @@ conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-
-patients_df = pd.read_csv('../../outputs/dm_patients_df_%s.csv' % cond)
-patients_df["patient_id"]= patients_df["patient_id"].astype(str)
-decision_tree_pn_place(patients_df,
-  event_log_file="../../outputs/eventlog_%s.xes" % cond,
-  pn_file='./PN_%s.pnml' % cond,
-  cond_code=cond,
-  place2analyze='place1')
+logging.info("Make decision making analysis of %s patients", cond)
+try:
+  decision_tree_pn_place(con,cond,
+    pn_file='./PN_%s.pnml' % cond,
+    place2analyze='place1')
+except Exception as Argument:
+  logging.warning(
+    "Error occurred when executing decision mining: %s",str(Argument))
+  pass
+con.close()
 
 ```
 
@@ -2981,22 +2960,20 @@ cond <- 'f'
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-notnan_p = select_by_condition(cond)
+con = duckdb.connect(db_path)
 if notnan_p>0.98:
+  logging.info("Generate event log of %s patients from prescriptions", cond)
   evlog_creation_prescriptions(
-    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
-    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
-    code2drug_path='./diabetes_drugs.csv',
-    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+    con=con,
+    cond=cond,
+    code2drug_path='./diabetes_drugs.csv')
 else:
+  logging.info("Generate event log of %s patients from dispensations", cond)
   evlog_creation_dispensations(
-    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
-    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
+    con=con,
+    cond=cond,
     code2drug_path='./diabetes_drugs.csv',
-    nac_path='./Nomenclator_de_Facturacion.csv',
-    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+    nac_path='./Nomenclator_de_Facturacion.csv')
 ```
 
 ```{python}
@@ -3005,54 +2982,15 @@ else:
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-df_ = pd.read_csv('../../outputs/eventlog_raw_%s.csv' % cond, 
-                  index_col=0)[['ID','date','cycle','nid','actins','Event']]
+logging.info("Filter event log of %s patients", cond)
+df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
 
-def df2dict(df_,ev_col='Event',id_col ='ID'):
-  '''Filtering length=2 traces and obtain id2trace dict
-    
-    Args:
-      df_ (dataframe): event log 
-      id_col (str): patients' id column's name in log
-      ev_col (str): events column's name in log
-    Returns:
-      df (dataframe): filtered event log (without cycle sense)
-      df_ (dataframe): filtered event log
-      id2trace_ (dict): patients' ids as keys and their traces (list) as values
-  '''
-  df = df_[df_['cycle']=='start']
-  df.index = range(len(df))
-  id2trace_ = dict()            
-  for id in set(df[id_col]):       
-      id2trace_[id] = list(df[ev_col][df[id_col] == id])
- 
-  #drop len<=2 traces
-  del_list = []
-  for i in range(len(df)):
-      if  len(id2trace_[df[id_col][i]])<=2 :
-          del_list.append(i)
-  for i in del_list:
-      try:
-          del id2trace_[df[id_col][i]]
-      except:
-          continue
-  df = df.drop(del_list, axis=0)
-  df.index = range(len(df))
-
-  del_list2 = []
-  for id in set(df_[id_col]):
-      if id not in id2trace_:
-          del_list2+= list(df_[df_[id_col]==id].index)
-  df_ = df_.drop(del_list2, axis=0)
-  df_.index = range(len(df_))
-  
-  return df,df_,id2trace_
-
-df,df_, id2trace = df2dict(df_)
-df_.to_csv("../../outputs/eventlog_%s.csv" % cond)
+df_, id2trace = df2dict(df_)
+con.sql(f"DROP TABLE IF EXISTS eventlog_{cond}")
+con.sql(f"CREATE TABLE eventlog_{cond} AS SELECT * FROM df_")
 patients = sorted(id2trace.keys())
 traces = list(id2trace[id] for id in patients)     
-del df
+con.close()
 ```
 
 ```{r}
@@ -3061,9 +2999,10 @@ del df
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-evLog <- load_csv_log(gsub("src/analysis-scripts/","",
-                           here("outputs",sprintf("eventlog_%s.csv",
-                                                  cond))))
+log_info('Load {cond} eventlog')
+con <- dbConnect(duckdb(), dbdir = db_path)
+evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
+dbDisconnect(con, shutdown = TRUE)
 ```
 
 Choosing patients with frailty and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
@@ -3074,6 +3013,7 @@ Choosing patients with frailty and after some preprocessing we obtain a new even
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+log_info('Make {cond} process map')
 make_process_map(evLog,1,gsub("src/analysis-scripts/","",
                               here("outputs",sprintf("evlog_pm_1_%s.png",
                                                      cond))))
@@ -3100,6 +3040,7 @@ make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+log_info('Make activity presence of {cond} patients')
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("activity_presence_%s.png",
                                          cond))),
@@ -3118,6 +3059,7 @@ dev.off()
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+logging.info("Make distance matrix of %s patients", cond)
 measure_f = textdistance.jaccard
 dm = calculate_dm_ED(traces,measure_f)
 ```
@@ -3126,7 +3068,7 @@ dm = calculate_dm_ED(traces,measure_f)
 #| label: dendograms (f)
 #| eval: TRUE
 #| echo: FALSE
-
+logging.info("Make dendogram of %s patients", cond)
 dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
 
@@ -3135,6 +3077,7 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| eval: TRUE
 #| echo: FALSE
 #| output: TRUE
+logging.info("Make k-elbow figure of %s patients", cond)
 if len(traces)>25:
   n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
@@ -3150,9 +3093,9 @@ else:
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-clust(n_clusters,dm,df_,id2trace,patients,
-      output_xes='../../outputs/eventlog_%s.xes' % cond,
-      output_csv='../../outputs/eventlog_%s.csv' % cond)
+logging.info("Make clustering of %s patients", cond)
+con = duckdb.connect(db_path)
+clust(con,cond,n_clusters,dm,df_,id2trace,patients)
 del dm
 del df_
 ```
@@ -3163,10 +3106,9 @@ del df_
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-col_dic = trace_explorer(
-  evlog_file='../../outputs/eventlog_filtered_%s.xes' % cond,
-  cond_code=cond,
-  color_dict=col_dic)
+logging.info("Make trace explorer figures of %s patients", cond)
+col_dic = trace_explorer(con,cond,color_dict=col_dic)
+con.close()
 ```
 
 ```{r}
@@ -3175,10 +3117,13 @@ col_dic = trace_explorer(
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
-                                    here("outputs",sprintf(
-                                      "eventlog_filtered_%s.csv",cond)))),
-                       0.25,cond)
+log_info('Make process maps figures of different clusters of {cond} patients')
+con <- dbConnect(duckdb(), dbdir = db_path)
+process_map_by_cluster(
+  load_log(con,
+           paste0("SELECT * FROM eventlog_",cond,"_clust_filtered")),
+  0.25,cond)
+dbDisconnect(con, shutdown = TRUE)
 ```
 
 ::: {#fig-cluster0_f .column-page layout-ncol="2"}
@@ -3197,11 +3142,12 @@ Cluster 0
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+logging.info("Make conformance checking analysis of %s patients", cond)
+con = duckdb.connect(db_path)
+conformance(con,cond,
             pn_file='./PN_%s.pnml' % cond,
             pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond,
-            output_csv='../../outputs/fitness_by_cluster_%s.csv' % cond)
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
 ```
 
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_f.png){#fig-fitness_by_cluster_f fig-align="center" width="80%"}
@@ -3214,14 +3160,16 @@ conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-
-patients_df = pd.read_csv('../../outputs/dm_patients_df_%s.csv' % cond)
-patients_df["patient_id"]= patients_df["patient_id"].astype(str)
-decision_tree_pn_place(patients_df,
-  event_log_file="../../outputs/eventlog_%s.xes" % cond,
-  pn_file='./PN_%s.pnml' % cond,
-  cond_code=cond,
-  place2analyze='place9')
+logging.info("Make decision making analysis of %s patients", cond)
+try:
+  decision_tree_pn_place(con,cond,
+    pn_file='./PN_%s.pnml' % cond,
+    place2analyze='place1')
+except Exception as Argument:
+  logging.warning(
+    "Error occurred when executing decision mining: %s",str(Argument))
+  pass
+con.close()
 ```
 
 ![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_f.png){#fig-decision_tree_f fig-align="center" width="80%"}
@@ -3257,22 +3205,20 @@ cond <- 'ob'
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-notnan_p = select_by_condition(cond)
+con = duckdb.connect(db_path)
 if notnan_p>0.98:
+  logging.info("Generate event log of %s patients from prescriptions", cond)
   evlog_creation_prescriptions(
-    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,
-    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
-    code2drug_path='./diabetes_drugs.csv',
-    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+    con=con,
+    cond=cond,
+    code2drug_path='./diabetes_drugs.csv')
 else:
+  logging.info("Generate event log of %s patients from dispensations", cond)
   evlog_creation_dispensations(
-    treat_df_path='../../outputs/dm_treat_df_%s.csv' % cond,
-    param_df_path='../../outputs/dm_param_df_%s.csv' % cond,        
-    patients_df_path='../../outputs/dm_patients_df_%s.csv' % cond,
+    con=con,
+    cond=cond,
     code2drug_path='./diabetes_drugs.csv',
-    nac_path='./Nomenclator_de_Facturacion.csv',
-    output_file='../../outputs/eventlog_raw_%s.csv' % cond)
+    nac_path='./Nomenclator_de_Facturacion.csv')
 ```
 
 ```{python}
@@ -3281,54 +3227,15 @@ else:
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-df_ = pd.read_csv('../../outputs/eventlog_raw_%s.csv' % cond, 
-                  index_col=0)[['ID','date','cycle','nid','actins','Event']]
+logging.info("Filter event log of %s patients", cond)
+df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
 
-def df2dict(df_,ev_col='Event',id_col ='ID'):
-  '''Filtering length=2 traces and obtain id2trace dict
-    
-    Args:
-      df_ (dataframe): event log 
-      id_col (str): patients' id column's name in log
-      ev_col (str): events column's name in log
-    Returns:
-      df (dataframe): filtered event log (without cycle sense)
-      df_ (dataframe): filtered event log
-      id2trace_ (dict): patients' ids as keys and their traces (list) as values
-  '''
-  df = df_[df_['cycle']=='start']
-  df.index = range(len(df))
-  id2trace_ = dict()            
-  for id in set(df[id_col]):       
-      id2trace_[id] = list(df[ev_col][df[id_col] == id])
- 
-  #drop len<=2 traces
-  del_list = []
-  for i in range(len(df)):
-      if  len(id2trace_[df[id_col][i]])<=2 :
-          del_list.append(i)
-  for i in del_list:
-      try:
-          del id2trace_[df[id_col][i]]
-      except:
-          continue
-  df = df.drop(del_list, axis=0)
-  df.index = range(len(df))
-
-  del_list2 = []
-  for id in set(df_[id_col]):
-      if id not in id2trace_:
-          del_list2+= list(df_[df_[id_col]==id].index)
-  df_ = df_.drop(del_list2, axis=0)
-  df_.index = range(len(df_))
-  
-  return df,df_,id2trace_
-
-df,df_, id2trace = df2dict(df_)
-df_.to_csv("../../outputs/eventlog_%s.csv" % cond)
+df_, id2trace = df2dict(df_)
+con.sql(f"DROP TABLE IF EXISTS eventlog_{cond}")
+con.sql(f"CREATE TABLE eventlog_{cond} AS SELECT * FROM df_")
 patients = sorted(id2trace.keys())
 traces = list(id2trace[id] for id in patients)     
-del df
+con.close()
 ```
 
 ```{r}
@@ -3337,9 +3244,10 @@ del df
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-evLog <- load_csv_log(gsub("src/analysis-scripts/","",
-                           here("outputs",sprintf("eventlog_%s.csv",
-                                                  cond))))
+log_info('Load {cond} eventlog')
+con <- dbConnect(duckdb(), dbdir = db_path)
+evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
+dbDisconnect(con, shutdown = TRUE)
 ```
 
 Choosing patients with obesity and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
@@ -3350,6 +3258,7 @@ Choosing patients with obesity and after some preprocessing we obtain a new even
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+log_info('Make {cond} process map')
 make_process_map(evLog,1,gsub("src/analysis-scripts/","",
                               here("outputs",sprintf("evlog_pm_1_%s.png",
                                                      cond))))
@@ -3376,6 +3285,7 @@ make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+log_info('Make activity presence of {cond} patients')
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("activity_presence_%s.png",
                                          cond))),
@@ -3394,6 +3304,7 @@ dev.off()
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+logging.info("Make distance matrix of %s patients", cond)
 measure_f = textdistance.jaccard
 dm = calculate_dm_ED(traces,measure_f)
 ```
@@ -3402,7 +3313,7 @@ dm = calculate_dm_ED(traces,measure_f)
 #| label: dendograms (ob)
 #| eval: TRUE
 #| echo: FALSE
-
+logging.info("Make dendogram of %s patients", cond)
 dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
 
@@ -3411,6 +3322,7 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| eval: TRUE
 #| echo: FALSE
 #| output: TRUE
+logging.info("Make k-elbow figure of %s patients", cond)
 if len(traces)>25:
   n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
@@ -3426,9 +3338,9 @@ else:
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-clust(n_clusters,dm,df_,id2trace,patients,
-      output_xes='../../outputs/eventlog_%s.xes' % cond,
-      output_csv='../../outputs/eventlog_%s.csv' % cond)
+logging.info("Make clustering of %s patients", cond)
+con = duckdb.connect(db_path)
+clust(con,cond,n_clusters,dm,df_,id2trace,patients)
 del dm
 del df_
 ```
@@ -3439,10 +3351,9 @@ del df_
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-col_dic = trace_explorer(
-  evlog_file='../../outputs/eventlog_filtered_%s.xes' % cond,
-  cond_code=cond,
-  color_dict=col_dic)
+logging.info("Make trace explorer figures of %s patients", cond)
+col_dic = trace_explorer(con,cond,color_dict=col_dic)
+con.close()
 ```
 
 ```{r}
@@ -3451,10 +3362,13 @@ col_dic = trace_explorer(
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-process_map_by_cluster(load_csv_log(gsub("src/analysis-scripts/","",
-                                    here("outputs",sprintf(
-                                      "eventlog_filtered_%s.csv",cond)))),
-                       0.25,cond)
+log_info('Make process maps figures of different clusters of {cond} patients')
+con <- dbConnect(duckdb(), dbdir = db_path)
+process_map_by_cluster(
+  load_log(con,
+           paste0("SELECT * FROM eventlog_",cond,"_clust_filtered")),
+  0.25,cond)
+dbDisconnect(con, shutdown = TRUE)
 ```
 
 ::: {#fig-cluster0_ob .column-page layout-ncol="2"}
@@ -3473,11 +3387,12 @@ Cluster 0
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
+logging.info("Make conformance checking analysis of %s patients", cond)
+con = duckdb.connect(db_path)
+conformance(con,cond,
             pn_file='./PN_%s.pnml' % cond,
             pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond,
-            output_csv='../../outputs/fitness_by_cluster_%s.csv' % cond)
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
 ```
 
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ob.png){#fig-fitness_by_cluster_ob fig-align="center" width="80%"}
@@ -3490,14 +3405,16 @@ conformance(xes_file='../../outputs/eventlog_filtered_%s.xes' % cond,
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-
-patients_df = pd.read_csv('../../outputs/dm_patients_df_%s.csv' % cond)
-patients_df["patient_id"]= patients_df["patient_id"].astype(str)
-decision_tree_pn_place(patients_df,
-  event_log_file="../../outputs/eventlog_%s.xes" % cond,
-  pn_file='./PN_%s.pnml' % cond,
-  cond_code=cond,
-  place2analyze='place1')
+logging.info("Make decision making analysis of %s patients", cond)
+try:
+  decision_tree_pn_place(con,cond,
+    pn_file='./PN_%s.pnml' % cond,
+    place2analyze='place1')
+except Exception as Argument:
+  logging.warning(
+    "Error occurred when executing decision mining: %s",str(Argument))
+  pass
+con.close()
 ```
 
 ![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_ob.png){#fig-decision_tree_ob fig-align="center" width="80%"}
@@ -3505,241 +3422,3 @@ decision_tree_pn_place(patients_df,
 ![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ob.png){#fig-features_relevance_ob fig-align="center" width="80%"}
 
 
-### Cluster survival analysis
-
-```{r}
-#| label: Joint model
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-df_cluster_else <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs","fitness_by_cluster_else.csv")))
-df_patient_else <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs","dm_patients_df_else.csv")))
-df_else <- merge(x=df_patient_else[c('patient_id','age','sex','copayment',
-                                    'dx_date','fin_date','fin_cause')],
-                 y=df_cluster_else[c('ID','cluster')],  
-                 by.x=c("patient_id"), 
-                 by.y=c("ID"),
-                 all.x=FALSE)
-df_else$cluster <- paste(df_else$cluster,"_else",sep="")
-
-df_cluster_ob <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs","fitness_by_cluster_ob.csv")))
-df_patient_ob <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs","dm_patients_df_ob.csv")))
-df_ob <- merge(x=df_patient_ob[c('patient_id','age','sex','copayment',
-                                   'dx_date','fin_date','fin_cause')],
-                 y=df_cluster_ob[c('ID','cluster')],  
-                 by.x=c("patient_id"), 
-                 by.y=c("ID"),
-                 all.x=FALSE)
-df_ob$fin_cause <- ifelse(df_ob$fin_cause == "['bmi<30']", "", df_ob$fin_cause)
-df_ob$cluster <- paste(df_ob$cluster,"_ob",sep="")
-
-df_cluster_f <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs","fitness_by_cluster_f.csv")))
-df_patient_f <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs","dm_patients_df_f.csv")))
-df_f <- merge(x=df_patient_f[c('patient_id','age','sex','copayment',
-                                   'dx_date','fin_date','fin_cause')],
-                 y=df_cluster_f[c('ID','cluster')],  
-                 by.x=c("patient_id"), 
-                 by.y=c("ID"),
-                 all.x=FALSE)
-df_f$cluster <- paste(df_f$cluster,"_f",sep="")
-
-df_cluster_erc <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs","fitness_by_cluster_erc.csv")))
-df_patient_erc <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs","dm_patients_df_erc.csv")))
-df_erc <- merge(x=df_patient_erc[c('patient_id','age','sex','copayment',
-                                   'dx_date','fin_date','fin_cause')],
-                 y=df_cluster_erc[c('ID','cluster')],  
-                 by.x=c("patient_id"), 
-                 by.y=c("ID"),
-                 all.x=FALSE)
-df_erc$cluster <- paste(df_erc$cluster,"_erc",sep="")
-
-df_cluster_ic <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs","fitness_by_cluster_ic.csv")))
-df_patient_ic <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs","dm_patients_df_ic.csv")))
-df_ic <- merge(x=df_patient_ic[c('patient_id','age','sex','copayment',
-                                   'dx_date','fin_date','fin_cause')],
-                 y=df_cluster_ic[c('ID','cluster')],  
-                 by.x=c("patient_id"), 
-                 by.y=c("ID"),
-                 all.x=FALSE)
-df_ic$cluster <- paste(df_ic$cluster,"_ic",sep="")
-
-df_cluster_ecv <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs","fitness_by_cluster_ecv.csv")))
-df_patient_ecv <- read.csv(gsub("src/analysis-scripts/","",
-                            here("outputs","dm_patients_df_ecv.csv")))
-df_ecv <- merge(x=df_patient_ecv[c('patient_id','age','sex','copayment',
-                                   'dx_date','fin_date','fin_cause')],
-                 y=df_cluster_ecv[c('ID','cluster')],  
-                 by.x=c("patient_id"), 
-                 by.y=c("ID"),
-                 all.x=FALSE)
-df_ecv$cluster <- paste(df_ecv$cluster,"_ecv",sep="")
-
-df <- bind_rows(df_else,df_ob,df_f,df_erc,df_ic,df_ecv) %>% filter(fin_cause!="['death']")
-
-df$sex <- as.factor(df$sex)
-df$cluster <- as.factor(df$cluster)
-df$status <- ifelse(is.na(df$fin_cause) | df$fin_cause != "", 1, 0)
-df$fin_date [df$fin_date ==""] <- "2023-01-01"
-df <- df %>%
-  mutate(n_days = as.Date(fin_date) - as.Date(dx_date))
-
-df$n_days <- as.numeric(df$n_days)
-
-
-
-base_model <- coxph(Surv(n_days, status) ~ age + sex, data=df)
-#summary(base_model)
-me_model <- coxme(Surv(n_days, status) ~ age + sex + (1 | cluster), data=df)
-summary(me_model)
-#marginal.model <- coxph(Surv(n_days, status) ~ age + sex, data=df, cluster=cluster)
-#summary(marginal.model)
-#frailty.model  <- coxph(Surv(n_days, status) ~ age + sex + frailty(cluster), data=df)
-#summary(frailty.model)
-predicted <- predict(me_model, type = "risk")
-
-# Compute the c-index
-library(glmnet)
-c_index <- Cindex(predicted, y = me_model$y)
-```
-
-
-
-```{r}
-#| label: cluster survival model
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-#https://cran.r-project.org/web/packages/coxme/vignettes/coxme.pdf
-nchange <- with(df, tapply(status,cluster,sum,na.rm=T))
-pyears <- with(df, tapply(n_days, cluster, sum, na.rm=T))/365.25
-count <- with(df, tapply(status, cluster,function(x) sum(!is.na(x))))
-indx <- match(names(ranef(me_model)[[1]]), names(nchange)) 
- 
-plot(nchange[indx], exp(ranef(me_model)[[1]]), log='y',
- xlab="Number of changes per cluster",
- ylab="Estimated cluster risk")
-abline(h=1, lty=2)
-dev.off()
-
-indx <- match(c(72,165), names(nchange))
-temp <- cbind(nchange, count, pyears, 100*nchange/pyears)[indx,]
- dimnames(temp) <- list(indx,
- c("Changes", "N", "Years of FU", "Rate"))
-print(round(temp,2))
- 
-
-estvar <- seq(.2, .6, length=15)^2 #range of std values
-loglik <- double(15)
-for (i in 1:15) {
- tfit <- coxme(Surv(n_days, status) ~ age + sex + (1 | cluster),
-               data=df,vfixed=estvar[i])
- loglik[i] <- 2*diff(tfit$loglik)[1]
- }
-plot(sqrt(estvar), loglik,
- xlab="Std of the random effect", ylab="2 * loglik")
-abline(h=2*diff(me_model$loglik)[1] - qchisq(.95, 1), lty=2)
-dev.off()
-                
-temp <- 2*diff(me_model$loglik)[1] - loglik
-approx(temp[1:8], sqrt(estvar[1:8]), 3.84)$y
-
-## Get profile likelihood for variance values to examine, based on
-## observed .486
-s <- seq(0.01, 0.4, length.out = 200)^2
-res <- sapply(s, function(i) {
-    mod <- coxme(Surv(n_days, status) ~ age + sex + 
-        (1 | cluster), data = df, vfixed = i)
-    2 * diff(mod$loglik)[1]
-})
-
-## profile likelihood, horizontal line is 95% CI obviously lower bound
-## includes 0, upper bound looks a little under .8
-
-plot(sqrt(s), res, type = "l", xlab = expression(SD[i]), ylab = "2 * LL")
-abline(h = 2 * diff(me_model$loglik)[1] - qchisq(0.95, 1), lty = 2)
-
-
-# estimate baseline hazard using muhaz: ---- 
-# df with derived CHFs, hazards, and survival fns for the RE model: ---- 
-# first define functions for getting chf values at time t
-calc_chf <- function(index, hazard_colname, df = df_random_effect_haz){
-  df <- as.data.frame(df)
-  df2 <- df %>% dplyr::select(time, {{hazard_colname}}) %>% slice(1:index)
-  
-  times_vector <- df2[,1]
-  haz_vector <- df2[,2]
-  return(area_under_curve(times_vector, haz_vector))
-}
-
-muhaz_fit <- muhaz(df$n_days, 
-                   df$status, 
-                   n.est.grid = 1000, 
-                   kern = "rectangle"
-)
-hazard_base_vector <- muhaz_fit$haz.est
-times_vector <- muhaz_fit$est.grid
-
-# df with base hazard:
-df_base_haz <- 
-  tibble(hazard_base = hazard_base_vector, 
-         time = times_vector) %>% 
-  mutate(index = row_number())  # used to calculate cumulative hazard 
-
-# df with group-specific hazards: ---- 
-# random effects act as multiples on the baseline hazard:
-names_list <- as.list(names(me_model$frail$cluster))
-
-for (i in c(1:length(names_list))) {
-  df_base_haz <- df_base_haz %>% 
-    mutate(!!paste("hazard_center",names_list[[i]],sep="_") 
-           := df_base_haz[['hazard_base']] * exp(ranef(me_model)$cluster[i]))
-}
-df_random_effect_haz <- df_base_haz
-df_survival <- 
-  df_random_effect_haz  %>%  
-  mutate(cum_hazard_base = map_dbl(index, calc_chf,
-                                   hazard_colname = "hazard_base"))
-
-for (i in c(1:length(names_list))) {
-  df_survival <- df_survival %>%
-    mutate(!!paste("cum_hazard_center",names_list[[i]],sep="_")
-           := map_dbl(index, calc_chf, hazard_colname = paste("hazard_center",
-                                                              names_list[[i]],
-                                                              sep="_")))
-}
-df_survival <- 
-  df_survival  %>%  
-  mutate(surv_base = exp(-cum_hazard_base))
-
-for (i in c(1:length(names_list))) {
-  df_survival <- df_survival %>% 
-    mutate(!!names_list[[i]] := exp(-df_survival[[4+length(names_list)+i]]))
-}
-
-
-# plot the derived survival curves: ----
-df_survival %>% 
-  pivot_longer(cols = c((5+2*length(names_list)):(5+3*length(names_list))), 
-               names_to = "survival") %>% 
-  ggplot(aes(x = time, 
-             y = value, 
-             group = survival, 
-             col = survival)) +
-  geom_point() + 
-  scale_x_continuous(limits = c(0, max(df_survival$time))) + 
-  scale_y_continuous(limits = c(0, 1)) + 
-  theme_minimal() 
-```

@@ -39,4 +39,5 @@ dependencies:
  - r-bayestestR=0.13.1
  - r-purrr=1.0.1
  - r-lcmm=1.9.5
-
+ - r-duckdb=0.8.1_3
+ - r-logger=0.2.2
