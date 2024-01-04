@@ -128,6 +128,7 @@ from dateutil.relativedelta import relativedelta
 import duckdb
 import re
 import logging
+from rapidfuzz.distance import Levenshtein
 ```
 
 The R libraries used are:
@@ -194,6 +195,7 @@ def select_by_condition(con):
     con.sql("DROP VIEW IF EXISTS ss_use_incidents_view;")
     con.sql("DROP VIEW IF EXISTS param_incidents_view_;")
     con.sql("DROP VIEW IF EXISTS param_incidents_view;")
+    con.sql("DROP VIEW IF EXISTS param_incidents_view_age_date;")
     con.sql("DROP VIEW IF EXISTS patient_incidents_view;")
     con.sql("DROP VIEW IF EXISTS treat_incidents_view;")   
     con.sql("DROP VIEW IF EXISTS comorb_incidents_ciap_view;")    
@@ -226,12 +228,17 @@ def select_by_condition(con):
                 AS 'age', \
             FLOOR(DATEDIFF('day',month_nac,DATE '2017-01-01') / 365.25) \
                 AS 'age_dx', \
-            DATE_ADD(month_nac, INTERVAL 75 YEAR) AS 'turn_to_75' \
+            DATE_ADD(month_nac, INTERVAL 75 YEAR) AS 'turn_to_75', \
+            DATE_ADD(month_nac, INTERVAL 65 YEAR) AS 'turn_to_65' \
                 FROM main.patient WHERE patient_id IN (SELECT patient_id \
                         FROM main.patient WHERE dx_date >='2017-01-01')")
     con.sql("CREATE VIEW treat_incidents_view AS SELECT * FROM main.treat \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
                                  WHERE dx_date >='2017-01-01')")
+    con.sql("CREATE VIEW param_incidents_view_age_date AS SELECT param_incidents_view.patient_id, \
+            param_name, param_value, param_date, turn_to_65, turn_to_75 FROM \
+                param_incidents_view LEFT JOIN patient_incidents_view ON \
+         param_incidents_view.patient_id = patient_incidents_view.patient_id")
 
     presc_data_p = con.sql(f" SELECT (COUNT(prescription_date_ini)) / COUNT(*) \
                            AS p FROM treat_incidents_view").fetchall()[0][0]
@@ -512,17 +519,37 @@ def evlog_creation_prescriptions(con,
         lambda x: min([x,datetime.strptime('2023-01-01', "%Y-%m-%d")])).apply(
                                               lambda x: x-timedelta(days=1))
     act_n = max(treat_df['actins'])
-            
-    param_df = con.sql(f"SELECT patient_id,param_date AS date, \
-                       CASE WHEN param_value < {7.5} THEN 'HBA<75' \
-                           ELSE 'HBA>75' END AS Event,\
-                       ROW_NUMBER() OVER (ORDER BY param_date) + {act_n} AS actins\
-                           FROM param_incidents_view \
-                               WHERE patient_id IN (SELECT patient_id \
-                                FROM patient_condition \
-                                    WHERE patient_condition.type = '{cond}') \
-                                AND param_name = 'hba1c' \
-                                AND param_value IS NOT NULL").df()
+    if cond in ['ecv','ic','erc','f']:
+        param_df = con.sql(f"SELECT patient_id,param_date AS date, \
+                           CASE WHEN param_value < {8} THEN 'HBA<L' \
+                               WHEN param_value >= {8} AND param_value < {8.5} \
+                                   AND param_date < turn_to_65 THEN 'HBA>L' \
+                               WHEN param_value >= {8} AND param_value < {8.5} \
+                                   AND param_date >= turn_to_65 THEN 'HBA<L' \
+                               ELSE 'HBA>L' END AS Event,\
+                           ROW_NUMBER() OVER (ORDER BY param_date) + {act_n} AS actins\
+                               FROM param_incidents_view_age_date \
+                                   WHERE patient_id IN (SELECT patient_id \
+                                    FROM patient_condition \
+                                        WHERE patient_condition.type = '{cond}') \
+                                    AND param_name = 'hba1c' \
+                                    AND param_value IS NOT NULL").df()
+    else:
+        param_df = con.sql(f"SELECT patient_id,param_date AS date, \
+                           CASE WHEN param_value < {7} THEN 'HBA<L' \
+                               WHEN param_value >= {7} AND param_value < {8.5} \
+                                   AND param_date < turn_to_75 THEN 'HBA>L' \
+                               WHEN param_value >= {7} AND param_value < {8.5} \
+                                   AND param_date >= turn_to_75 THEN 'HBA<L' \
+                               ELSE 'HBA>L' END AS Event,\
+                           ROW_NUMBER() OVER (ORDER BY param_date) + {act_n} AS actins\
+                               FROM param_incidents_view_age_date \
+                                   WHERE patient_id IN (SELECT patient_id \
+                                    FROM patient_condition \
+                                        WHERE patient_condition.type = '{cond}') \
+                                    AND param_name = 'hba1c' \
+                                    AND param_value IS NOT NULL").df()        
+
     param_df_start = param_df.copy()
     param_df_start['cycle'] = 'start'
     param_df_end = param_df.copy()
@@ -548,7 +575,7 @@ def evlog_creation_prescriptions(con,
     days_after_m = 5
     id_list = list(set(df['patient_id']))
     events = list(set([drug for e in set(df['Event']) for drug in e.split('&')]))
-    hba0, hba1 = events.index('HBA<75'), events.index('HBA>75')
+    hba0, hba1 = events.index('HBA<L'), events.index('HBA>L')
     row = len(events)
     no_hba = [i for i in range(row) if i not in [hba0,hba1]]
     for id in tqdm(id_list):
@@ -711,34 +738,80 @@ def evlog_creation_dispensations(con,
                         ].rename(columns = {'dispensing_date':'date'}
                                  ).sort_values(by = ['patient_id','date' ],
                       ascending = [True, True])
-                                
-    df = con.sql(f"SELECT *, 'start' AS cycle,\
-                 ROW_NUMBER() OVER (ORDER BY patient_id, date) AS actins \
-                     FROM (SELECT patient_id,param_date AS date, \
-                       CASE WHEN param_value < {7.5} THEN 'HBA<75' \
-                           ELSE 'HBA>75' END AS Event, 0 AS nac_code\
-                           FROM param_incidents_view \
-                               WHERE patient_id IN (SELECT patient_id \
-                                FROM patient_condition \
-                                    WHERE patient_condition.type = '{cond}') \
-                                   AND param_name = 'hba1c' \
-                                AND param_value IS NOT NULL \
-                            UNION ALL SELECT * FROM treat_df) \
-                UNION ALL SELECT patient_id, date, Event, nac_code, 'end' AS cycle,\
-                 ROW_NUMBER() OVER (ORDER BY patient_id, param_date) AS actins \
-                     FROM (SELECT patient_id,param_date AS date, param_date,\
-                       CASE WHEN param_value < {7.5} THEN 'HBA<75' \
-                           ELSE 'HBA>75' END AS Event, 0 AS nac_code\
-                           FROM param_incidents_view \
-                               WHERE patient_id IN (SELECT patient_id \
-                                FROM patient_condition \
-                                    WHERE patient_condition.type = '{cond}') \
-                                   AND param_name = 'hba1c' \
-                                AND param_value IS NOT NULL \
-                            UNION ALL SELECT patient_id,\
-                            CAST(date AS TIMESTAMP)+INTERVAL {treat_min_days} DAYS AS date, \
-                                date AS param_date, \
-                                    Event, nac_code FROM treat_df)").df()
+                     
+    if cond in ['ecv','ic','erc','f']:
+        df = con.sql(f"SELECT *, 'start' AS cycle,\
+                     ROW_NUMBER() OVER (ORDER BY patient_id, date) AS actins \
+                         FROM (SELECT patient_id,param_date AS date, \
+                           CASE WHEN param_value < {8} THEN 'HBA<L' \
+                                WHEN param_value >= {8} AND param_value < {8.5} \
+                                   AND param_date < turn_to_65 THEN 'HBA>L' \
+                                WHEN param_value >= {8} AND param_value < {8.5} \
+                                   AND param_date >= turn_to_65 THEN 'HBA<L' \
+                                ELSE 'HBA>L' END AS Event, 0 AS nac_code\
+                               FROM param_incidents_view_age_date \
+                                   WHERE patient_id IN (SELECT patient_id \
+                                    FROM patient_condition \
+                                        WHERE patient_condition.type = '{cond}') \
+                                       AND param_name = 'hba1c' \
+                                    AND param_value IS NOT NULL \
+                                UNION ALL SELECT * FROM treat_df) \
+                    UNION ALL SELECT patient_id, date, Event, nac_code, 'end' AS cycle,\
+                     ROW_NUMBER() OVER (ORDER BY patient_id, param_date) AS actins \
+                         FROM (SELECT patient_id,param_date AS date, param_date,\
+                           CASE WHEN param_value < {8} THEN 'HBA<L' \
+                                WHEN param_value >= {8} AND param_value < {8.5} \
+                                   AND param_date < turn_to_65 THEN 'HBA>L' \
+                                WHEN param_value >= {8} AND param_value < {8.5} \
+                                   AND param_date >= turn_to_65 THEN 'HBA<L' \
+                                ELSE 'HBA>L' END AS Event, 0 AS nac_code\
+                               FROM param_incidents_view_age_date \
+                                   WHERE patient_id IN (SELECT patient_id \
+                                    FROM patient_condition \
+                                        WHERE patient_condition.type = '{cond}') \
+                                       AND param_name = 'hba1c' \
+                                    AND param_value IS NOT NULL \
+                                UNION ALL SELECT patient_id,\
+                                CAST(date AS TIMESTAMP)+INTERVAL {treat_min_days} \
+                                    DAYS AS date, date AS param_date, \
+                                        Event, nac_code FROM treat_df)").df()
+    else:
+        df = con.sql(f"SELECT *, 'start' AS cycle,\
+                     ROW_NUMBER() OVER (ORDER BY patient_id, date) AS actins \
+                         FROM (SELECT patient_id,param_date AS date, \
+                           CASE WHEN param_value < {7} THEN 'HBA<L' \
+                                WHEN param_value >= {7} AND param_value < {8.5} \
+                                   AND param_date < turn_to_75 THEN 'HBA>L' \
+                                WHEN param_value >= {7} AND param_value < {8.5} \
+                                   AND param_date >= turn_to_75 THEN 'HBA<L' \
+                                ELSE 'HBA>L' END AS Event, 0 AS nac_code\
+                               FROM param_incidents_view_age_date \
+                                   WHERE patient_id IN (SELECT patient_id \
+                                    FROM patient_condition \
+                                        WHERE patient_condition.type = '{cond}') \
+                                       AND param_name = 'hba1c' \
+                                    AND param_value IS NOT NULL \
+                                UNION ALL SELECT * FROM treat_df) \
+                    UNION ALL SELECT patient_id, date, Event, nac_code, 'end' AS cycle,\
+                     ROW_NUMBER() OVER (ORDER BY patient_id, param_date) AS actins \
+                         FROM (SELECT patient_id,param_date AS date, param_date,\
+                           CASE WHEN param_value < {7} THEN 'HBA<L' \
+                                WHEN param_value >= {7} AND param_value < {8.5} \
+                                   AND param_date < turn_to_75 THEN 'HBA>L' \
+                                WHEN param_value >= {7} AND param_value < {8.5} \
+                                   AND param_date >= turn_to_75 THEN 'HBA<L' \
+                                ELSE 'HBA>L' END AS Event, 0 AS nac_code\
+                               FROM param_incidents_view_age_date \
+                                   WHERE patient_id IN (SELECT patient_id \
+                                    FROM patient_condition \
+                                        WHERE patient_condition.type = '{cond}') \
+                                       AND param_name = 'hba1c' \
+                                    AND param_value IS NOT NULL \
+                                UNION ALL SELECT patient_id,\
+                                CAST(date AS TIMESTAMP)+INTERVAL {treat_min_days} \
+                                    DAYS AS date, date AS param_date, \
+                                        Event, nac_code FROM treat_df)").df()
+
     patient_list = list(set(df['patient_id']))
     df['nid'] = [patient_list.index(df['patient_id'][n]) for n in range(len(df))] 
     df = df.sort_values(by = ['patient_id', 'actins','cycle'],
@@ -756,7 +829,7 @@ def evlog_creation_dispensations(con,
     
     id_list = list(set(df['patient_id']))
     events = list(set([drug for e in set(df['Event']) for drug in e.split('&')]))
-    hba0, hba1 = events.index('HBA<75'), events.index('HBA>75')
+    hba0, hba1 = events.index('HBA<L'), events.index('HBA>L')
     row = len(events)
     no_hba = [i for i in range(row) if i not in [hba0,hba1]]
     for id in tqdm(id_list):
@@ -1096,7 +1169,7 @@ def dendogram(dm,output_png='../../outputs/dendogram.png'):
   
   matrix = linkage(
       dm_condensed,
-      method='average'
+      method='complete'
       )
   sys.setrecursionlimit(10000000)
   dn = dendrogram(matrix,truncate_mode='lastp',p=80)
@@ -1123,7 +1196,7 @@ def kelbow(dm,
   '''
 
   model = AgglomerativeClustering(metric = "precomputed",
-                                  linkage = 'average')
+                                  linkage = 'complete')
   # k is range of number of clusters.
   visualizer_ = KElbowVisualizer(model,
                                 k=(2,25),
@@ -1164,7 +1237,7 @@ def clust(con,cond,clust_n,dist_matrix,df_,id2trace,patients):
 
   model = AgglomerativeClustering(n_clusters=clust_n,
                                   metric = "precomputed",
-                                  linkage = 'average')
+                                  linkage = 'complete')
   model.fit(dist_matrix)
   labels = model.labels_
 
@@ -1795,6 +1868,7 @@ The Cox proportional hazards regression model is frequently used for the analysi
 #| output: FALSE
 logging.info('Preprocess of the initial dataframes')
 db_path = '../../inputs/data.duckdb'
+db_path = 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
 con = duckdb.connect(db_path)
 notnan_p = select_by_condition(con)
 con.close()
@@ -1807,6 +1881,7 @@ con.close()
 #| warning: FALSE
 #| output: FALSE
 db_path <- '../../inputs/data.duckdb'
+db_path <- 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
 ```
 ### Patients without predominant clinical condition
 
@@ -1976,7 +2051,7 @@ Once the set of traces to analyze are selected, there is a need to choose a dist
 #| warning: FALSE
 #| output: FALSE
 logging.info("Make distance matrix of %s patients", cond)
-measure_f = textdistance.jaccard
+measure_f = Levenshtein.normalized_similarity
 dm = calculate_dm_ED(traces,measure_f)
 ```
 
@@ -1986,6 +2061,7 @@ When distance matrix is acquired, we are able to cluster. However, the number of
 #| label: dendograms (else)
 #| eval: TRUE
 #| echo: FALSE
+#| output: FALSE
 logging.info("Make dendogram of %s patients", cond)
 dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
@@ -1994,8 +2070,6 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| label: kelbow (else)
 #| eval: TRUE
 #| echo: FALSE
-#| output: TRUE
-logging.info("Make k-elbow figure of %s patients", cond)
 if len(traces)>25:
   n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
@@ -2324,7 +2398,7 @@ dev.off()
 #| warning: FALSE
 #| output: FALSE
 logging.info("Make distance matrix of %s patients", cond)
-measure_f = textdistance.jaccard
+measure_f = Levenshtein.normalized_similarity
 dm = calculate_dm_ED(traces,measure_f)
 ```
 
@@ -2332,6 +2406,7 @@ dm = calculate_dm_ED(traces,measure_f)
 #| label: dendograms (ecv)
 #| eval: TRUE
 #| echo: FALSE
+#| output: FALSE
 logging.info("Make dendogram of %s patients", cond)
 dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
@@ -2340,8 +2415,6 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| label: kelbow (ecv)
 #| eval: TRUE
 #| echo: FALSE
-#| output: TRUE
-logging.info("Make k-elbow figure of %s patients", cond)
 if len(traces)>25:
   n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
@@ -2569,7 +2642,7 @@ dev.off()
 #| warning: FALSE
 #| output: FALSE
 logging.info("Make distance matrix of %s patients", cond)
-measure_f = textdistance.jaccard
+measure_f = Levenshtein.normalized_similarity
 dm = calculate_dm_ED(traces,measure_f)
 ```
 
@@ -2577,6 +2650,7 @@ dm = calculate_dm_ED(traces,measure_f)
 #| label: dendograms (ic)
 #| eval: TRUE
 #| echo: FALSE
+#| output: FALSE
 logging.info("Make dendogram of %s patients", cond)
 dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
@@ -2585,8 +2659,6 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| label: kelbow (ic)
 #| eval: TRUE
 #| echo: FALSE
-#| output: TRUE
-logging.info("Make k-elbow figure of %s patients", cond)
 if len(traces)>25:
   n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
@@ -2814,7 +2886,7 @@ dev.off()
 #| warning: FALSE
 #| output: FALSE
 logging.info("Make distance matrix of %s patients", cond)
-measure_f = textdistance.jaccard
+measure_f = Levenshtein.normalized_similarity
 dm = calculate_dm_ED(traces,measure_f)
 ```
 
@@ -2822,6 +2894,7 @@ dm = calculate_dm_ED(traces,measure_f)
 #| label: dendograms (erc)
 #| eval: TRUE
 #| echo: FALSE
+#| output: FALSE
 logging.info("Make dendogram of %s patients", cond)
 dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
@@ -2830,8 +2903,6 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| label: kelbow (erc)
 #| eval: TRUE
 #| echo: FALSE
-#| output: TRUE
-logging.info("Make k-elbow figure of %s patients", cond)
 if len(traces)>25:
   n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
@@ -3060,7 +3131,7 @@ dev.off()
 #| warning: FALSE
 #| output: FALSE
 logging.info("Make distance matrix of %s patients", cond)
-measure_f = textdistance.jaccard
+measure_f = Levenshtein.normalized_similarity
 dm = calculate_dm_ED(traces,measure_f)
 ```
 
@@ -3076,8 +3147,6 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| label: kelbow (f)
 #| eval: TRUE
 #| echo: FALSE
-#| output: TRUE
-logging.info("Make k-elbow figure of %s patients", cond)
 if len(traces)>25:
   n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
@@ -3305,7 +3374,7 @@ dev.off()
 #| warning: FALSE
 #| output: FALSE
 logging.info("Make distance matrix of %s patients", cond)
-measure_f = textdistance.jaccard
+measure_f = Levenshtein.normalized_similarity
 dm = calculate_dm_ED(traces,measure_f)
 ```
 
@@ -3313,6 +3382,7 @@ dm = calculate_dm_ED(traces,measure_f)
 #| label: dendograms (ob)
 #| eval: TRUE
 #| echo: FALSE
+#| output: FALSE
 logging.info("Make dendogram of %s patients", cond)
 dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
@@ -3321,8 +3391,6 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| label: kelbow (ob)
 #| eval: TRUE
 #| echo: FALSE
-#| output: TRUE
-logging.info("Make k-elbow figure of %s patients", cond)
 if len(traces)>25:
   n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
