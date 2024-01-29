@@ -25,7 +25,7 @@
       </transition>
       <transition id="transition3">
         <name>
-          <text>HBA&gt;75</text>
+          <text>HBA&gt;L</text>
         </name>
         <graphics>
           <position x="196" y="365" />
@@ -34,7 +34,7 @@
       </transition>
       <transition id="transition4">
         <name>
-          <text>HBA&lt;75</text>
+          <text>HBA&lt;L</text>
         </name>
         <graphics>
           <position x="197" y="499" />
@@ -85,7 +85,7 @@
       </place>
       <transition id="transition31">
         <name>
-          <text>HBA&gt;75</text>
+          <text>HBA&gt;L</text>
         </name>
         <graphics>
           <position x="1293" y="731" />
@@ -94,7 +94,7 @@
       </transition>
       <transition id="transition32">
         <name>
-          <text>HBA&lt;75</text>
+          <text>HBA&lt;L</text>
         </name>
         <graphics>
           <position x="1122" y="635" />
@@ -103,7 +103,7 @@
       </transition>
       <transition id="transition34">
         <name>
-          <text>HBA&lt;75</text>
+          <text>HBA&lt;L</text>
         </name>
         <graphics>
           <position x="953" y="761" />
@@ -112,7 +112,7 @@
       </transition>
       <transition id="transition35">
         <name>
-          <text>HBA&lt;75</text>
+          <text>HBA&lt;L</text>
         </name>
         <graphics>
           <position x="681" y="715" />
@@ -127,7 +127,7 @@
       </place>
       <transition id="transition17">
         <name>
-          <text>HBA&gt;75</text>
+          <text>HBA&gt;L</text>
         </name>
         <graphics>
           <position x="678" y="297" />
@@ -136,7 +136,7 @@
       </transition>
       <transition id="transition18">
         <name>
-          <text>HBA&lt;75</text>
+          <text>HBA&lt;L</text>
         </name>
         <graphics>
           <position x="680" y="626" />
