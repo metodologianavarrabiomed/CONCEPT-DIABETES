@@ -2,7 +2,7 @@
 <pnml>
   <net id="net1" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel">
     <name>
-      <text>PN_PI_year3</text>
+      <text>PN_PI_year4</text>
     </name>
     <page id="n0">
       <place id="place6">
@@ -458,7 +458,7 @@
       </arc>
       <arc id="arc613" source="place185" target="transition247">
         <inscription>
-          <text>3</text>
+          <text>4</text>
         </inscription>
         <name>
           <text>1</text>

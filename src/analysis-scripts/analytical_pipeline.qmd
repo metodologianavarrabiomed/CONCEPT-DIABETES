@@ -132,6 +132,7 @@ from dateutil.relativedelta import relativedelta
 import duckdb
 import re
 import logging
+import seaborn as sns
 from rapidfuzz.distance import Levenshtein
 ```
 
@@ -1055,9 +1056,13 @@ def evlog_process_ind(con):
     con.sql("DROP TABLE IF EXISTS process_ind;")
     con.sql("DROP TABLE IF EXISTS process_ind1;")
     con.sql("DROP TABLE IF EXISTS process_ind2;")
+    con.sql("DROP TABLE IF EXISTS process_ind3;")
+    con.sql("DROP TABLE IF EXISTS process_ind4;")
+    con.sql("DROP TABLE IF EXISTS process_ind5;")
+
+
     
-    con.sql(f"CREATE VIEW pre_process_ind AS \
-            SELECT *,'start' AS cycle,\
+    con.sql("CREATE VIEW pre_process_ind AS SELECT *,'start' AS cycle,\
                 ROW_NUMBER() OVER (ORDER BY patient_id,date) AS actins \
             FROM (SELECT DISTINCT patient_id,'hba1c' AS event, \
             CAST(param_date AS TIMESTAMP) + INTERVAL 60 SECOND AS date \
@@ -1088,35 +1093,62 @@ def evlog_process_ind(con):
             FROM patient_incidents_view \
             UNION ALL SELECT patient_id, 'yFIN' AS event,\
                     CAST(dx_date AS TIMESTAMP) + INTERVAL 1095 DAYS AS date \
-            FROM patient_incidents_view UNION \
-            ALL SELECT patient_id, 'FIN' AS event,\
-                    CAST(dx_date AS TIMESTAMP) + INTERVAL 1095 DAYS + INTERVAL 1 SECOND AS date \
-            FROM patient_incidents_view)  ") 
+            FROM patient_incidents_view \
+            UNION ALL SELECT patient_id, 'yFIN' AS event,\
+                    CAST(dx_date AS TIMESTAMP) + INTERVAL 1461 DAYS AS date \
+            FROM patient_incidents_view \
+            UNION ALL SELECT patient_id, 'yFIN' AS event,\
+                    CAST(dx_date AS TIMESTAMP) + INTERVAL 1826 DAYS AS date \
+            FROM patient_incidents_view \
+            UNION ALL SELECT patient_id, 'FIN' AS event,\
+                    CAST(COALESCE(deregistration_date,'2023-01-01') AS TIMESTAMP) AS date \
+            FROM patient_incidents_view)") 
     
     
     
-    con.sql(f"CREATE TABLE process_ind AS SELECT a.* FROM eventlog_guidelines a \
+    
+    con.sql("CREATE TABLE process_ind AS SELECT a.* FROM pre_process_ind a \
             JOIN (SELECT patient_id, MIN(date) as ini_date,MAX(date) as fin_date \
-            FROM eventlog_guidelines WHERE event IN ('INI', 'FIN') \
+            FROM pre_process_ind d WHERE event IN ('INI', 'yFIN') AND \
+                date<(SELECT c.date FROM pre_process_ind c \
+                      WHERE c.event = 'FIN' AND c.patient_id = d.patient_id) \
             GROUP BY patient_id) b ON a.patient_id = b.patient_id \
-            WHERE (a.date BETWEEN b.ini_date AND b.fin_date) AND \
-                b.fin_date<= (SELECT COALESCE(deregistration_date,'2023-01-01')\
-                              FROM  patient_incidents_view \
-                                  WHERE a.patient_id = patient_incidents_view.patient_id)")
+            WHERE (a.date BETWEEN b.ini_date AND b.fin_date) OR a.event = 'FIN'")
     con.sql("CREATE TABLE process_ind1 AS SELECT * FROM \
             (WITH RankedActions AS (SELECT patient_id, date, event,\
                     ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY date) AS rn \
                         FROM process_ind WHERE event = 'yFIN') \
              SELECT DISTINCT A.* FROM process_ind A \
                  JOIN RankedActions R ON A.patient_id = R.patient_id WHERE \
-                     (R.rn = 1 AND A.date <= R.date) OR A.event = 'FIN')")  
+                     R.rn = 1 AND (A.date <= R.date OR A.event = 'FIN'))")  
     con.sql("CREATE TABLE process_ind2 AS SELECT * FROM \
             (WITH RankedActions AS (SELECT patient_id, date, event,\
                     ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY date) AS rn \
                         FROM process_ind WHERE event = 'yFIN') \
              SELECT DISTINCT A.* FROM process_ind A \
                  JOIN RankedActions R ON A.patient_id = R.patient_id WHERE \
-                     (R.rn = 2 AND A.date <= R.date) OR A.event = 'FIN')")        
+                     R.rn = 2 AND (A.date <= R.date OR A.event = 'FIN'))")        
+    con.sql("CREATE TABLE process_ind3 AS SELECT * FROM \
+            (WITH RankedActions AS (SELECT patient_id, date, event,\
+                    ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY date) AS rn \
+                        FROM process_ind WHERE event = 'yFIN') \
+             SELECT DISTINCT A.* FROM process_ind A \
+                 JOIN RankedActions R ON A.patient_id = R.patient_id WHERE \
+                     R.rn = 3 AND (A.date <= R.date OR A.event = 'FIN'))")        
+    con.sql("CREATE TABLE process_ind4 AS SELECT * FROM \
+            (WITH RankedActions AS (SELECT patient_id, date, event,\
+                    ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY date) AS rn \
+                        FROM process_ind WHERE event = 'yFIN') \
+             SELECT DISTINCT A.* FROM process_ind A \
+                 JOIN RankedActions R ON A.patient_id = R.patient_id WHERE \
+                     R.rn = 4 AND (A.date <= R.date OR A.event = 'FIN'))")        
+    con.sql("CREATE TABLE process_ind5 AS SELECT * FROM \
+            (WITH RankedActions AS (SELECT patient_id, date, event,\
+                    ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY date) AS rn \
+                        FROM process_ind WHERE event = 'yFIN') \
+             SELECT DISTINCT A.* FROM process_ind A \
+                 JOIN RankedActions R ON A.patient_id = R.patient_id WHERE \
+                     R.rn = 5 AND (A.date <= R.date OR A.event = 'FIN'))") 
         
 ```
 
@@ -1610,7 +1642,7 @@ Conformance checking is a technique used to check process compliance by comparin
 Fitness is the metric that measures how much a trace is distanced from a given process model, or from the guidelines in this case. There are different methods to calculate this metric but in the code below is used the aligned fitness. Since in this metric the initial marking and the final marking have to be fixed we included the events 'INI' and 'FIN' in the Petri Net and in each trace. Adding this artificial events allows us to compare all traces fitness in the same conditions.
 
 ```{python}
-#| label: Fitness  calculation
+#| label: Fitness  calculation (treatments)
 def id2treat_fitness(log ,
                net, 
                initial_marking, 
@@ -1673,7 +1705,7 @@ def id2treat_fitness(log ,
 The function below takes a treatments' event log and returns each patient's period's fitness.
 
 ```{python}
-#| label: Fitness  calculation by intervals
+#| label: Fitness  calculation by intervals (treatments)
 def id2treat_fitness_by_interval(con,
                            cond,
                            pn_file,
@@ -1776,7 +1808,8 @@ def id2treat_fitness_by_interval(con,
     period2fitness['ini_date'] = date_0
     period2fitness['status'] = status
     con.sql(f"DROP TABLE IF EXISTS period2fitness_{cond}")
-    con.sql(f"CREATE TABLE period2fitness_{cond} AS SELECT * FROM period2fitness")
+    con.sql(f"CREATE TABLE period2fitness_{cond} AS SELECT * FROM period2fitness \
+              WHERE t_0!=t_1")
 ```
 
 In the next function is shown a boxplot function to show clusters' fitness distribution.
@@ -1846,14 +1879,19 @@ def treatments_clusters_boxplot(con,
 
 ```
 
-Process indicators can also be represented in a Petri Net. Therefore we created the next Petri Nets to analyze whether the traces obey the guidelines the first three years:
+Process indicators can also be represented in a Petri Net. Therefore we created the next Petri Nets to analyze whether the traces obey the guidelines the first five years:
 
 ![Petri Net of process indicators of the first year](../../outputs/PN_process1.png){#fig-petrinet_process1 fig-align="center" width="100%"}
+
 ![Petri Net of process indicators of the first two years](../../outputs/PN_process2.png){#fig-petrinet_process2 fig-align="center" width="100%"}
+
 ![Petri Net of process indicators of the first three years](../../outputs/PN_process3.png){#fig-petrinet_process3 fig-align="center" width="100%"}
 
+![Petri Net of process indicators of the first four years](../../outputs/PN_process4.png){#fig-petrinet_process4 fig-align="center" width="100%"}
+
+![Petri Net of process indicators of the first five years](../../outputs/PN_process5.png){#fig-petrinet_process5 fig-align="center" width="100%"}
 ```{python}
-#| label: Fitness  calculation
+#| label: Fitness  calculation (process_indicators)
 def id2process_fitness(con,
                        query,
                        pn_file,
@@ -1901,12 +1939,15 @@ def id2process_fitness(con,
         date_list.append(list(log['time:timestamp'])[-2])
         fit_list.append(fit_obj[0]['trace_fitness'])
         
+    log_0 = log[log['concept:name'].isin(['INI','FIN','yFIN'])]
+    alfa = pm4py.conformance.conformance_diagnostics_token_based_replay(
+        log_0, net, initial_marking, final_marking)[0]['trace_fitness']
+    
     df =  pd.DataFrame()
     df['ID'] = id_list
-    df['fitness'] = fit_list
+    df['fitness'] = [(x-alfa)/(1-alfa) for x in fit_list]
     df['date'] = date_list
     return df
-
 ```
 
 ### Decision mining
@@ -2014,8 +2055,8 @@ Joint models are used to analyse simultaneously two related phenomena, the evolu
 #| warning: FALSE
 #| output: FALSE
 logging.info('Preprocess of the initial dataframes')
-#db_path = '../../inputs/data.duckdb'
-db_path = 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
+db_path = '../../inputs/data.duckdb'
+#db_path = 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
 con = duckdb.connect(db_path)
 notnan_p = select_by_condition(con)
 con.close()
@@ -2027,8 +2068,8 @@ con.close()
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-#db_path <- '../../inputs/data.duckdb'
-db_path <- 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
+db_path <- '../../inputs/data.duckdb'
+#db_path <- 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
 ```
 ### Patients without predominant clinical condition
 
@@ -2394,7 +2435,8 @@ Using same predictive variables a joint latent class model of three classes is m
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
                  survival = Surv(t_min,t_max,status) ~ age+sex, hazard="Weibull",
-                     hazardtype="PH",ng=1,data=df, verbose=FALSE)
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
+                 B=c(1,1,0,0,0,0,1,0,1,1))
 ### 3 latent class
 tryCatch(
 {mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
@@ -2756,7 +2798,8 @@ Using same predictive variables a joint latent class model of three classes is m
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
                  survival = Surv(t_min,t_max,status) ~ age+sex, hazard="Weibull",
-                     hazardtype="PH",ng=1,data=df, verbose=FALSE)
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
+                 B=c(1,1,0,0,0,0,1,0,1,1))
 ### 3 latent class
 tryCatch(
 {mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
@@ -3120,7 +3163,8 @@ Using same predictive variables a joint latent class model of three classes is m
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
                  survival = Surv(t_min,t_max,status) ~ age+sex, hazard="Weibull",
-                     hazardtype="PH",ng=1,data=df, verbose=FALSE)
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
+                 B=c(1,1,0,0,0,0,1,0,1,1))
 ### 3 latent class
 tryCatch(
 {mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
@@ -3486,7 +3530,8 @@ Using same predictive variables a joint latent class model of three classes is m
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
                  survival = Surv(t_min,t_max,status) ~ age+sex, hazard="Weibull",
-                     hazardtype="PH",ng=1,data=df, verbose=FALSE)
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
+                 B=c(1,1,0,0,0,0,1,0,1,1))
 ### 3 latent class
 tryCatch(
 {mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
@@ -3674,6 +3719,7 @@ dm = calculate_dm_ED(traces,measure_f)
 #| label: dendograms (f)
 #| eval: TRUE
 #| echo: FALSE
+#| output: FALSE
 logging.info("Make dendogram of %s patients", cond)
 dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
@@ -3849,7 +3895,8 @@ Using same predictive variables a joint latent class model of three classes is m
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
                  survival = Surv(t_min,t_max,status) ~ age+sex, hazard="Weibull",
-                     hazardtype="PH",ng=1,data=df, verbose=FALSE)
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
+                 B=c(1,1,0,0,0,0,1,0,1,1))
 ### 3 latent class
 tryCatch(
 {mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
@@ -4213,7 +4260,8 @@ Using same predictive variables a joint latent class model of three classes is m
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
                  survival = Surv(t_min,t_max,status) ~ age+sex, hazard="Weibull",
-                     hazardtype="PH",ng=1,data=df, verbose=FALSE)
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
+                 B=c(1,1,0,0,0,0,1,0,1,1))
 ### 3 latent class
 tryCatch(
 {mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
@@ -4342,13 +4390,63 @@ png(filename=gsub("src/analysis-scripts/","",
     width = 600, height = 750, units = "px")
 eventlog <- dbGetQuery(con,
                       "SELECT patient_id,event,date,cycle,actins\
-                       FROM process_ind WHERE actins NOT IN (\
+                       FROM process_ind3 WHERE actins NOT IN (\
                        SELECT actins FROM process_ind2) \
                        UNION ALL SELECT patient_id,event, \
                        CAST(date AS TIMESTAMP) + INTERVAL 1 SECOND AS date, \
                        'complete' AS cycle,actins\
-                       FROM process_ind WHERE actins NOT IN (\
+                       FROM process_ind3 WHERE actins NOT IN (\
                        SELECT actins FROM process_ind2)")
+activity_presence_df <- eventlog %>%
+    mutate(resource = NA) %>%
+    eventlog(
+      case_id = "patient_id",
+      activity_id = "event", 
+      lifecycle_id = "cycle", 
+      activity_instance_id = "actins", 
+      timestamp = "date", 
+      resource_id = 'resource'
+    ) %>% activity_presence()  
+plot(activity_presence_df[activity_presence_df$event != "yFIN",])
+dev.off()
+
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs/activity_presence_process_indicators_year4.png")),
+    width = 600, height = 750, units = "px")
+eventlog <- dbGetQuery(con,
+                      "SELECT patient_id,event,date,cycle,actins\
+                       FROM process_ind4 WHERE actins NOT IN (\
+                       SELECT actins FROM process_ind3) \
+                       UNION ALL SELECT patient_id,event, \
+                       CAST(date AS TIMESTAMP) + INTERVAL 1 SECOND AS date, \
+                       'complete' AS cycle,actins\
+                       FROM process_ind4 WHERE actins NOT IN (\
+                       SELECT actins FROM process_ind3)")
+activity_presence_df <- eventlog %>%
+    mutate(resource = NA) %>%
+    eventlog(
+      case_id = "patient_id",
+      activity_id = "event", 
+      lifecycle_id = "cycle", 
+      activity_instance_id = "actins", 
+      timestamp = "date", 
+      resource_id = 'resource'
+    ) %>% activity_presence()  
+plot(activity_presence_df[activity_presence_df$event != "yFIN",])
+dev.off()
+
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs/activity_presence_process_indicators_year5.png")),
+    width = 600, height = 750, units = "px")
+eventlog <- dbGetQuery(con,
+                      "SELECT patient_id,event,date,cycle,actins\
+                       FROM process_ind5 WHERE actins NOT IN (\
+                       SELECT actins FROM process_ind4) \
+                       UNION ALL SELECT patient_id,event, \
+                       CAST(date AS TIMESTAMP) + INTERVAL 1 SECOND AS date, \
+                       'complete' AS cycle,actins\
+                       FROM process_ind5 WHERE actins NOT IN (\
+                       SELECT actins FROM process_ind4)")
 activity_presence_df <- eventlog %>%
     mutate(resource = NA) %>%
     eventlog(
@@ -4398,7 +4496,7 @@ df_2 = id2process_fitness(con,
                           event_col = 'event',
                           date_col='date')
                           
-query = "SELECT * FROM process_ind"
+query = "SELECT * FROM process_ind3"
 df_3 = id2process_fitness(con,
                           query,
                           './PN_PI_year3.pnml',
@@ -4408,17 +4506,172 @@ df_3 = id2process_fitness(con,
                           id_col = 'patient_id',
                           event_col = 'event',
                           date_col='date')
-df = con.sql("SELECT d.*, p.type AS type,p.date AS date_fin \
-              FROM (SELECT *,1 AS year \
-              FROM df_1 UNION ALL SELECT *,2 AS year \
-              FROM df_2 UNION ALL SELECT *,3 AS year FROM df_3) d \
+                          
+query = "SELECT * FROM process_ind4"
+df_4 = id2process_fitness(con,
+                          query,
+                          './PN_PI_year4.pnml',
+                          pn_png_file='../../outputs/PN_process4.png',
+                          ini_place='place37',
+                          fin_place='place148',
+                          id_col = 'patient_id',
+                          event_col = 'event',
+                          date_col='date')
+
+query = "SELECT * FROM process_ind5"
+df_5 = id2process_fitness(con,
+                          query,
+                          './PN_PI_year5.pnml',
+                          pn_png_file='../../outputs/PN_process5.png',
+                          ini_place='place37',
+                          fin_place='place148',
+                          id_col = 'patient_id',
+                          event_col = 'event',
+                          date_col='date')
+                          
+df2year = con.sql("SELECT *,1 AS year FROM df_1 \
+                    UNION ALL SELECT *,2 AS year FROM df_2 \
+                    UNION ALL SELECT *,3 AS year FROM df_3 \
+                    UNION ALL SELECT *,4 AS year FROM df_4 \
+                    UNION ALL SELECT *,5 AS year FROM df_5").df()
+boxplot1 = sns.boxplot(x = df2year['year'], 
+                       y = df2year['fitness'], 
+                       palette = 'husl')
+fig1 = boxplot1.get_figure()
+fig1.savefig("fitness_by_year.png")
+con.sql("DROP TABLE IF EXISTS period2process_fitness;")
+con.sql("CREATE TABLE period2process_fitness AS \
+SELECT ID, \
+DATEDIFF('day', initial_date,date) AS t_0, \
+DATEDIFF('day', initial_date,final_date) AS t_1, fitness, initial_date, status \
+FROM (SELECT a.*,COALESCE(b.deregistration_date,'2022-12-31'),\
+             COALESCE( LEAD(date, 1) OVER (PARTITION BY ID ORDER BY date), \
+             LEAST(deregistration_date, \
+                   COALESCE(admission_date,\
+                            CAST('2022-12-31' AS DATE)) )) AS final_date, \
+             CASE WHEN admission_date=final_date THEN 1 ELSE 0 END AS status, \
+             MIN(date) OVER (PARTITION BY ID) AS initial_date\
+             FROM (SELECT * FROM (SELECT df2year.*, \
+                  cmbd_incidents_postdx_first_view.admission_date AS admission_date \
+                  FROM df2year LEFT JOIN cmbd_incidents_postdx_first_view ON \
+                    df2year.ID = cmbd_incidents_postdx_first_view.patient_id) \
+                      WHERE date<admission_date OR admission_date IS NULL) a \
+                  LEFT JOIN patient_incidents_view b ON a.ID=b.patient_id) WHERE t_0!=t_1")
+```
+
+```{python}
+#| label: Creating process indicators' conformance analysis by condition
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+df2cond = con.sql("SELECT d.*, p.type AS type,p.date AS date_fin \
+              FROM (SELECT *,1 AS year FROM df_1 \
+                    UNION ALL SELECT *,2 AS year FROM df_2 \
+                    UNION ALL SELECT *,3 AS year FROM df_3 \
+                    UNION ALL SELECT *,4 AS year FROM df_4 \
+                    UNION ALL SELECT *,5 AS year FROM df_5) d \
               LEFT JOIN patient_condition p ON d.ID = p.patient_id \
               WHERE d.date<=p.date").df()
 
-sns.boxplot(x = df['type'], 
-            y = df['fitness'], 
-            hue = df['year'], 
-            palette = 'husl')
+boxplot2 = sns.boxplot(x = df2cond['type'], 
+                      y = df2cond['fitness'], 
+                      hue = df2cond['year'], 
+                      palette = 'husl')
+plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0, title='Year')
+fig2 = boxplot2.get_figure()
+fig2.savefig("fitness2cond_by_year.png")
+
 con.close()
 ```
+
+#### Prediction Models
+
+In the next example, we choose fitness, age, sex and copayment to try to predict a hospitalization with a time dependet Cox model, and the summary of it is:
+
+
+```{r}
+#| label: Time dependent COX (process indicators)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+con <- dbConnect(duckdb(), dbdir = db_path)
+
+df <- dbGetQuery(con, paste0("SELECT period2process_fitness.ID, period2process_fitness.t_0, period2process_fitness.t_1, period2process_fitness.fitness, period2process_fitness.status, patient_incidents_view.age, patient_incidents_view.sex, patient_incidents_view.copayment FROM period2process_fitness LEFT JOIN patient_incidents_view ON period2process_fitness.ID=patient_incidents_view.patient_id"))
+dbDisconnect(con, shutdown = TRUE)
+
+df$sex <- as.factor(df$sex)
+df$ID2 <- as.numeric(as.factor(df$ID))
+df$t_max <- ave(df$t_1, df$ID2, FUN = max)
+df$t_min <- ave(df$t_0, df$ID2, FUN = min)
+
+model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness,
+               data=df)
+
+summary(model)
+```
+
+
+Using same predictive variables a joint latent class model of three classes is made:
+```{r}
+#| label: JLCM model (process indicators)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+
+### 1 latent class
+
+mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
+                 survival = Surv(t_min,t_max,status) ~ age+sex, hazard="Weibull",
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,
+                 B=c(1,1,0,0,0,0,1,0,1,1))
+### 3 latent class
+tryCatch(
+{mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
+                  Jointlcmm(fixed= fitness ~ t_1 ,mixture =~ t_1,
+                            random=~t_1,subject="ID2",
+                            survival = Surv(t_min,t_max,status)~ age+sex,
+                            hazard="Weibull",hazardtype="PH",
+                            ng=3,data=df, verbose=FALSE))
+
+summary(mj3)
+
+postprob(mj3)
+
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs/joint1_PI.png")),
+    width = 600, height = 750, units = "px")
+plot(mj3, which = "fit", var.time = "t_1", marg = F, break.times = 5, bty = "l", legend.loc = 'bottomright',
+     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,0.9))
+dev.off()
+ 
+d1 <- data.frame(t_1=seq(1,1200,length.out=100))
+data.new <-data.frame(d1,age=0,sex=0)
+mj3.pred <- predictY(mj3, data.new , var.time = "t_1")
+
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs/joint2_PI.png")),
+    width = 600, height = 750, units = "px")
+plot(mj3.pred, bty = "l", ylim = c(0, 1), legend.loc = 'bottomleft',
+     ylab = "fitness", xlab = "days", lwd = 2)
+dev.off()
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs/joint3_PI.png")),
+    width = 600, height = 750, units = "px")
+plot(mj3, which = "survival", lwd = 2, legend.loc = 'bottomleft', bty = "l",
+     xlab = "days", ylab = "event-free probability")
+dev.off()},
+error = function(cond_) {
+            message(conditionMessage(cond_))
+        }
+)
+
+```
+![Class-specific weighted marginal and subject-specific mean predicted trajectories](../../outputs/joint1_PI.png){#fig-joint1_PI fig-align="center" width="80%"}
+
+![Class-specific fitness mean  predicted trajectory](../../outputs/joint2_PI.png){#fig-joint2_PI fig-align="center" width="80%"}
+
+![Class-specific survival functions](../../outputs/joint3_PI.png){#fig-joint3_PI fig-align="center" width="80%"}
 

@@ -2,7 +2,7 @@
 <pnml>
   <net id="net1" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel">
     <name>
-      <text>PN_indicadores_de_proceso10_</text>
+      <text>PN_PI_year1</text>
     </name>
     <page id="n0">
       <place id="place6">
