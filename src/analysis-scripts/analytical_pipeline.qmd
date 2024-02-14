@@ -40,9 +40,9 @@ It is a population-based retrospective observational study centered on all T2D p
 
 The cohort is defined as patients with type 2 diabetes:
 
--   Inclusion criteria: Patients that, at 2017-01-01 or during the follow-up from 2017-01-01 to 2022-12-31, had active health card (active TIA - tarjeta sanitaria activa) and one of the inclusion codes given in the 'inclusion code list ('T90' if CIAP-2, '250' if 'CIE-9CM' or 'E11' if CIE-10-ES) and none of the exclusion codes given in the exclusion codes list ('T89' if CIAP-2, '250.01' if CIE-9CM, '250.03' if CIE-9CM, '250.11' if CIE-9CM, '250.13' if CIE-9CM, '250.21' if CIE-9CM, '250.23' if CIE-9CM, '250.31' if CIE-9CM, '250.33' if CIE-9CM, '250.41' if CIE-9CM, '250.43' if CIE-9CM, '250.51' if CIE-9CM, '250.53' if CIE-9CM, '250.61' if CIE-9CM, '250.63' if CIE-9CM, '250.71' if CIE-9CM, '250.73' if CIE-9CM, '250.81' if CIE-9CM, '250.83' if CIE-9CM, '250.91' if CIE-9CM, '250.93' if CIE-9CM or 'E10' if CIE-10-ES) in the clinical records of primary care.
+-   Inclusion criteria: Patients that, at 2017-01-01 or during the follow-up from 2017-01-01 to 2022-12-31, had active health card (active TIA - tarjeta sanitaria activa) and one of the inclusion codes given in the 'inclusion code list ('T90' if CIAP-2, '250' if 'CIE-9CM' or 'E11' if CIE-10-ES).
 
--   Exclusion criteria: Patients that had one the codes in exclusion code lists ('T90' if CIAP-2, '250' if 'CIE-9CM' or 'E11' if CIE-10-ES) and none of the exclusion codes given in the exclusion codes list ('T89' if CIAP-2, '250.01' if CIE-9CM, '250.03' if CIE-9CM, '250.11' if CIE-9CM, '250.13' if CIE-9CM, '250.21' if CIE-9CM, '250.23' if CIE-9CM, '250.31' if CIE-9CM, '250.33' if CIE-9CM, '250.41' if CIE-9CM, '250.43' if CIE-9CM, '250.51' if CIE-9CM, '250.53' if CIE-9CM, '250.61' if CIE-9CM, '250.63' if CIE-9CM, '250.71' if CIE-9CM, '250.73' if CIE-9CM, '250.81' if CIE-9CM, '250.83' if CIE-9CM, '250.91' if CIE-9CM, '250.93' if CIE-9CM or 'E10' if CIE-10-ES) during their follow-up or patients with no contact with the health system from 2017-01-01 to 2022-12-31.
+-   Exclusion criteria: Patients that had none of the exclusion codes given in the exclusion codes list ('T89' if CIAP-2, '250.01' if CIE-9CM, '250.03' if CIE-9CM, '250.11' if CIE-9CM, '250.13' if CIE-9CM, '250.21' if CIE-9CM, '250.23' if CIE-9CM, '250.31' if CIE-9CM, '250.33' if CIE-9CM, '250.41' if CIE-9CM, '250.43' if CIE-9CM, '250.51' if CIE-9CM, '250.53' if CIE-9CM, '250.61' if CIE-9CM, '250.63' if CIE-9CM, '250.71' if CIE-9CM, '250.73' if CIE-9CM, '250.81' if CIE-9CM, '250.83' if CIE-9CM, '250.91' if CIE-9CM, '250.93' if CIE-9CM or 'E10' if CIE-10-ES) during their follow-up or patients with no contact with the health system from 2017-01-01 to 2022-12-31.
 
 -   Study period: 2017-01-01 until 2022-12-31.
 
@@ -64,7 +64,7 @@ Treatment decisions are based on glycated hemoglobin measurements. In this conte
 
 ### Process indicators
 
-Another measures to which different studies pay special attention are the process indicators. First, process indicators are essential for assessing the three dimensions of healthcare quality: effectiveness, safety, and patient-centeredness. They are measured relatively easily and often do not require risk-adjustment, making their interpretation straightforward. Poor performance on process indicators can be directly attributed to the actions of healthcare providers, providing a clear indication for improvement, such as better adherence to clinical guidelines. Moreover, process indicators allow for the identification of areas for quality improvement, which is crucial in the complex healthcare environment. These indicators cover a wide range of health factors and help focus resources and efforts to improve the health and well-being of the population. Therefore, the attention given to health process indicators is justified by their crucial role in evaluating and improving healthcare quality and population health.
+Another measures to which different studies pay special attention are process indicators. First, process indicators are essential for assessing the three dimensions of healthcare quality: effectiveness, safety, and patient-centeredness. They are measured relatively easily and often do not require risk-adjustment, making their interpretation straightforward. Poor performance on process indicators can be directly attributed to the actions of healthcare providers, providing a clear indication for improvement, such as better adherence to clinical guidelines. Moreover, process indicators allow for the identification of areas for quality improvement, which is crucial in the complex healthcare environment. These indicators cover a wide range of health factors and help focus resources and efforts to improve the health and well-being of the population. Therefore, the attention given to health process indicators is justified by their crucial role in evaluating and improving healthcare quality and population health.
 
 ## Running code
 
@@ -162,57 +162,33 @@ library(bayestestR)
 library(purrr)
 library(duckdb)
 library(logger)
+library(finalfit)
+library(flextable)
+library(readxl)
+library(knitr)
+
 ```
+### Data preprocessing
 
-### Data preprocessing and treatments' event log creation
-
-For using process mining an event log is needed. The sort of functions below take data model's treatment and parameter tables to create an event log of glycated hemoglobin measures and treatment of patients. Glycated hemoglobin measurement events are divided into two different states, those that have a value smaller than 'L' and the others. Therefore, these events do not have any duration. In the case of treatments on the other hand a duration period exists. For treatments events definition it is based on drugs dispensing and a fixed time period after the dispensing date of the last dispensing date of the same drug if the dispensing is regularly produced . Functions below make an event log taking some assumptions. However the analysis of this document is thought to do by the predominant clinical condition of patients according to DM2 treatment algorithm. In other words, patients are grouped by their predominant clinical condition and the analysis is realized independently to each group.
-
-
+First of all, it is important to prepare correctly the data for the analysis. The next function creates some sql views that are going to be useful later:
 ```{python, warning: FALSE}
-#| label: Preprocessing functions and treatments' event log
+#| label: data preprocess
 #| warning: FALSE
-logging.basicConfig(level=logging.INFO)
-def select_by_condition(con):
+def general_preprocess(con):
     '''
-    Filtering data by predominant clinical condition according to redGDPS
+    Generating  views
     Args:
         con : db connector variable
-    Return:
-        presc_data_p (float): percentage of not null data in prescription dates
-        
-    https://www.sciencedirect.com/science/article/pii/S1751991821000176?via%3Dihub#tbl0015
-    https://www.sanidad.gob.es/estadEstudios/estadisticas/estadisticas/estMinisterio/SIAP/map_cie9mc_cie10_ciap2.htm
-    
-     obesity (BMI≥30 kg/m2), age older than 75, established CVD (defined as
-     myocardial infarction, ischemic heart disease, cerebrovascular disease,
-     or peripheral arterial disease), CKD (defined as eGFR < 60 ml/min/
-     1.73 m2 and/or UACR ≥ 30 mg/g) and HF. 
     '''
-    ecv_code_list = ['K76','K75','K76','K91','K92']
-    ic = 'K77'
-    erc = 'U99.01'
-    ob = "T82"
-
-    to_list = lambda l: "('"+"','".join(l)+"')"     
     con.sql("DROP VIEW IF EXISTS cmbd_incidents_view;")
-    con.sql("DROP VIEW IF EXISTS cmbd_incidents_postdx_view")
-    con.sql("DROP VIEW IF EXISTS cmbd_incidents_postdx_first_view")
     con.sql("DROP VIEW IF EXISTS comorb_incidents_view;")    
     con.sql("DROP VIEW IF EXISTS ss_use_incidents_view;")
     con.sql("DROP VIEW IF EXISTS param_incidents_view_;")
     con.sql("DROP VIEW IF EXISTS param_incidents_view;")
-    con.sql("DROP VIEW IF EXISTS param_incidents_view_age_date;")
+    con.sql("DROP VIEW IF EXISTS param_cat_incidents_view;")    
     con.sql("DROP VIEW IF EXISTS patient_incidents_view;")
     con.sql("DROP VIEW IF EXISTS treat_incidents_view;")   
-    con.sql("DROP VIEW IF EXISTS comorb_incidents_ciap_view;")    
-    con.sql("DROP VIEW IF EXISTS comorb_incidents_active_view;")    
-    con.sql("DROP VIEW IF EXISTS param_incidents_predx_view;")
-    con.sql("DROP VIEW IF EXISTS param_incidents_predx_last_view;")
-    con.sql("DROP VIEW IF EXISTS cmbd_incidents_long_view;")
-    con.sql("DROP VIEW IF EXISTS ob_events;")
-    con.sql("DROP VIEW IF EXISTS cmbd_incidents_long_view_dx")
-    con.sql("DROP TABLE IF EXISTS patient_condition;")
+
 
     con.sql("CREATE VIEW cmbd_incidents_view AS SELECT * FROM main.cmbd \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
@@ -228,12 +204,15 @@ def select_by_condition(con):
                                  WHERE dx_date >='2017-01-01') \
                 AND (param_value!=0 OR param_name!='bmi')")
     con.sql("CREATE VIEW param_incidents_view AS \
-            SELECT patient_id,param_name,MAX(param_value) AS param_value,param_date\
+            SELECT DISTINCT patient_id,param_name,MAX(param_value) AS param_value,param_date\
         FROM param_incidents_view_ GROUP BY patient_id,param_name,param_date")
+    con.sql("CREATE VIEW param_cat_incidents_view AS SELECT DISTINCT * FROM main.param_cat \
+            WHERE patient_id IN (SELECT patient_id FROM main.patient \
+                                 WHERE dx_date >='2017-01-01')")
     con.sql("CREATE VIEW patient_incidents_view AS SELECT *,\
             FLOOR(DATEDIFF('day',month_nac,DATE '2017-01-01') / 365.25) \
                 AS 'age', \
-            FLOOR(DATEDIFF('day',month_nac,DATE '2017-01-01') / 365.25) \
+            FLOOR(DATEDIFF('day',month_nac, dx_date) / 365.25) \
                 AS 'age_dx', \
             DATE_ADD(month_nac, INTERVAL 75 YEAR) AS 'turn_to_75', \
             DATE_ADD(month_nac, INTERVAL 65 YEAR) AS 'turn_to_65' \
@@ -242,21 +221,126 @@ def select_by_condition(con):
     con.sql("CREATE VIEW treat_incidents_view AS SELECT * FROM main.treat \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
                                  WHERE dx_date >='2017-01-01')")
+                
+    con.sql("DROP VIEW IF EXISTS param_incidents_view_age_date;")    
     con.sql("CREATE VIEW param_incidents_view_age_date AS SELECT param_incidents_view.patient_id, \
             param_name, param_value, param_date, turn_to_65, turn_to_75 FROM \
                 param_incidents_view LEFT JOIN patient_incidents_view ON \
          param_incidents_view.patient_id = patient_incidents_view.patient_id")
+
+    con.sql("DROP VIEW IF EXISTS cmbd_incidents_postdx_view")
     con.sql("CREATE VIEW cmbd_incidents_postdx_view AS \
             SELECT * FROM cmbd_incidents_view \
                 WHERE admission_date > (SELECT dx_date \
                                         FROM patient_incidents_view \
     WHERE patient_incidents_view.patient_id = cmbd_incidents_view.patient_id)")
+                    
+    con.sql("DROP VIEW IF EXISTS cmbd_incidents_postdx_first_view")
     con.sql("CREATE VIEW cmbd_incidents_postdx_first_view AS \
             SELECT patient_id, admission_date, diagnosis1_code FROM (SELECT *,\
                       ROW_NUMBER() OVER(PARTITION BY patient_id \
                                         ORDER BY admission_date) AS rn \
-                          FROM cmbd_incidents_postdx_view) t WHERE rn = 1;") 
+                          FROM cmbd_incidents_postdx_view) t WHERE rn = 1;")
+                
+    con.sql("DROP VIEW IF EXISTS param_incidents_predx_view;")
+    con.sql("CREATE VIEW param_incidents_predx_view AS SELECT * FROM (\
+            SELECT * FROM (SELECT patient_id, param_name, param_value, param_date \
+                            FROM param_incidents_view) sub \
+                WHERE param_date <= (SELECT dx_date FROM patient_incidents_view \
+                    WHERE patient_incidents_view.patient_id = sub.patient_id));")
+        
+    con.sql("DROP VIEW IF EXISTS param_incidents_predx_last_view;")        
+    con.sql("CREATE VIEW param_incidents_predx_last_view AS \
+            SELECT patient_id, param_name, param_date, param_value \
+                FROM (SELECT patient_id, param_name, param_date, param_value,\
+                      ROW_NUMBER() OVER(PARTITION BY patient_id, param_name \
+                                        ORDER BY param_date DESC) AS rn \
+                          FROM param_incidents_predx_view \
+                          WHERE param_value!=9999) t WHERE rn = 1;")
+                    
+    con.sql("DROP VIEW IF EXISTS param_cat_incidents_predx_view;")                    
+    con.sql("CREATE VIEW param_cat_incidents_predx_view AS SELECT * FROM (\
+            SELECT * FROM (SELECT patient_id, param_cat_name, param_cat_value, param_cat_date \
+                            FROM param_cat_incidents_view) sub \
+                WHERE param_cat_date <= (SELECT dx_date FROM patient_incidents_view \
+                    WHERE patient_incidents_view.patient_id = sub.patient_id));")
+    con.sql("DROP VIEW IF EXISTS param_cat_incidents_predx_last_view;")
+    con.sql("CREATE VIEW param_cat_incidents_predx_last_view AS \
+            SELECT patient_id, param_cat_name, param_cat_date, param_cat_value \
+                FROM (SELECT patient_id, param_cat_name, param_cat_date, param_cat_value,\
+                      ROW_NUMBER() OVER(PARTITION BY patient_id, param_cat_name \
+                                        ORDER BY param_cat_date DESC) AS rn \
+                          FROM param_cat_incidents_predx_view) t WHERE rn = 1;") 
+                    
+    con.sql("DROP VIEW IF EXISTS param_prevalents_pre_view;")
+    con.sql("CREATE VIEW param_prevalents_pre_view AS \
+            SELECT DISTINCT patient_id, param_name, param_value, param_date FROM main.param \
+             WHERE param_date < '2017-01-01' AND patient_id IN (\
+                SELECT patient_id FROM main.patient WHERE dx_date < '2017-01-01')")
+    con.sql("DROP VIEW IF EXISTS param_prevalents_pre_last_view;")
+    con.sql("CREATE VIEW param_prevalents_pre_last_view AS \
+            SELECT patient_id, param_name, param_date, param_value \
+                FROM (SELECT patient_id, param_name, param_date, param_value,\
+                      ROW_NUMBER() OVER(PARTITION BY patient_id, param_name \
+                                        ORDER BY param_date DESC) AS rn \
+                          FROM param_prevalents_pre_view \
+                              WHERE param_value!=9999) t WHERE rn = 1;")
+                    
+    con.sql("DROP VIEW IF EXISTS param_cat_prevalents_pre_view;")
+    con.sql("CREATE VIEW param_cat_prevalents_pre_view AS \
+            SELECT DISTINCT * FROM main.param_cat \
+             WHERE param_cat_date < '2017-01-01' AND patient_id IN (\
+                SELECT patient_id FROM main.patient WHERE dx_date < '2017-01-01')")
+    con.sql("DROP VIEW IF EXISTS param_cat_prevalents_pre_last_view;")
+    con.sql("CREATE VIEW param_cat_prevalents_pre_last_view AS \
+            SELECT patient_id, param_cat_name, param_cat_date, param_cat_value \
+                FROM (SELECT patient_id, param_cat_name, param_cat_date, param_cat_value,\
+                      ROW_NUMBER() OVER(PARTITION BY patient_id, param_cat_name \
+                                        ORDER BY param_cat_date DESC) AS rn \
+                          FROM param_cat_prevalents_pre_view) t WHERE rn = 1;") 
 
+
+```
+
+### Treatments' event log creation
+
+For using process mining an event log is needed. The sort of functions below take data model's treatment and parameter tables to create an event log of glycated hemoglobin measures and treatment of patients. Glycated hemoglobin measurement events are divided into two different states, those that have a value smaller than "L" and the others. L's value depends on patient's diabetes duration, age and comorbilities and complications. Therefore with the help of expert clinicians we decided that L would take the following values:
+
+-   L=7 if age<75 and no cardiovascular disease, heart failure, chronic kidney disease or fragility.
+-   L=8 if age<65 and any cardiovascular disease, heart failure, chronic kidney disease or fragility.
+-   L=8.5 if else.
+
+As they are measures these events do not have any duration. In the case of treatments on the other hand a duration period exists. For treatments events definition it is based on drugs dispensing and a fixed time period after the dispensing date of the last dispensing date of the same drug if the dispensing is regularly produced. Functions below make an event logs. However the analysis of this document is thought to do by the predominant clinical condition of patients according to DM2 treatment algorithm. In other words, patients are grouped by their predominant clinical condition and the analysis is realized independently to each group.
+
+
+```{python, warning: FALSE}
+#| label: treatments' event log creation
+#| warning: FALSE
+logging.basicConfig(level=logging.INFO)
+def separate_patients_by_condition(con):
+    '''
+    Filtering data by predominant clinical condition according to redGDPS
+    Args:
+        con : db connector variable
+    Return:
+        presc_data_p (float): percentage of not null data in prescription dates
+        
+    https://www.sciencedirect.com/science/article/pii/S1751991821000176?via%3Dihub#tbl0015
+    https://www.sanidad.gob.es/estadEstudios/estadisticas/estadisticas/estMinisterio/SIAP/map_cie9mc_cie10_ciap2.htm
+    
+     obesity (BMI≥30 kg/m2), age older than 75, established CVD (defined as
+     myocardial infarction, ischemic heart disease, cerebrovascular disease,
+     or peripheral arterial disease), CKD (defined as eGFR < 60 ml/min/
+     1.73 m2 and/or UACR ≥ 30 mg/g) and HF. 
+    '''
+    cvd_code_list = ['K76','K75','K76','K91','K92']
+    hf = 'K77'
+    ckd = 'U99.01'
+    ob = "T82"
+
+    to_list = lambda l: "('"+"','".join(l)+"')"     
+                    
+                    
     presc_data_p = con.sql(f" SELECT (COUNT(prescription_date_ini)) / COUNT(*) \
                            AS p FROM treat_incidents_view").fetchall()[0][0]
     cie9_df = pd.read_csv('./CIE9.csv').rename(columns={'CIE9':'CIE',
@@ -267,6 +351,9 @@ def select_by_condition(con):
     cie10_df['comorb_codif'] = 'ICD10'
     cie2ciap = pd.concat([cie9_df[['comorb_codif','CIE','CIAP']],
                           cie10_df[['comorb_codif','CIE','CIAP']]])
+    
+    con.sql("DROP VIEW IF EXISTS comorb_incidents_ciap_view;")    
+    con.sql("DROP VIEW IF EXISTS comorb_incidents_active_view;")    
     con.sql("CREATE VIEW comorb_incidents_ciap_view AS \
             SELECT * FROM comorb_incidents_view \
                 LEFT JOIN cie2ciap \
@@ -281,15 +368,15 @@ def select_by_condition(con):
     ob_list = set(con.sql(f"SELECT DISTINCT patient_id \
                           FROM comorb_incidents_active_view WHERE CIAP2 = '{ob}'"
                           ).df()['patient_id'])        
-    erc_list = set(con.sql(f"SELECT DISTINCT patient_id \
-                           FROM comorb_incidents_active_view WHERE CIAP2 = '{erc}'"
+    ckd_list = set(con.sql(f"SELECT DISTINCT patient_id \
+                           FROM comorb_incidents_active_view WHERE CIAP2 = '{ckd}'"
                            ).df()['patient_id'])        
-    ic_list = set(con.sql(f"SELECT DISTINCT patient_id \
-                          FROM comorb_incidents_active_view WHERE CIAP2 = '{ic}'"
+    hf_list = set(con.sql(f"SELECT DISTINCT patient_id \
+                          FROM comorb_incidents_active_view WHERE CIAP2 = '{hf}'"
                           ).df()['patient_id'])        
-    ecv_list = set(con.sql(f"SELECT DISTINCT patient_id \
+    cvd_list = set(con.sql(f"SELECT DISTINCT patient_id \
                            FROM comorb_incidents_active_view \
-                               WHERE CIAP2 IN {to_list(ecv_code_list)}"
+                               WHERE CIAP2 IN {to_list(cvd_code_list)}"
                                ).df()['patient_id'])        
 
     # Which is the predominal clinical condition at dx_date?
@@ -298,31 +385,31 @@ def select_by_condition(con):
     # ATEROESCLEROSIS (ENFERMEDADES VASCULARES PERIFÉRICAS) (I70)
     # OTRAS ENFERMEDADES VASCULARES PERIFÉRICAS (I73)
     # EMBOLIA Y TROMBOSIS ARTERIAL (ENFERMEDADES VASCULARES PERIFÉRICAS) (I74)
-    to_ecv_change_prelist = ['I2%i' %i for i in range(6)]+[
+    to_cvd_change_prelist = ['I2%i' %i for i in range(6)]+[
                              'I6%i' %i for i in [1,3,4,5,6,7,8,9]]+[
                                 'I7%i' %i for i in [0,3,4]]
-    to_ecv_change_list = []
-    for code in to_ecv_change_prelist:
+    to_cvd_change_list = []
+    for code in to_cvd_change_prelist:
      for c in cie10_df['CIE']:
       if code in c and c not in ['I51.4','I60','I62','I67.1','I68.2','I67.5']:
-                to_ecv_change_list.append(c)
+                to_cvd_change_list.append(c)
     # INSUFICIENCIA CARDÍACA (I50)
     # ENFERMEDAD CARDÍACA Y RENAL CRÓNICA HIPERTENSIVA (I13)
-    to_ic_change_list = ['I09.81', 'I11.0', 'I13.0', 'I13.2', 'I50', 'I50.0',
+    to_hf_change_list = ['I09.81', 'I11.0', 'I13.0', 'I13.2', 'I50', 'I50.0',
                          'I50.1', 'I50.9']
     # ENFERMEDAD RENAL CRÓNICA (N18)
     # ENFERMEDAD RENAL CRÓNICA HIPERTENSIVA (I12)
-    to_erc_change_list = ['N18','N18.1','N18.2','N18.3','N18.30','N18.31',
+    to_ckd_change_list = ['N18','N18.1','N18.2','N18.3','N18.30','N18.31',
                           'N18.32','N18.4','N18.5','N18.6','N18.9','I12',
                           'I12.0','I12.9','filtglom']
     to_f_change_list = ['f_date']
     to_ob_change_list = ['bmi>=30','E66.01','E66.09','E66.1','E66.2',
                          'E66.8','E66.9']
     # SOBREPESO Y OBESIDAD (E66)
-    from_ecv_change_list = ['death']
-    from_ic_change_list = from_ecv_change_list+to_ecv_change_list
-    from_erc_change_list = from_ic_change_list+to_ic_change_list
-    from_f_change_list = from_erc_change_list+to_erc_change_list
+    from_cvd_change_list = ['death']
+    from_hf_change_list = from_cvd_change_list+to_cvd_change_list
+    from_ckd_change_list = from_hf_change_list+to_hf_change_list
+    from_f_change_list = from_ckd_change_list+to_ckd_change_list
     from_ob_change_list = from_f_change_list+to_f_change_list+['bmi<30']
     from_else_change_list = from_ob_change_list[:-1]+to_ob_change_list
     
@@ -331,18 +418,7 @@ def select_by_condition(con):
     relevance_order['order'] = range(len(relevance_order))
 
     
-    
-    con.sql("CREATE VIEW param_incidents_predx_view AS SELECT * FROM (\
-            SELECT * FROM (SELECT patient_id, param_name, param_value, param_date \
-                            FROM param_incidents_view) sub \
-                WHERE param_date <= (SELECT dx_date FROM patient_incidents_view \
-                    WHERE patient_incidents_view.patient_id = sub.patient_id));")
-    con.sql("CREATE VIEW param_incidents_predx_last_view AS \
-            SELECT patient_id, param_name, param_date, param_value \
-                FROM (SELECT patient_id, param_name, param_date, param_value,\
-                      ROW_NUMBER() OVER(PARTITION BY patient_id, param_name \
-                                        ORDER BY param_date DESC) AS rn \
-                          FROM param_incidents_predx_view) t WHERE rn = 1;")    
+       
     # https://ukkidney.org/health-professionals/information-resources/uk-eckd-guide/ckd-stages
     # Include obesity and kcd detection by parameters values                             
     param_filt = con.sql("SELECT * FROM param_incidents_view \
@@ -356,6 +432,7 @@ def select_by_condition(con):
                                ].rename(columns={
                                    'param_name':'code',
                                    'param_date':'admission_date'})
+    con.sql("DROP VIEW IF EXISTS cmbd_incidents_long_view;")
     con.sql("CREATE VIEW cmbd_incidents_long_view AS SELECT *,\
             COALESCE(t.order, 404) AS relevance FROM\
             (SELECT patient_id, admission_date, diagnosis1_code AS code \
@@ -384,6 +461,7 @@ def select_by_condition(con):
     f_list.update(set(con.sql("SELECT DISTINCT patient_id \
                               FROM patient_incidents_view WHERE turn_to_75<=dx_date"
                               ).df()['patient_id']))
+    con.sql("DROP VIEW IF EXISTS ob_events;")
     con.sql(f"CREATE VIEW ob_events AS SELECT * \
             FROM cmbd_incidents_long_view sub \
                 WHERE code IN {to_list(to_ob_change_list)} \
@@ -404,40 +482,41 @@ def select_by_condition(con):
                         FROM ob_events \
                             WHERE ob_events.patient_id  = sub.patient_id);"
                                    ).df()['patient_id'])
-    erc_list.update(set(con.sql(f"SELECT DISTINCT patient_id \
+    ckd_list.update(set(con.sql(f"SELECT DISTINCT patient_id \
                            FROM cmbd_incidents_long_view sub \
-                               WHERE code IN {to_list(to_erc_change_list)} \
+                               WHERE code IN {to_list(to_ckd_change_list)} \
                                    AND admission_date <= (SELECT dx_date \
                         FROM patient_incidents_view \
                             WHERE patient_incidents_view.patient_id = sub.patient_id);"
                             ).df()['patient_id']))        
-    ic_list.update(set(con.sql(f"SELECT DISTINCT patient_id \
+    hf_list.update(set(con.sql(f"SELECT DISTINCT patient_id \
                            FROM cmbd_incidents_long_view sub \
-                               WHERE code IN {to_list(to_ic_change_list)} \
+                               WHERE code IN {to_list(to_hf_change_list)} \
                                    AND admission_date <= (SELECT dx_date \
                         FROM patient_incidents_view \
                             WHERE patient_incidents_view.patient_id = sub.patient_id);"
                             ).df()['patient_id']))        
-    ecv_list.update(set(con.sql(f"SELECT DISTINCT patient_id \
+    cvd_list.update(set(con.sql(f"SELECT DISTINCT patient_id \
                            FROM cmbd_incidents_long_view sub \
-                               WHERE code IN {to_list(to_ecv_change_list)} \
+                               WHERE code IN {to_list(to_cvd_change_list)} \
                                    AND admission_date <= (SELECT dx_date \
                         FROM patient_incidents_view \
                             WHERE patient_incidents_view.patient_id = sub.patient_id);"
                             ).df()['patient_id']))        
       
     
-    ecv_list = list(ecv_list)
-    ic_list = list(ic_list.difference(ecv_list))
-    erc_list = list(erc_list.difference(ecv_list+ic_list))
-    f_list = list(f_list.difference(ecv_list+ic_list+erc_list))
-    ob_list = list(ob_list.difference(ecv_list+ic_list+erc_list+f_list))
+    cvd_list = list(cvd_list)
+    hf_list = list(hf_list.difference(cvd_list))
+    ckd_list = list(ckd_list.difference(cvd_list+hf_list))
+    f_list = list(f_list.difference(cvd_list+hf_list+ckd_list))
+    ob_list = list(ob_list.difference(cvd_list+hf_list+ckd_list+f_list))
     else_list = list(set(con.sql("SELECT DISTINCT patient_id \
                                  FROM patient_incidents_view"
                                  ).df()['patient_id']
-                         ).difference(ecv_list+ic_list+erc_list+f_list+ob_list))
+                         ).difference(cvd_list+hf_list+ckd_list+f_list+ob_list))
                
-    # When is a change on predominant clinical condition made?   
+    # When is a change on predominant clinical condition made?  
+    con.sql("DROP VIEW IF EXISTS cmbd_incidents_long_view_dx")
     con.sql(f"CREATE VIEW cmbd_incidents_long_view_dx AS SELECT * \
             FROM cmbd_incidents_long_view sub \
                 WHERE admission_date > (SELECT dx_date \
@@ -459,21 +538,21 @@ def select_by_condition(con):
             SELECT patient_id, '***' AS type,code, admission_date AS date \
                 FROM rankedevents__*** WHERE  event_rank=1 AND code='end')\
                 ".replace('***',cond)
-     
+    con.sql("DROP TABLE IF EXISTS patient_condition;")    
     con.sql(eval('f"CREATE TABLE patient_condition AS {}"'.format(' UNION ALL '.join(
-        [query_function(cond) for cond in ['ecv','ic','erc','f','ob','else']]))))    
+        [query_function(cond) for cond in ['cvd','hf','ckd','f','ob','else']]))))    
     return presc_data_p
                 
 
-def evlog_creation_prescriptions(con,
+def evlog_creation_by_prescriptions(con,
                                  cond,
-                                 code2drug_path='./diabetes_drugs.csv'):
+                                 code2drug_info_path='./diabetes_drugs.csv'):
     '''Preprocessing and event log obtention with prescriptions
   
     Args:
       con : db connector variable
       cond (str): predominal clinical condition's code
-      code2drug_path (str): drugs' and their codes' info's table's path
+      code2drug_info_path (str): drugs' and their codes' info's table's path
   
     ADNI: ANTIDIABETICOS NO INSULINICOS
   
@@ -505,7 +584,7 @@ def evlog_creation_prescriptions(con,
                              WHERE patient_condition.type = '{cond}')").df()
     dx_date = dict(zip(dx_date.patient_id,dx_date.dx_date))
     fin_date = dict(zip(fin_date.patient_id,fin_date.date))
-    code2drug = pd.read_csv(code2drug_path,index_col=0).to_dict()
+    code2drug = pd.read_csv(code2drug_info_path,index_col=0).to_dict()
     code2drug_f = lambda atc: code2drug.get(atc,{'class':'NONE'}
                                            ).get('class','NONE2'
                                                  ).replace('+','&')
@@ -534,7 +613,7 @@ def evlog_creation_prescriptions(con,
         lambda x: min([x,datetime.strptime('2023-01-01', "%Y-%m-%d")])).apply(
                                               lambda x: x-timedelta(days=1))
     act_n = max(treat_df['actins'])
-    if cond in ['ecv','ic','erc','f']:
+    if cond in ['cvd','hf','ckd','f']:
         param_df = con.sql(f"SELECT patient_id,param_date AS date, \
                            CASE WHEN param_value < {8} THEN 'HBA<L' \
                                WHEN param_value >= {8} AND param_value < {8.5} \
@@ -687,16 +766,16 @@ def evlog_creation_prescriptions(con,
     evlog['actins'] = [n//2 for n in range(len(evlog))]
     con.sql(f"CREATE TABLE evlog_raw_{cond} AS SELECT * FROM evlog")
  
-def evlog_creation_dispensations(con, 
+def evlog_creation_by_dispensations(con, 
                               cond,
-                              code2drug_path='./diabetes_drugs.csv',
+                              code2drug_info_path='./diabetes_drugs.csv',
                               nac_path='./Nomenclator_de_Facturacion.csv'):
     '''Preprocessing and event log obtention with dispensations
 
     Args:
       con : db connector variable
       cond (str): predominal clinical condition's code
-      code2drug_path (str): drugs' and their codes' info's table's path
+      code2drug_info_path (str): drugs' and their codes' info's table's path
       nac_path (str): drugs' and their containers' info's table's path
     
     ADNI: ANTIDIABETICOS NO INSULINICOS
@@ -733,7 +812,7 @@ def evlog_creation_dispensations(con,
                              WHERE patient_condition.type = '{cond}')").df()
     dx_date = dict(zip(dx_date.patient_id,dx_date.dx_date))
     fin_date = dict(zip(fin_date.patient_id,fin_date.date))
-    code2drug = pd.read_csv(code2drug_path,index_col=0).to_dict()
+    code2drug = pd.read_csv(code2drug_info_path,index_col=0).to_dict()
     code2drug_f = lambda atc: code2drug.get(atc,{'class':'NONE'}
                                            ).get('class','NONE2'
                                                  ).replace('+','&')
@@ -754,7 +833,7 @@ def evlog_creation_dispensations(con,
                                  ).sort_values(by = ['patient_id','date' ],
                       ascending = [True, True])
                      
-    if cond in ['ecv','ic','erc','f']:
+    if cond in ['cvd','hf','ckd','f']:
         df = con.sql(f"SELECT *, 'start' AS cycle,\
                      ROW_NUMBER() OVER (ORDER BY patient_id, date) AS actins \
                          FROM (SELECT patient_id,param_date AS date, \
@@ -1044,14 +1123,19 @@ def nac2comprimidos(nac_path,code_set):
 ```
 
 
-### Data preprocessing and process indicators' event log creation
+### Process indicators' event log creation
 
-With the objective of studying process indicators a function to make a process indicator's event log is code above. There, in addition to laboratory measures, specialist visits, and patient interviews, three artificial events have been included to aid the analysis. The 'INI' event denotes each patient's diabetes diagnosis date, the 'FIN' event indicates the date 3 years after the diagnosis, and the 'yFIN' events indicate the end of each annual interval.
+With the objective of studying process indicators a function to make a process indicators' event log is coded above. There, in addition to laboratory measures, specialist visits, and patient interviews, three artificial events have been included to aid the analysis.'INI' event denotes each patient's diabetes diagnosis date, 'yFIN' events indicate the end of each annual interval and 'FIN' event is the date of the end of the last completed annual interval.
 
 ```{python, warning: FALSE}
-#| label: Preprocessing functions and process indicators' event log
+#| label: process indicators' event log creation
 #| warning: FALSE
 def evlog_process_ind(con):
+    '''Generation of process indicators' eventlog
+
+    Args:
+      con : db connector variable
+    '''
     con.sql("DROP VIEW IF EXISTS pre_process_ind;")
     con.sql("DROP TABLE IF EXISTS process_ind;")
     con.sql("DROP TABLE IF EXISTS process_ind1;")
@@ -1154,7 +1238,7 @@ def evlog_process_ind(con):
 
 ### Distances
 
-One of the most important aim of process mining is to show and explain the processes. However, the great variety of traces does not allow us to draw any clear conclusions and it is often necessary to simplify our data. Another option that we can do before simplifying, to avoid the excessive losing of information and give another perspective to the analysis, is to cluster the traces and to analyze them by cluster. To do that we have to measure somehow the differences between the traces, the distance between them. This is not evident if we take into account that traces are categorical sequences of different lengths. Nevertheless, there are some distances that we can use to this task: edit distances, vector term similarity, LDA based distances, dynamic time warping, embedding based distances... Some of them are shown below as functions to calculate the distance matrix of traces:
+One of the most important aim of process mining is to show and explain the processes. However, the great variety of traces does not allow us to draw any clear conclusions and it is often necessary to simplify our data. Another option that we can do before simplifying, to avoid the excessive losing of information and give another perspective to the analysis, is to cluster the traces and to analyze them by cluster. To do that we have to measure somehow the differences between the traces, the distance between them. This is not evident if we take into account that traces are categorical sequences of different lengths. Nevertheless, there are some distances that we can use to this task: edit distances, vector term similarity, LDA based distances, embedding based distances... Some of them are shown below as functions to calculate the distance matrix of traces:
 
 ```{python}
 #| label: Distance matrix functions
@@ -1274,7 +1358,7 @@ def calculate_dm_LDA(traces,T=10):
 
 ### Clustering
 
-Once the distance matrix is obtained, we can proceed with the clustering. Each clustering method has its characteristics and its peculiarities, so we cannot choose whatever method we want. For example, we have to consider we have a distance matrix and not a data frame in which we apply directly the method. A hierarchical clustering algorithm seems to be a good choice in our case because in addition to the above it allows to choose the optimal number of clusters.
+Once the distance matrix is obtained, we can proceed with the clustering. Each clustering method has its characteristics and its peculiarities. For example, we have to consider we have a distance matrix and not a data frame in which we apply directly the method. A hierarchical clustering algorithm seems to be a good choice in our case because in addition to the above it allows to choose the optimal number of clusters.
 
 The next code box contains two different functions to choose the optimal number of clusters:
 
@@ -1627,11 +1711,11 @@ process_map_by_cluster <- function(evLog,t_freq,cond_code){
 
 Conformance checking is a technique used to check process compliance by comparing event logs for a discovered process with the existing reference model (target model) of the same process. Basing on the DM2 treatment algorithm previous shown, with a software called Carassius , we created the next Petri Nets that are going to be useful as treatment guidelines in reference to glycated hemoglobin measures.
 
-![DM2 Treatment Algorithm's interpretation to patients with some CV disease in Petri Net format](../../outputs/PN_ecv.png){#fig-petrinet_ecv fig-align="center" width="100%"}
+![DM2 Treatment Algorithm's interpretation to patients with some CV disease in Petri Net format](../../outputs/PN_cvd.png){#fig-petrinet_cvd fig-align="center" width="100%"}
 
-![DM2 Treatment Algorithm's interpretation to patients with heart failure in Petri Net format](../../outputs/PN_ic.png){#fig-petrinet_ic fig-align="center" width="100%\""}
+![DM2 Treatment Algorithm's interpretation to patients with heart failure in Petri Net format](../../outputs/PN_hf.png){#fig-petrinet_hf fig-align="center" width="100%\""}
 
-![DM2 Treatment Algorithm's interpretation to patients with some chronic kidney disease in Petri Net format](../../outputs/PN_erc.png){#fig-petrinet_erc fig-align="center" width="100%"}
+![DM2 Treatment Algorithm's interpretation to patients with some chronic kidney disease in Petri Net format](../../outputs/PN_ckd.png){#fig-petrinet_ckd fig-align="center" width="100%"}
 
 ![DM2 Treatment Algorithm's interpretation to patients with frailty in Petri Net format](../../outputs/PN_f.png){#fig-petrinet_f fig-align="center" width="100%\""}
 
@@ -1689,7 +1773,7 @@ def id2treat_fitness(log ,
       new['@@index'] = [index[0]-1,index[1]+1]
       new['actins'] = [actins[0]-1,actins[1]+1]
     
-      log2 = pd.concat([log2,new])
+      log2 = pd.concat([log2,new]).sort_values('time:timestamp')
       aligned_fitness = pm4py.conformance_diagnostics_alignments(
                         log2, net, initial_marking, final_marking)[0]['fitness']
       for id in id2ids[name]:
@@ -1713,7 +1797,7 @@ def id2treat_fitness_by_interval(con,
                            fin_place='place111',
                            date_n_col='date',
                            fixed_period_time=90):
-    '''Barplot of the fitness of each cluster
+    '''Obtain traces fitness by intervals of fixed_period_time days
     
     Args:
       con: db connector variable
@@ -1722,7 +1806,7 @@ def id2treat_fitness_by_interval(con,
       ini_place (str): initial place in the petri net
       fin_place (str): final place in the petri net
       date_n_col (str): events dates column's name in log
-      id_col (str): patients identifiers column's name in log
+      fixed_period_time (int): number of days in each interval
   '''
     net, initial_marking, final_marking = pm4py.read_pnml(pn_file)
     initial_marking = Marking()
@@ -1771,9 +1855,10 @@ def id2treat_fitness_by_interval(con,
         date_max = min(max(event_log_id[date_n_col]),hosp_d)
         date_min = min(event_log_id['time:timestamp'])
         n_periods = date_max//fixed_period_time
+        n_periods_r = date_max/fixed_period_time
         if date_max<=fixed_period_time:
             continue
-        for n in range(1,n_periods+2):
+        for n in range(1,n_periods+1):
             event_log_id_n = event_log_id[
                 event_log_id[date_n_col]<n*fixed_period_time]
             
@@ -1784,20 +1869,22 @@ def id2treat_fitness_by_interval(con,
             new['concept:name'] = ['INI','FIN']
             new['@@index'] = [index[0]-1,index[1]+1]
             new['actins'] = [actins[0]-1,actins[1]+1]
-            event_log_id_n = pd.concat([event_log_id_n,new])
+            event_log_id_n = pd.concat([event_log_id_n,new]
+                                       ).sort_values('time:timestamp')
             aligned_fitness = pm4py.conformance_diagnostics_alignments(
                              event_log_id_n, net, 
                              initial_marking, final_marking)[0]['fitness']
             id_list_df.append(id)
             p_start.append((n-1)*fixed_period_time)
             p_end_value = n*fixed_period_time
-            if n==n_periods+1:
-                p_end_value = date_max
+            if n==n_periods:
+                p_end_value = date_max-fixed_period_time
             p_end.append(p_end_value)
             fitness.append(aligned_fitness)
             date_0.append(date_min)
-            if n==n_periods+1 and hosp_d==date_max:
+            if (n==n_periods or n==n_periods_r-1) and hosp_d==date_max :
                 status.append(1)
+                break
             else:
                 status.append(0)
     
@@ -1808,8 +1895,9 @@ def id2treat_fitness_by_interval(con,
     period2fitness['ini_date'] = date_0
     period2fitness['status'] = status
     con.sql(f"DROP TABLE IF EXISTS period2fitness_{cond}")
-    con.sql(f"CREATE TABLE period2fitness_{cond} AS SELECT * FROM period2fitness \
-              WHERE t_0!=t_1")
+    con.sql(f"CREATE TABLE period2fitness_{cond} AS SELECT *,\
+            MAX(status) OVER (PARTITION BY ID) AS status2  FROM period2fitness \
+            WHERE t_0!=t_1") 
 ```
 
 In the next function is shown a boxplot function to show clusters' fitness distribution.
@@ -1875,6 +1963,7 @@ def treatments_clusters_boxplot(con,
   plt.ylabel("Aligned Fitness")
   # show plot
   plt.savefig(output_png,bbox_inches='tight')
+  plt.close(fig)
   
 
 ```
@@ -1890,6 +1979,8 @@ Process indicators can also be represented in a Petri Net. Therefore we created 
 ![Petri Net of process indicators of the first four years](../../outputs/PN_process4.png){#fig-petrinet_process4 fig-align="center" width="100%"}
 
 ![Petri Net of process indicators of the first five years](../../outputs/PN_process5.png){#fig-petrinet_process5 fig-align="center" width="100%"}
+The function below takes a process indicators' event log and returns each patient's fitness by year. The method to calculate the fitness in this case is the token base replay method.
+
 ```{python}
 #| label: Fitness  calculation (process_indicators)
 def id2process_fitness(con,
@@ -1901,7 +1992,7 @@ def id2process_fitness(con,
                        id_col = 'patient_id',
                        event_col = 'event',
                        date_col='date',):
-    '''Barplot of the fitness of each cluster
+    '''Calculate the fitness of a given process indicators' event log
     
     Args:
       con: db connector variable
@@ -1912,7 +2003,7 @@ def id2process_fitness(con,
       fin_place (str): final place in the petri net
       id_col (str): ids' column's name in event log
       event_col (str): events' column's name in event log
-      date_n_col (str): events' dates' column's name in event log
+      date_col (str): events' dates' column's name in event log
     Returns:
       df (dataframe): dataframe of ids' fitness
   '''
@@ -2032,6 +2123,7 @@ def decision_tree_pn_place(con,
     ax.set_ylabel("Mean decrease in impurity")
     fig.tight_layout()
     fig.savefig('../../outputs/barplot_features_importance_%s.png' % cond)
+    plt.close(fig)
   except ValueError as err:
     logging.basicConfig(level=logging.INFO)
     logging.info('Error in decidsion making: %s', str(err))
@@ -2041,13 +2133,16 @@ def decision_tree_pn_place(con,
 
 ### Time dependent Cox model
 
-The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. A Cox model is a statistical technique for exploring the relationship between the survival of a patient and several explanatory variables. One of the strengths of the Cox model is its ability to encompass covariates that change over time, such as treatment adherence. A time dependent Cox model can be made using each patient trace’s fitness at different time interval. The function below takes an event log and returns each patients’ period’s fitness.
+The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. A Cox model is a statistical technique for exploring the relationship between the survival of a patient and several explanatory variables. One of the strengths of the Cox model is its ability to encompass covariates that change over time, such as treatment adherence. A time dependent Cox model can be made using each patient trace’s fitness at different time interval. 
 
 ### Joint Latent Class Model
 
 Joint models are used to analyse simultaneously two related phenomena, the evolution of a variable and the occurence of an event. Joint latent class models (JLCM) consist of a linear mixed model and a proportional hazard model linked by the latent classes. The population is split in several groups, the latent classes, and each class is caracterized by a specific evolution of the dependent variable and an associated risk of event. Using fitness as time dependent treatment adherence measure we can made a joint latent class model.
 
 ## Results
+
+### Cohort description
+
 ```{python}
 #| label: preprocessing of the initial dataframes
 #| eval: TRUE
@@ -2055,10 +2150,11 @@ Joint models are used to analyse simultaneously two related phenomena, the evolu
 #| warning: FALSE
 #| output: FALSE
 logging.info('Preprocess of the initial dataframes')
-db_path = '../../inputs/data.duckdb'
-#db_path = 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
+#db_path = '../../inputs/data.duckdb'
+db_path = 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
 con = duckdb.connect(db_path)
-notnan_p = select_by_condition(con)
+general_preprocess(con)
+notnan_p = separate_patients_by_condition(con)
 con.close()
 ```
 
@@ -2068,9 +2164,395 @@ con.close()
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-db_path <- '../../inputs/data.duckdb'
-#db_path <- 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
+#db_path <- '../../inputs/data.duckdb'
+
+db_path <- 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
+con <- dbConnect(duckdb(), dbdir = db_path)
+country2cont = read.csv('./country2continent.csv') %>% 
+  transform(country = as.numeric(country))
 ```
+
+```{r}
+#| label: tbl-patient_inc
+#| tbl-cap: "Demographic and socioeconomic characteristics of incidents patients "
+#| tbl-colwidths: [60,40]
+
+###INCIDENTS
+patient_inc <- dbGetQuery(con,
+                       "SELECT *,
+                       CASE WHEN sex = 0 THEN 'Male' 
+                       ELSE 'Female' END AS sexo FROM patient_incidents_view") 
+patient_inc <- patient_inc %>%
+  left_join( country2cont %>% select(country, CC), by = "country") %>%
+  mutate(education=factor(education, levels=c(0,1,2,3),
+      labels=c("Without studies","Primary school",
+               "High school","University")))
+patient_inc$CC[patient_inc$country == 724] <- 'Spain'
+dependent="sexo"
+explanatory=c("age","age_dx","CC","copayment","education", "avg_income")  
+
+patient_inc%>%summary_factorlist(dependent,
+                              explanatory,
+                              total_col = TRUE,
+                              cont="mean",
+                              cont_cut=7,
+                              na_include = TRUE,
+                              na_to_prop =  FALSE, 
+                              include_col_totals_percent	=FALSE,
+                              add_col_totals = TRUE)-> patient_inc_tab
+
+kable(patient_inc_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
+
+```
+
+```{r}
+#| label: tbl-param_inc
+#| tbl-cap: "Demographic and socioeconomic characteristics of incidents patients "
+#| tbl-colwidths: [60,40]
+param_inc <- dbGetQuery(con,"SELECT * FROM param_incidents_predx_last_view")
+param_cat_inc <- dbGetQuery(con,"SELECT * FROM param_cat_incidents_predx_last_view")
+dependent="sexo"
+
+
+param_inc2unnest <- param_inc %>% 
+  pivot_wider( id_cols=patient_id,names_from=param_name,values_from=param_value)%>%
+  left_join( patient_inc %>% select(patient_id, sexo), by = "patient_id")
+
+param_cat_inc$param_cat_value = as.numeric(as.character(param_cat_inc$param_cat_value))
+param_cat_inc2unnest <- param_cat_inc %>% 
+  pivot_wider( id_cols=patient_id,names_from=param_cat_name,values_from=param_cat_value)%>%
+  left_join( patient_inc %>% select(patient_id, sexo), by = "patient_id") %>%
+  mutate(physical_activity=factor(physical_activity, levels=c(0,1,2,3),
+                                  labels=c("Incapacity", "Inactive", "Partially Active","Active")),
+         smoking_status=factor(smoking_status, levels=c(0,1,2,3),
+                               labels=c("Non Smoker", "Ex-smoker < 1 year", "Ex-smoker >= 1 year","Smoker")),
+         alcohol=factor(alcohol, levels=c(0,1,2),
+                        labels=c("Abstinent", "Moderate Drinker","Heavy Drinker")),
+         vaccination_covid=factor(vaccination_covid, levels=c(0,1,2,3,4,5,6,7),
+                                  labels=c("No", "Yes, BioNTech-Pfizer","Yes, Moderna","Yes, Astrazeneca","Yes, Johnson-Johnson","Yes, Novavax","Yes, Other","Yes, Unknown type")),
+         vaccination_flu=factor(vaccination_flu, levels=c(0,1), labels=c("No", "Yes")),
+         working_status=factor(working_status,levels=c(0,1,2),labels=c('Active','Unemployed','Pensionist')))
+
+param_inc_tab <- rbind(
+  param_inc2unnest %>%
+    summary_factorlist(dependent ,
+                       c("bmi","height","weight","sbp","dbp","hba1c","col",
+                         "hdl","ldl","trgl","creat","indalbcr","alb"),
+                       total_col = TRUE,cont="mean",na_include = TRUE,
+                       na_to_prop =  FALSE,add_row_totals = TRUE,
+                       include_row_missing_col = TRUE,
+                       include_col_totals_percent	=FALSE,add_col_totals = TRUE),
+  param_cat_inc2unnest %>%
+    summary_factorlist(dependent ,
+                       c("physical_activity","smoking_status","alcohol",
+                         "vaccination_covid","vaccination_flu",'working_status'),
+                       total_col = TRUE,cont="mean",na_include = TRUE,
+                       na_to_prop =  FALSE,cont_cut=8,add_row_totals = TRUE,
+                       include_row_missing_col = TRUE))
+kable(param_inc_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
+```
+
+```{r}
+#| label: tbl-use_inc
+#| tbl-cap: "Use of Primary Care Services per year of incidents patients"
+#| tbl-colwidths: [60,40]
+
+patient_inc$deregistration_date <- patient_inc$deregistration_date %>%
+  replace_na(as.Date('2023-01-01'))
+patient_inc <- patient_inc %>% 
+  mutate(follow_up_time=as.numeric(difftime(deregistration_date,
+                                            dx_date,units="days")/365.25))
+
+ss_use_inc <- dbGetQuery(con," SELECT * FROM main.ss_use \
+            WHERE patient_id IN (SELECT patient_id FROM main.patient \
+                                 WHERE dx_date >='2017-01-01') AND \
+                  visit_date>= (SELECT dx_date FROM main.patient WHERE \
+                  main.patient.patient_id = main.ss_use.patient_id)") %>% mutate(
+                        visit_type=factor(visit_type, levels=c(1,2,3,4,5,6,7,8),
+                        labels=c("PC_physician", "PC_nurse", "PC_social_worker",
+                                 "PC_emergency_service","PC_others",
+                                 "Specialized_visit_physician",
+                                 "Specialized_visit_nurse",
+                                 "Specialized_visit_unknown_professional")))
+
+ss_use_inc1 <- ss_use_inc %>% 
+  filter(visit_loc == 1)
+use_inc_freq1 <- as.data.frame.matrix(table(ss_use_inc1$patient_id,ss_use_inc1$visit_type))
+use_inc_freq1 <- cbind(patient_id = rownames(use_inc_freq1), use_inc_freq1)
+use_inc_freq1_time <- left_join(use_inc_freq1, patient_inc %>% select(patient_id, sex, follow_up_time,dx_date), by = "patient_id") %>%
+  mutate(PC_physician= PC_physician/follow_up_time,
+         PC_nurse=PC_nurse/follow_up_time,
+         PC_social_worker=PC_social_worker/follow_up_time,
+         PC_emergency_service=PC_emergency_service/follow_up_time,
+         PC_others=PC_others/follow_up_time,
+         Specialized_visit_physician=Specialized_visit_physician/follow_up_time,
+         Specialized_visit_nurse=Specialized_visit_nurse/follow_up_time,
+         Specialized_visit_unknown_professional=Specialized_visit_unknown_professional/follow_up_time,
+         sexo=factor(sex, levels=c(0,1), labels=c("Male", "Female"))) 
+
+ss_use_inc2 <- ss_use_inc %>% 
+  filter(visit_loc == 2)
+use_inc_freq2 <- as.data.frame.matrix(table(ss_use_inc2$patient_id,ss_use_inc2$visit_type))
+use_inc_freq2 <- cbind(patient_id = rownames(use_inc_freq2), use_inc_freq2)
+use_inc_freq2_time <- left_join(use_inc_freq2, patient_inc %>% select(patient_id, sex, follow_up_time,dx_date), by = "patient_id") %>%
+  mutate(PC_physician= PC_physician/follow_up_time,
+         PC_nurse=PC_nurse/follow_up_time,
+         PC_social_worker=PC_social_worker/follow_up_time,
+         PC_emergency_service=PC_emergency_service/follow_up_time,
+         PC_others=PC_others/follow_up_time,
+         Specialized_visit_physician=Specialized_visit_physician/follow_up_time,
+         Specialized_visit_nurse=Specialized_visit_nurse/follow_up_time,
+         Specialized_visit_unknown_professional=Specialized_visit_unknown_professional/follow_up_time,
+         sexo=factor(sex, levels=c(0,1), labels=c("Male", "Female"))) 
+
+ss_use_inc3 <- ss_use_inc %>% 
+  filter(visit_loc == 3)
+use_inc_freq3 <- as.data.frame.matrix(table(ss_use_inc3$patient_id,ss_use_inc3$visit_type))
+use_inc_freq3 <- cbind(patient_id = rownames(use_inc_freq3), use_inc_freq3)
+use_inc_freq3_time <- left_join(use_inc_freq3, patient_inc %>% select(patient_id, sex, follow_up_time,dx_date), by = "patient_id") %>%
+  mutate(PC_physician= PC_physician/follow_up_time,
+         PC_nurse=PC_nurse/follow_up_time,
+         PC_social_worker=PC_social_worker/follow_up_time,
+         PC_emergency_service=PC_emergency_service/follow_up_time,
+         PC_others=PC_others/follow_up_time,
+         Specialized_visit_physician=Specialized_visit_physician/follow_up_time,
+         Specialized_visit_nurse=Specialized_visit_nurse/follow_up_time,
+         Specialized_visit_unknown_professional=Specialized_visit_unknown_professional/follow_up_time,
+         sexo=factor(sex, levels=c(0,1), labels=c("Male", "Female"))) 
+
+
+use_inc_tab <- rbind(
+  rbind(data.frame(label = "at care center", levels = '',
+                   Male = '', Female = '', Total = ''),
+        use_inc_freq1_time %>%
+          summary_factorlist(dependent ,c("PC_physician", "PC_nurse", "PC_social_worker",
+                                          "PC_emergency_service","PC_others",
+                                          "Specialized_visit_physician",
+                                          "Specialized_visit_nurse",
+                                          "Specialized_visit_unknown_professional"),
+                             total_col = TRUE,cont="mean",cont_cut=1,
+                             na_include = TRUE,na_to_prop =  FALSE)),
+  rbind(data.frame(label = "at home", levels = '',
+                   Male = '', Female = '', Total = ''),
+        use_inc_freq2_time %>%
+          summary_factorlist(dependent ,c("PC_physician", "PC_nurse", "PC_social_worker",
+                                          "PC_emergency_service","PC_others",
+                                          "Specialized_visit_physician",
+                                          "Specialized_visit_nurse",
+                                          "Specialized_visit_unknown_professional"),
+                             total_col = TRUE,cont="mean",cont_cut=1,
+                             na_include = TRUE,na_to_prop =  FALSE)),
+  rbind(data.frame(label = "by telephone or similar", levels = '',
+                   Male = '', Female = '', Total = ''),
+        use_inc_freq3_time %>%
+          summary_factorlist(dependent ,c("PC_physician", "PC_nurse", "PC_social_worker",
+                                          "PC_emergency_service","PC_others",
+                                          "Specialized_visit_physician",
+                                          "Specialized_visit_nurse",
+                                          "Specialized_visit_unknown_professional"),
+                             total_col = TRUE,cont="mean",cont_cut=1,
+                             na_include = TRUE,na_to_prop =  FALSE)))
+
+kable(use_inc_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
+
+```
+
+```{r}
+#| label: tbl-patient_pre
+#| tbl-cap: "Demographic and socioeconomic characteristics of prevalents patients"
+#| tbl-colwidths: [60,40]
+patient_pre <- dbGetQuery(con,
+                          "SELECT *,
+                       CASE WHEN sex = 0 THEN 'Male' 
+                       ELSE 'Female' END AS sexo,
+                       FLOOR(DATEDIFF('day',month_nac,DATE '2017-01-01') / 365.25) 
+                       AS 'age',
+                       FLOOR(DATEDIFF('day',month_nac, dx_date) / 365.25) 
+                       AS 'age_dx'FROM main.patient 
+                       WHERE dx_date < '2017-01-01'") 
+patient_pre <- patient_pre %>%
+  left_join( country2cont %>% select(country, CC), by = "country") %>%
+  mutate(education=factor(education, levels=c(0,1,2,3),
+      labels=c("Without studies","Primary school",
+               "High school","University")))
+patient_pre$CC[patient_pre$country == 724] <- 'Spain'
+dependent="sexo"
+explanatory=c("age","age_dx","CC","copayment","education", "avg_income")  
+
+patient_pre%>%summary_factorlist(dependent,
+                                 explanatory,
+                                 total_col = TRUE,
+                                 cont="mean",
+                                 cont_cut=7,
+                                 na_include = TRUE,
+                                 na_to_prop =  FALSE, 
+                                 include_col_totals_percent	=FALSE,
+                                 add_col_totals = TRUE)-> patient_pre_tab
+kable(patient_pre_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
+
+```
+
+```{r}
+#| label: tbl-param_pre
+#| tbl-cap: "Clinical and lifestyle characteristics of prevalent patients"
+#| tbl-colwidths: [60,40]
+param_pre <- dbGetQuery(con,"SELECT * FROM param_prevalents_pre_last_view")
+param_cat_pre <- dbGetQuery(con,"SELECT * FROM param_cat_prevalents_pre_last_view")
+dependent="sexo"
+
+
+param_pre2unnest <- param_pre %>% 
+  pivot_wider( id_cols=patient_id,names_from=param_name,values_from=param_value)%>%
+  left_join( patient_pre %>% select(patient_id, sexo), by = "patient_id")
+
+param_cat_pre$param_cat_value = as.numeric(as.character(param_cat_pre$param_cat_value))
+param_cat_pre2unnest <- param_cat_pre %>% 
+  pivot_wider( id_cols=patient_id,names_from=param_cat_name,values_from=param_cat_value)%>%
+  left_join( patient_pre %>% select(patient_id, sexo), by = "patient_id") %>%
+  mutate(physical_activity=factor(physical_activity, levels=c(0,1,2,3),
+                                  labels=c("Incapacity", "Inactive", "Partially Active","Active")),
+         smoking_status=factor(smoking_status, levels=c(0,1,2,3),
+                               labels=c("Non Smoker", "Ex-smoker < 1 year", "Ex-smoker >= 1 year","Smoker")),
+         alcohol=factor(alcohol, levels=c(0,1,2),
+                        labels=c("Abstinent", "Moderate Drinker","Heavy Drinker")),
+         vaccination_covid=factor(vaccination_covid, levels=c(0,1,2,3,4,5,6,7),
+                                  labels=c("No", "Yes, BioNTech-Pfizer","Yes, Moderna","Yes, Astrazeneca","Yes, Johnson-Johnson","Yes, Novavax","Yes, Other","Yes, Unknown type")),
+         vaccination_flu=factor(vaccination_flu, levels=c(0,1), labels=c("No", "Yes")),
+         working_status=factor(working_status,levels=c(0,1,2),labels=c('Active','Unemployed','Pensionist')))
+
+param_pre_tab <- rbind(
+  param_pre2unnest %>%
+    summary_factorlist(dependent ,
+                       c("bmi","height","weight","sbp","dbp","hba1c","col",
+                         "hdl","ldl","trgl","creat","indalbcr","alb"),
+                       total_col = TRUE,cont="mean",na_include = TRUE,
+                       na_to_prop =  FALSE,add_row_totals = TRUE,
+                       include_row_missing_col = TRUE,
+                       include_col_totals_percent	=FALSE,add_col_totals = TRUE),
+  param_cat_pre2unnest %>%
+    summary_factorlist(dependent ,
+                       c("physical_activity","smoking_status","alcohol",
+                         "vaccination_covid","vaccination_flu",'working_status'),
+                       total_col = TRUE,cont="mean",na_include = TRUE,
+                       na_to_prop =  FALSE,cont_cut=8,add_row_totals = TRUE,
+                       include_row_missing_col = TRUE))
+kable(param_pre_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
+
+```
+
+```{r}
+#| label: tbl-use_pre
+#| tbl-cap: "Use of Primary Care Services of prevalent patients"
+#| tbl-colwidths: [60,40]
+patient_pre$deregistration_date <- patient_pre$deregistration_date %>%
+  replace_na(as.Date('2023-01-01'))
+patient_pre <- patient_pre %>% 
+  mutate(follow_up_time=as.numeric(difftime(deregistration_date,                                          as.Date('2016-12-31'),units="days")/365.25))
+
+
+
+ss_use_pre <- dbGetQuery(con," SELECT * FROM main.ss_use \
+            WHERE patient_id IN (SELECT patient_id FROM main.patient \
+                                 WHERE dx_date <'2017-01-01') AND
+                         visit_date>='2017-01-01'") %>% mutate(
+                           visit_type=factor(visit_type, levels=c(1,2,3,4,5,6,7,8),
+                          labels=c("PC_physician", "PC_nurse", "PC_social_worker",
+                                   "PC_emergency_service","PC_others",
+                                   "Specialized_visit_physician",
+                                   "Specialized_visit_nurse",
+                                   "Specialized_visit_unknown_professional"))
+                         )
+
+ss_use_pre1 <- ss_use_pre %>% 
+  filter(visit_loc == 1)
+use_pre_freq1 <- as.data.frame.matrix(table(ss_use_pre1$patient_id,ss_use_pre1$visit_type))
+use_pre_freq1 <- cbind(patient_id = rownames(use_pre_freq1), use_pre_freq1)
+use_pre_freq1_time <- left_join(use_pre_freq1, patient_pre %>% select(patient_id, sex, follow_up_time,dx_date), by = "patient_id") %>%
+  mutate(PC_physician= PC_physician/follow_up_time,
+         PC_nurse=PC_nurse/follow_up_time,
+         PC_social_worker=PC_social_worker/follow_up_time,
+         PC_emergency_service=PC_emergency_service/follow_up_time,
+         PC_others=PC_others/follow_up_time,
+         Specialized_visit_physician=Specialized_visit_physician/follow_up_time,
+         Specialized_visit_nurse=Specialized_visit_nurse/follow_up_time,
+         Specialized_visit_unknown_professional=Specialized_visit_unknown_professional/follow_up_time,
+         sexo=factor(sex, levels=c(0,1), labels=c("Male", "Female"))) 
+
+ss_use_pre2 <- ss_use_pre %>% 
+  filter(visit_loc == 2)
+use_pre_freq2 <- as.data.frame.matrix(table(ss_use_pre2$patient_id,ss_use_pre2$visit_type))
+use_pre_freq2 <- cbind(patient_id = rownames(use_pre_freq2), use_pre_freq2)
+use_pre_freq2_time <- left_join(use_pre_freq2, patient_pre %>% select(patient_id, sex, follow_up_time,dx_date), by = "patient_id") %>%
+  mutate(PC_physician= PC_physician/follow_up_time,
+         PC_nurse=PC_nurse/follow_up_time,
+         PC_social_worker=PC_social_worker/follow_up_time,
+         PC_emergency_service=PC_emergency_service/follow_up_time,
+         PC_others=PC_others/follow_up_time,
+         Specialized_visit_physician=Specialized_visit_physician/follow_up_time,
+         Specialized_visit_nurse=Specialized_visit_nurse/follow_up_time,
+         Specialized_visit_unknown_professional=Specialized_visit_unknown_professional/follow_up_time,
+         sexo=factor(sex, levels=c(0,1), labels=c("Male", "Female"))) 
+
+ss_use_pre3 <- ss_use_pre %>% 
+  filter(visit_loc == 3)
+use_pre_freq3 <- as.data.frame.matrix(table(ss_use_pre3$patient_id,ss_use_pre3$visit_type))
+use_pre_freq3 <- cbind(patient_id = rownames(use_pre_freq3), use_pre_freq3)
+use_pre_freq3_time <- left_join(use_pre_freq3, patient_pre %>% select(patient_id, sex, follow_up_time,dx_date), by = "patient_id") %>%
+  mutate(PC_physician= PC_physician/follow_up_time,
+         PC_nurse=PC_nurse/follow_up_time,
+         PC_social_worker=PC_social_worker/follow_up_time,
+         PC_emergency_service=PC_emergency_service/follow_up_time,
+         PC_others=PC_others/follow_up_time,
+         Specialized_visit_physician=Specialized_visit_physician/follow_up_time,
+         Specialized_visit_nurse=Specialized_visit_nurse/follow_up_time,
+         Specialized_visit_unknown_professional=Specialized_visit_unknown_professional/follow_up_time,
+         sexo=factor(sex, levels=c(0,1), labels=c("Male", "Female"))) 
+
+
+use_pre_tab <- rbind(
+  rbind(data.frame(label = "at care center", levels = '',
+                   Male = '', Female = '', Total = ''),
+        use_pre_freq1_time %>%
+    summary_factorlist(dependent ,c("PC_physician", "PC_nurse", "PC_social_worker",
+                                    "PC_emergency_service","PC_others",
+                                    "Specialized_visit_physician",
+                                    "Specialized_visit_nurse",
+                                    "Specialized_visit_unknown_professional"),
+                       total_col = TRUE,cont="mean",cont_cut=1,
+                       na_include = TRUE,na_to_prop =  FALSE)),
+    rbind(data.frame(label = "at home", levels = '',
+                     Male = '', Female = '', Total = ''),
+        use_pre_freq2_time %>%
+    summary_factorlist(dependent ,c("PC_physician", "PC_nurse", "PC_social_worker",
+                                    "PC_emergency_service","PC_others",
+                                    "Specialized_visit_physician",
+                                    "Specialized_visit_nurse",
+                                    "Specialized_visit_unknown_professional"),
+                        total_col = TRUE,cont="mean",cont_cut=1,
+                        na_include = TRUE,na_to_prop =  FALSE)),
+    rbind(data.frame(label = "by telephone or similar", levels = '',
+                     Male = '', Female = '', Total = ''),
+        use_pre_freq3_time %>%
+    summary_factorlist(dependent ,c("PC_physician", "PC_nurse", "PC_social_worker",
+                                    "PC_emergency_service","PC_others",
+                                    "Specialized_visit_physician",
+                                    "Specialized_visit_nurse",
+                                    "Specialized_visit_unknown_professional"),
+                        total_col = TRUE,cont="mean",cont_cut=1,
+                        na_include = TRUE,na_to_prop =  FALSE)))
+
+kable(use_pre_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
+```
+
+```{r}
+#| label: db shutdown
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+dbDisconnect(con, shutdown = TRUE)
+```
+
 ### Patients without predominant clinical condition
 
 #### Event log's creation and description
@@ -2102,16 +2584,16 @@ cond <- 'else'
 con = duckdb.connect(db_path)
 if notnan_p>0.98:
   logging.info("Generate event log of %s patients from prescriptions", cond)
-  evlog_creation_prescriptions(
+  evlog_creation_by_prescriptions(
     con=con,
     cond=cond,
-    code2drug_path='./diabetes_drugs.csv')
+    code2drug_info_path='./diabetes_drugs.csv')
 else:
   logging.info("Generate event log of %s patients from dispensations", cond)
-  evlog_creation_dispensations(
+  evlog_creation_by_dispensations(
     con=con,
     cond=cond,
-    code2drug_path='./diabetes_drugs.csv',
+    code2drug_info_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv')
 ```
 
@@ -2182,7 +2664,7 @@ evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
 dbDisconnect(con, shutdown = TRUE)
 ```
 
-These results have been carried out with a set of synthetic data previously generated according to data model. Choosing patients without any predominan clinical condition and after some preprocessing we obtain an event log that can be reproduced in the below process map @fig-pm1_else. There is shown how the events are connected, the mean number of days patients spent in each event (or treatment), percentage of patients who made each transition and the mean number of days it took to make the transition. However, a spaghetti map is obtained and nothing can be concluded. Therefore, we have to simplify the process map and for example only show the most frequent traces covering 20% of the event log as in @fig-pm02_else. Moreover, in @fig-activity_presence_else we show percentage of patients' traces each activity is present.
+Choosing patients without any predominant clinical condition and after some preprocessing we obtain an event log that can be reproduced in the below process map @fig-pm1_else. There is shown how the events are connected, the mean number of days patients spent in each event (or treatment), percentage of patients who made each transition and the mean number of days it took to make the transition. However, a spaghetti map is obtained and nothing can be concluded. Therefore, we have to simplify the process map and for example only show the most frequent traces covering 20% of the event log as in @fig-pm02_else. Moreover, in @fig-activity_presence_else we show percentage of patients' traces each activity is present.
 
 ```{r}
 #| label: proces map 1 (else)
@@ -2222,7 +2704,7 @@ png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("activity_presence_%s.png",
                                          cond))),
     width = 600, height = 750, units = "px")
-plot(evLog %>% activity_presence()  )
+plot(evLog %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
 dev.off()
 ```
 
@@ -2408,13 +2890,14 @@ con.close()
 #| output: TRUE
 con <- dbConnect(duckdb(), dbdir = db_path)
 
-df <- dbGetQuery(con, paste0("SELECT period2fitness_",cond,".ID,period2fitness_",cond,".t_0,period2fitness_",cond,".t_1,period2fitness_",cond,".fitness,period2fitness_",cond,".status,patient_incidents_view.age,patient_incidents_view.sex,patient_incidents_view.copayment FROM period2fitness_",cond," LEFT JOIN patient_incidents_view ON period2fitness_",cond,".ID=patient_incidents_view.patient_id"))
+df <- dbGetQuery(con, paste0("SELECT period2fitness_",cond,".ID,period2fitness_",cond,".t_0,period2fitness_",cond,".t_1,period2fitness_",cond,".fitness,period2fitness_",cond,".status,period2fitness_",cond,".status2,patient_incidents_view.age,patient_incidents_view.sex,patient_incidents_view.copayment FROM period2fitness_",cond," LEFT JOIN patient_incidents_view ON period2fitness_",cond,".ID=patient_incidents_view.patient_id"))
 dbDisconnect(con, shutdown = TRUE)
 
 df$sex <- as.factor(df$sex)
 df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
+
 
 model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness,
                data=df)
@@ -2433,18 +2916,18 @@ Using same predictive variables a joint latent class model of three classes is m
 
 ### 1 latent class
 
-mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
-                 survival = Surv(t_min,t_max,status) ~ age+sex, hazard="Weibull",
+mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
+                 survival = Surv(t_min,t_max,status2) ~ age+sex, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
                  B=c(1,1,0,0,0,0,1,0,1,1))
-### 3 latent class
+### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
-                  Jointlcmm(fixed= fitness ~ t_1 ,mixture =~ t_1,
-                            random=~t_1,subject="ID2",
-                            survival = Surv(t_min,t_max,status)~ age+sex,
+{mj3 <- gridsearch(rep = 10, maxiter = 10, minit = mj1, 
+                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
+                            random=~t_0,subject="ID2",
+                            survival = Surv(t_min,t_max,status2)~ age+sex,
                             hazard="Weibull",hazardtype="PH",
-                            ng=3,data=df, verbose=FALSE))
+                            ng=2,data=df, verbose=FALSE))
 
 summary(mj3)
 
@@ -2454,13 +2937,13 @@ png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("joint1_%s.png",
                                          cond))),
     width = 600, height = 750, units = "px")
-plot(mj3, which = "fit", var.time = "t_1", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
-     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,0.9))
+plot(mj3, which = "fit", var.time = "t_0", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
+     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,1.0))
 dev.off()
  
-d1 <- data.frame(t_1=seq(1,1000,length.out=100))
-data.new <-data.frame(d1,age=0,sex=0)
-mj3.pred <- predictY(mj3, data.new , var.time = "t_1")
+d1 <- data.frame(t_0=seq(1,1000,length.out=100))
+data.new <-data.frame(d1,age=65,sex=0)
+mj3.pred <- predictY(mj3, data.new , var.time = "t_0")
 
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("joint2_%s.png",
@@ -2481,35 +2964,36 @@ error = function(cond_) {
         }
 )
 ```
-![Class-specific weighted marginal and subject-specific mean predicted trajectories](../../outputs/joint1_else.png){#fig-joint1_else fig-align="center" width="80%"}
+![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_else.png){#fig-joint1_else fig-align="center" width="80%"}
 
-![Class-specific fitness mean  predicted trajectory](../../outputs/joint2_else.png){#fig-joint2_else fig-align="center" width="80%"}
+![Class-specific mean predicted fitness trajectory](../../outputs/joint2_else.png){#fig-joint2_else fig-align="center" width="80%"}
 
 ![Class-specific survival functions](../../outputs/joint3_else.png){#fig-joint3_else fig-align="center" width="80%"}
+
 ### CV Disease
 
 #### Event log's creation and description
 
 ```{python}
-#| label: condition variable in python (ecv)
+#| label: condition variable in python (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-cond = 'ecv'
+cond = 'cvd'
 ```
 
 ```{r}
-#| label: condition variable in r (ecv)
+#| label: condition variable in r (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-cond <- 'ecv'
+cond <- 'cvd'
 ```
 
 ```{python}
-#| label: Preprocessing of raw event log (ecv)
+#| label: Preprocessing of raw event log (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2517,21 +3001,21 @@ cond <- 'ecv'
 con = duckdb.connect(db_path)
 if notnan_p>0.98:
   logging.info("Generate event log of %s patients from prescriptions", cond)
-  evlog_creation_prescriptions(
+  evlog_creation_by_prescriptions(
     con=con,
     cond=cond,
-    code2drug_path='./diabetes_drugs.csv')
+    code2drug_info_path='./diabetes_drugs.csv')
 else:
   logging.info("Generate event log of %s patients from dispensations", cond)
-  evlog_creation_dispensations(
+  evlog_creation_by_dispensations(
     con=con,
     cond=cond,
-    code2drug_path='./diabetes_drugs.csv',
+    code2drug_info_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv')
 ```
 
 ```{python}
-#| label: event log (ecv)
+#| label: event log (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2548,7 +3032,7 @@ con.close()
 ```
 
 ```{r}
-#| label: Loading event log in R (ecv)
+#| label: Loading event log in R (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2562,7 +3046,7 @@ dbDisconnect(con, shutdown = TRUE)
 Choosing patients with a cardiovascular disease and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
 
 ```{r}
-#| label: proces map 1 (ecv)
+#| label: proces map 1 (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2573,10 +3057,10 @@ make_process_map(evLog,1,gsub("src/analysis-scripts/","",
                                                      cond))))
 ```
 
-![Event log's process maps with all traces](../../outputs/evlog_pm_1_ecv.png){#fig-pm1_ecv fig-align="center" width="80%"}
+![Event log's process maps with all traces](../../outputs/evlog_pm_1_cvd.png){#fig-pm1_cvd fig-align="center" width="80%"}
 
 ```{r}
-#| label: process map 0.2 (ecv)
+#| label: process map 0.2 (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2586,10 +3070,10 @@ make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
                                                      cond))))
 ```
 
-![Event log's process maps with most frequent traces covering 20%](../../outputs/evlog_pm_02_ecv.png){#fig-pm02_ecv fig-align="center" width="80%"}
+![Event log's process maps with most frequent traces covering 20%](../../outputs/evlog_pm_02_cvd.png){#fig-pm02_cvd fig-align="center" width="80%"}
 
 ```{r}
-#| label: activity presence (ecv)
+#| label: activity presence (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2599,16 +3083,16 @@ png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("activity_presence_%s.png",
                                          cond))),
     width = 600, height = 750, units = "px")
-plot(evLog %>% activity_presence()  )
+plot(evLog %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
 dev.off()
 ```
 
-![Percentage of patients' traces an activity is present](../../outputs/activity_presence_ecv.png){#fig-activity_presence_ecv fig-align="center" width="80%"}
+![Percentage of patients' traces an activity is present](../../outputs/activity_presence_cvd.png){#fig-activity_presence_cvd fig-align="center" width="80%"}
 
 #### Clustering traces
 
 ```{python}
-#| label: dm calculation (ecv)
+#| label: dm calculation (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2619,7 +3103,7 @@ dm = calculate_dm_ED(traces,measure_f)
 ```
 
 ```{python}
-#| label: dendograms (ecv)
+#| label: dendograms (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| output: FALSE
@@ -2628,7 +3112,7 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
 
 ```{python}
-#| label: kelbow (ecv)
+#| label: kelbow (cvd)
 #| eval: TRUE
 #| echo: FALSE
 if len(traces)>25:
@@ -2638,10 +3122,10 @@ else:
   n_clusters=1
 ```
 
-![Distance matrix's dendogram](../../outputs/dendogram_ecv.png){#fig-dendogram_ecv fig-align="center" width="80%"}
+![Distance matrix's dendogram](../../outputs/dendogram_cvd.png){#fig-dendogram_cvd fig-align="center" width="80%"}
 
 ```{python}
-#| label: clustering (ecv)
+#| label: clustering (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2669,7 +3153,7 @@ con.sql(f"CREATE VIEW eventlog_{cond}_clust_filtered AS \
 ```
 
 ```{python}
-#| label: trace explorer (ecv)
+#| label: trace explorer (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2680,7 +3164,7 @@ con.close()
 ```
 
 ```{r}
-#| label: process explorer (ecv)
+#| label: process explorer (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2694,10 +3178,10 @@ process_map_by_cluster(
 dbDisconnect(con, shutdown = TRUE)
 ```
 
-::: {#fig-cluster0_ecv .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/t_cluster_ecv_0.png){#fig-traceexplorer0_ecv}
+::: {#fig-cluster0_cvd .column-page layout-ncol="2"}
+![5 most frequent traces](../../outputs/t_cluster_cvd_0.png){#fig-traceexplorer0_cvd}
 
-![Process map covering 25% most frequent traces](../../outputs/pm_cluster_ecv_0.png){#fig-processmap0_ecv}
+![Process map covering 25% most frequent traces](../../outputs/pm_cluster_cvd_0.png){#fig-processmap0_cvd}
 
 Cluster 0
 :::
@@ -2705,7 +3189,7 @@ Cluster 0
 #### Conformace checking
 
 ```{python}
-#| label: fitness boxplot (ecv)
+#| label: fitness boxplot (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2718,12 +3202,12 @@ treatments_clusters_boxplot(con,cond,
             output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
 ```
 
-![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ecv.png){#fig-fitness_by_cluster_ecv fig-align="center" width="80%"}
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_cvd.png){#fig-fitness_by_cluster_cvd fig-align="center" width="80%"}
 
 #### Decision mining
 
 ```{python}
-#| label: create decision tree (ecv)
+#| label: create decision tree (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2740,16 +3224,16 @@ except Exception as Argument:
 con.close()
 ```
 
-![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_ecv.png){#fig-decision_tree_ecv fig-align="center" width="80%"}
+![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_cvd.png){#fig-decision_tree_cvd fig-align="center" width="80%"}
 
-![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ecv.png){#fig-features_relevance_ecv fig-align="center" width="80%"}
+![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_cvd.png){#fig-features_relevance_cvd fig-align="center" width="80%"}
 
 #### Prediction Models
 
 In the next example, we choose fitness, age, sex and copayment to try to predict a hospitalization with a time dependet Cox model, and the summary of it is:
 
 ```{python}
-#| label: create fitness by period table (ecv)
+#| label: create fitness by period table (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2764,14 +3248,14 @@ con.close()
 ```
 
 ```{r}
-#| label: Time dependent COX (ecv)
+#| label: Time dependent COX (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
 con <- dbConnect(duckdb(), dbdir = db_path)
 
-df <- dbGetQuery(con, paste0("SELECT period2fitness_",cond,".ID,period2fitness_",cond,".t_0,period2fitness_",cond,".t_1,period2fitness_",cond,".fitness,period2fitness_",cond,".status,patient_incidents_view.age,patient_incidents_view.sex,patient_incidents_view.copayment FROM period2fitness_",cond," LEFT JOIN patient_incidents_view ON period2fitness_",cond,".ID=patient_incidents_view.patient_id"))
+df <- dbGetQuery(con, paste0("SELECT period2fitness_",cond,".ID,period2fitness_",cond,".t_0,period2fitness_",cond,".t_1,period2fitness_",cond,".fitness,period2fitness_",cond,".status,period2fitness_",cond,".status2,patient_incidents_view.age,patient_incidents_view.sex,patient_incidents_view.copayment FROM period2fitness_",cond," LEFT JOIN patient_incidents_view ON period2fitness_",cond,".ID=patient_incidents_view.patient_id"))
 dbDisconnect(con, shutdown = TRUE)
 
 df$sex <- as.factor(df$sex)
@@ -2788,7 +3272,7 @@ summary(model)
 
 Using same predictive variables a joint latent class model of three classes is made:
 ```{r}
-#| label: JLCM model (ecv)
+#| label: JLCM model (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2796,18 +3280,18 @@ Using same predictive variables a joint latent class model of three classes is m
 
 ### 1 latent class
 
-mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
-                 survival = Surv(t_min,t_max,status) ~ age+sex, hazard="Weibull",
+mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
+                 survival = Surv(t_min,t_max,status2) ~ age+sex, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
                  B=c(1,1,0,0,0,0,1,0,1,1))
-### 3 latent class
+### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
-                  Jointlcmm(fixed= fitness ~ t_1 ,mixture =~ t_1,
-                            random=~t_1,subject="ID2",
-                            survival = Surv(t_min,t_max,status)~ age+sex,
+{mj3 <- gridsearch(rep = 10, maxiter = 10, minit = mj1, 
+                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
+                            random=~t_0,subject="ID2",
+                            survival = Surv(t_min,t_max,status2)~ age+sex,
                             hazard="Weibull",hazardtype="PH",
-                            ng=3,data=df, verbose=FALSE))
+                            ng=2,data=df, verbose=FALSE))
 
 summary(mj3)
 
@@ -2817,13 +3301,13 @@ png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("joint1_%s.png",
                                          cond))),
     width = 600, height = 750, units = "px")
-plot(mj3, which = "fit", var.time = "t_1", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
-     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,0.9))
+plot(mj3, which = "fit", var.time = "t_0", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
+     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,1.0))
 dev.off()
  
-d1 <- data.frame(t_1=seq(1,1000,length.out=100))
-data.new <-data.frame(d1,age=0,sex=0)
-mj3.pred <- predictY(mj3, data.new , var.time = "t_1")
+d1 <- data.frame(t_0=seq(1,1000,length.out=100))
+data.new <-data.frame(d1,age=65,sex=0)
+mj3.pred <- predictY(mj3, data.new , var.time = "t_0")
 
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("joint2_%s.png",
@@ -2845,36 +3329,36 @@ error = function(cond_) {
 )
 
 ```
-![Class-specific weighted marginal and subject-specific mean predicted trajectories](../../outputs/joint1_ecv.png){#fig-joint1_ecv fig-align="center" width="80%"}
+![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_cvd.png){#fig-joint1_cvd fig-align="center" width="80%"}
 
-![Class-specific fitness mean  predicted trajectory](../../outputs/joint2_ecv.png){#fig-joint2_ecv fig-align="center" width="80%"}
+![Class-specific mean predicted fitness trajectory](../../outputs/joint2_cvd.png){#fig-joint2_cvd fig-align="center" width="80%"}
 
-![Class-specific survival functions](../../outputs/joint3_ecv.png){#fig-joint3_ecv fig-align="center" width="80%"}
+![Class-specific survival functions](../../outputs/joint3_cvd.png){#fig-joint3_cvd fig-align="center" width="80%"}
 
 ### Heart Failure
 
 #### Event log's creation and description
 
 ```{python}
-#| label: condition variable in python (ic)
+#| label: condition variable in python (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-cond = 'ic'
+cond = 'hf'
 ```
 
 ```{r}
-#| label: condition variable in r (ic)
+#| label: condition variable in r (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-cond <- 'ic'
+cond <- 'hf'
 ```
 
 ```{python}
-#| label: Preprocessing of raw event log (ic)
+#| label: Preprocessing of raw event log (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2882,21 +3366,21 @@ cond <- 'ic'
 con = duckdb.connect(db_path)
 if notnan_p>0.98:
   logging.info("Generate event log of %s patients from prescriptions", cond)
-  evlog_creation_prescriptions(
+  evlog_creation_by_prescriptions(
     con=con,
     cond=cond,
-    code2drug_path='./diabetes_drugs.csv')
+    code2drug_info_path='./diabetes_drugs.csv')
 else:
   logging.info("Generate event log of %s patients from dispensations", cond)
-  evlog_creation_dispensations(
+  evlog_creation_by_dispensations(
     con=con,
     cond=cond,
-    code2drug_path='./diabetes_drugs.csv',
+    code2drug_info_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv')
 ```
 
 ```{python}
-#| label: event log (ic)
+#| label: event log (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2913,7 +3397,7 @@ con.close()
 ```
 
 ```{r}
-#| label: Loading event log in R (ic)
+#| label: Loading event log in R (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2927,7 +3411,7 @@ dbDisconnect(con, shutdown = TRUE)
 Choosing patients with heart failure and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
 
 ```{r}
-#| label: proces map 1 (ic)
+#| label: proces map 1 (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2938,10 +3422,10 @@ make_process_map(evLog,1,gsub("src/analysis-scripts/","",
                                                      cond))))
 ```
 
-![Event log's process maps with all traces](../../outputs/evlog_pm_1_ic.png){#fig-pm1_ic fig-align="center" width="80%"}
+![Event log's process maps with all traces](../../outputs/evlog_pm_1_hf.png){#fig-pm1_hf fig-align="center" width="80%"}
 
 ```{r}
-#| label: process map 0.2 (ic)
+#| label: process map 0.2 (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2951,10 +3435,10 @@ make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
                                                      cond))))
 ```
 
-![Event log's process maps with most frequent traces covering 20%](../../outputs/evlog_pm_02_ic.png){#fig-pm02_ic fig-align="center" width="80%"}
+![Event log's process maps with most frequent traces covering 20%](../../outputs/evlog_pm_02_hf.png){#fig-pm02_hf fig-align="center" width="80%"}
 
 ```{r}
-#| label: activity presence (ic)
+#| label: activity presence (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2964,16 +3448,16 @@ png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("activity_presence_%s.png",
                                          cond))),
     width = 600, height = 750, units = "px")
-plot(evLog %>% activity_presence()  )
+plot(evLog %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
 dev.off()
 ```
 
-![Percentage of patients' traces an activity is present](../../outputs/activity_presence_ic.png){#fig-activity_presence_ic fig-align="center" width="80%"}
+![Percentage of patients' traces an activity is present](../../outputs/activity_presence_hf.png){#fig-activity_presence_hf fig-align="center" width="80%"}
 
 #### Clustering traces
 
 ```{python}
-#| label: dm calculation (ic)
+#| label: dm calculation (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -2984,7 +3468,7 @@ dm = calculate_dm_ED(traces,measure_f)
 ```
 
 ```{python}
-#| label: dendograms (ic)
+#| label: dendograms (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| output: FALSE
@@ -2993,7 +3477,7 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
 
 ```{python}
-#| label: kelbow (ic)
+#| label: kelbow (hf)
 #| eval: TRUE
 #| echo: FALSE
 if len(traces)>25:
@@ -3003,10 +3487,10 @@ else:
   n_clusters=1
 ```
 
-![Distance matrix's dendogram](../../outputs/dendogram_ic.png){#fig-dendogram_ic fig-align="center" width="80%"}
+![Distance matrix's dendogram](../../outputs/dendogram_hf.png){#fig-dendogram_hf fig-align="center" width="80%"}
 
 ```{python}
-#| label: clustering (ic)
+#| label: clustering (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3034,7 +3518,7 @@ con.sql(f"CREATE VIEW eventlog_{cond}_clust_filtered AS \
 ```
 
 ```{python}
-#| label: trace explorer (ic)
+#| label: trace explorer (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3045,7 +3529,7 @@ con.close()
 ```
 
 ```{r}
-#| label: process explorer (ic)
+#| label: process explorer (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3059,10 +3543,10 @@ process_map_by_cluster(
 dbDisconnect(con, shutdown = TRUE)
 ```
 
-::: {#fig-cluster0_ic .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/t_cluster_ic_0.png){#fig-traceexplorer0_ic}
+::: {#fig-cluster0_hf .column-page layout-ncol="2"}
+![5 most frequent traces](../../outputs/t_cluster_hf_0.png){#fig-traceexplorer0_hf}
 
-![Process map covering 25% most frequent traces](../../outputs/pm_cluster_ic_0.png){#fig-processmap0_ic}
+![Process map covering 25% most frequent traces](../../outputs/pm_cluster_hf_0.png){#fig-processmap0_hf}
 
 Cluster 0
 :::
@@ -3070,7 +3554,7 @@ Cluster 0
 #### Conformace checking
 
 ```{python}
-#| label: fitness boxplot (ic)
+#| label: fitness boxplot (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3083,12 +3567,12 @@ treatments_clusters_boxplot(con,cond,
             output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
 ```
 
-![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ic.png){#fig-fitness_by_cluster_ic fig-align="center" width="80%"}
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_hf.png){#fig-fitness_by_cluster_hf fig-align="center" width="80%"}
 
 #### Decision mining
 
 ```{python}
-#| label: create decision tree (ic)
+#| label: create decision tree (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3105,16 +3589,16 @@ except Exception as Argument:
 con.close()
 ```
 
-![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_ic.png){#fig-decision_tree_ic fig-align="center" width="80%"}
+![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_hf.png){#fig-decision_tree_hf fig-align="center" width="80%"}
 
-![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ic.png){#fig-features_relevance_ic fig-align="center" width="80%"}
+![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_hf.png){#fig-features_relevance_hf fig-align="center" width="80%"}
 
 #### Prediction Models
 
 In the next example, we choose fitness, age, sex and copayment to try to predict a hospitalization with a time dependet Cox model, and the summary of it is:
 
 ```{python}
-#| label: create fitness by period table (ic)
+#| label: create fitness by period table (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3129,14 +3613,14 @@ con.close()
 ```
 
 ```{r}
-#| label: Time dependent COX (ic)
+#| label: Time dependent COX (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
 con <- dbConnect(duckdb(), dbdir = db_path)
 
-df <- dbGetQuery(con, paste0("SELECT period2fitness_",cond,".ID,period2fitness_",cond,".t_0,period2fitness_",cond,".t_1,period2fitness_",cond,".fitness,period2fitness_",cond,".status,patient_incidents_view.age,patient_incidents_view.sex,patient_incidents_view.copayment FROM period2fitness_",cond," LEFT JOIN patient_incidents_view ON period2fitness_",cond,".ID=patient_incidents_view.patient_id"))
+df <- dbGetQuery(con, paste0("SELECT period2fitness_",cond,".ID,period2fitness_",cond,".t_0,period2fitness_",cond,".t_1,period2fitness_",cond,".fitness,period2fitness_",cond,".status,period2fitness_",cond,".status2,patient_incidents_view.age,patient_incidents_view.sex,patient_incidents_view.copayment FROM period2fitness_",cond," LEFT JOIN patient_incidents_view ON period2fitness_",cond,".ID=patient_incidents_view.patient_id"))
 dbDisconnect(con, shutdown = TRUE)
 
 df$sex <- as.factor(df$sex)
@@ -3153,7 +3637,7 @@ summary(model)
 
 Using same predictive variables a joint latent class model of three classes is made:
 ```{r}
-#| label: JLCM model (ic)
+#| label: JLCM model (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3161,18 +3645,18 @@ Using same predictive variables a joint latent class model of three classes is m
 
 ### 1 latent class
 
-mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
-                 survival = Surv(t_min,t_max,status) ~ age+sex, hazard="Weibull",
+mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
+                 survival = Surv(t_min,t_max,status2) ~ age+sex, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
                  B=c(1,1,0,0,0,0,1,0,1,1))
-### 3 latent class
+### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
-                  Jointlcmm(fixed= fitness ~ t_1 ,mixture =~ t_1,
-                            random=~t_1,subject="ID2",
-                            survival = Surv(t_min,t_max,status)~ age+sex,
+{mj3 <- gridsearch(rep = 10, maxiter = 10, minit = mj1, 
+                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
+                            random=~t_0,subject="ID2",
+                            survival = Surv(t_min,t_max,status2)~ age+sex,
                             hazard="Weibull",hazardtype="PH",
-                            ng=3,data=df, verbose=FALSE))
+                            ng=2,data=df, verbose=FALSE))
 
 summary(mj3)
 
@@ -3182,13 +3666,13 @@ png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("joint1_%s.png",
                                          cond))),
     width = 600, height = 750, units = "px")
-plot(mj3, which = "fit", var.time = "t_1", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
-     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,0.9))
+plot(mj3, which = "fit", var.time = "t_0", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
+     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,1.0))
 dev.off()
  
-d1 <- data.frame(t_1=seq(1,1000,length.out=100))
-data.new <-data.frame(d1,age=0,sex=0)
-mj3.pred <- predictY(mj3, data.new , var.time = "t_1")
+d1 <- data.frame(t_0=seq(1,1000,length.out=100))
+data.new <-data.frame(d1,age=65,sex=0)
+mj3.pred <- predictY(mj3, data.new , var.time = "t_0")
 
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("joint2_%s.png",
@@ -3210,11 +3694,11 @@ error = function(cond_) {
 )
 
 ```
-![Class-specific weighted marginal and subject-specific mean predicted trajectories](../../outputs/joint1_ic.png){#fig-joint1_ic fig-align="center" width="80%"}
+![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_hf.png){#fig-joint1_hf fig-align="center" width="80%"}
 
-![Class-specific fitness mean  predicted trajectory](../../outputs/joint2_ic.png){#fig-joint2_ic fig-align="center" width="80%"}
+![Class-specific mean predicted fitness trajectory](../../outputs/joint2_hf.png){#fig-joint2_hf fig-align="center" width="80%"}
 
-![Class-specific survival functions](../../outputs/joint3_ic.png){#fig-joint3_ic fig-align="center" width="80%"}
+![Class-specific survival functions](../../outputs/joint3_hf.png){#fig-joint3_hf fig-align="center" width="80%"}
 
 
 ### Chronic kidney disease
@@ -3222,25 +3706,25 @@ error = function(cond_) {
 #### Event log's creation and description
 
 ```{python}
-#| label: condition variable in python (erc)
+#| label: condition variable in python (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-cond = 'erc'
+cond = 'ckd'
 ```
 
 ```{r}
-#| label: condition variable in r (erc)
+#| label: condition variable in r (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-cond <- 'erc'
+cond <- 'ckd'
 ```
 
 ```{python}
-#| label: Preprocessing of raw event log (erc)
+#| label: Preprocessing of raw event log (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3248,21 +3732,21 @@ cond <- 'erc'
 con = duckdb.connect(db_path)
 if notnan_p>0.98:
   logging.info("Generate event log of %s patients from prescriptions", cond)
-  evlog_creation_prescriptions(
+  evlog_creation_by_prescriptions(
     con=con,
     cond=cond,
-    code2drug_path='./diabetes_drugs.csv')
+    code2drug_info_path='./diabetes_drugs.csv')
 else:
   logging.info("Generate event log of %s patients from dispensations", cond)
-  evlog_creation_dispensations(
+  evlog_creation_by_dispensations(
     con=con,
     cond=cond,
-    code2drug_path='./diabetes_drugs.csv',
+    code2drug_info_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv')
 ```
 
 ```{python}
-#| label: event log (erc)
+#| label: event log (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3279,7 +3763,7 @@ con.close()
 ```
 
 ```{r}
-#| label: Loading event log in R (erc)
+#| label: Loading event log in R (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3293,7 +3777,7 @@ dbDisconnect(con, shutdown = TRUE)
 Choosing patients with chronic kidney disease and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
 
 ```{r}
-#| label: proces map 1 (erc)
+#| label: proces map 1 (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3304,10 +3788,10 @@ make_process_map(evLog,1,gsub("src/analysis-scripts/","",
                                                      cond))))
 ```
 
-![Event log's process maps with all traces](../../outputs/evlog_pm_1_erc.png){#fig-pm1_erc fig-align="center" width="80%"}
+![Event log's process maps with all traces](../../outputs/evlog_pm_1_ckd.png){#fig-pm1_ckd fig-align="center" width="80%"}
 
 ```{r}
-#| label: process map 0.2 (erc)
+#| label: process map 0.2 (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3317,10 +3801,10 @@ make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
                                                      cond))))
 ```
 
-![Event log's process maps with most frequent traces covering 20%](../../outputs/evlog_pm_02_erc.png){#fig-pm02_erc fig-align="center" width="80%"}
+![Event log's process maps with most frequent traces covering 20%](../../outputs/evlog_pm_02_ckd.png){#fig-pm02_ckd fig-align="center" width="80%"}
 
 ```{r}
-#| label: activity presence (erc)
+#| label: activity presence (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3330,16 +3814,16 @@ png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("activity_presence_%s.png",
                                          cond))),
     width = 600, height = 750, units = "px")
-plot(evLog %>% activity_presence()  )
+plot(evLog %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
 dev.off()
 ```
 
-![Percentage of patients' traces an activity is present](../../outputs/activity_presence_erc.png){#fig-activity_presence_erc fig-align="center" width="80%"}
+![Percentage of patients' traces an activity is present](../../outputs/activity_presence_ckd.png){#fig-activity_presence_ckd fig-align="center" width="80%"}
 
 #### Clustering traces
 
 ```{python}
-#| label: dm calculation (erc)
+#| label: dm calculation (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3350,7 +3834,7 @@ dm = calculate_dm_ED(traces,measure_f)
 ```
 
 ```{python}
-#| label: dendograms (erc)
+#| label: dendograms (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| output: FALSE
@@ -3359,7 +3843,7 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 ```
 
 ```{python}
-#| label: kelbow (erc)
+#| label: kelbow (ckd)
 #| eval: TRUE
 #| echo: FALSE
 if len(traces)>25:
@@ -3369,10 +3853,10 @@ else:
   n_clusters=1
 ```
 
-![Distance matrix's dendogram](../../outputs/dendogram_erc.png){#fig-dendogram_erc fig-align="center" width="80%"}
+![Distance matrix's dendogram](../../outputs/dendogram_ckd.png){#fig-dendogram_ckd fig-align="center" width="80%"}
 
 ```{python}
-#| label: clustering (erc)
+#| label: clustering (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3400,7 +3884,7 @@ con.sql(f"CREATE VIEW eventlog_{cond}_clust_filtered AS \
 ```
 
 ```{python}
-#| label: trace explorer (erc)
+#| label: trace explorer (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3411,7 +3895,7 @@ con.close()
 ```
 
 ```{r}
-#| label: process explorer (erc)
+#| label: process explorer (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3425,10 +3909,10 @@ process_map_by_cluster(
 dbDisconnect(con, shutdown = TRUE)
 ```
 
-::: {#fig-cluster0_erc .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/t_cluster_erc_0.png){#fig-traceexplorer0_erc}
+::: {#fig-cluster0_ckd .column-page layout-ncol="2"}
+![5 most frequent traces](../../outputs/t_cluster_ckd_0.png){#fig-traceexplorer0_ckd}
 
-![Process map covering 25% most frequent traces](../../outputs/pm_cluster_erc_0.png){#fig-processmap0_erc}
+![Process map covering 25% most frequent traces](../../outputs/pm_cluster_ckd_0.png){#fig-processmap0_ckd}
 
 Cluster 0
 :::
@@ -3436,7 +3920,7 @@ Cluster 0
 #### Conformace checking
 
 ```{python}
-#| label: fitness boxplot (erc)
+#| label: fitness boxplot (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3449,12 +3933,12 @@ treatments_clusters_boxplot(con,cond,
             output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
 ```
 
-![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_erc.png){#fig-fitness_by_cluster_erc fig-align="center" width="80%"}
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ckd.png){#fig-fitness_by_cluster_ckd fig-align="center" width="80%"}
 
 #### Decision mining
 
 ```{python}
-#| label: create decision tree (erc)
+#| label: create decision tree (ckd)
 #| eval: FALSE
 #| echo: FALSE
 #| warning: FALSE
@@ -3472,16 +3956,16 @@ con.close()
 
 ```
 
-![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_erc.png){#fig-decision_tree_erc fig-align="center" width="80%"}
+![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_ckd.png){#fig-decision_tree_ckd fig-align="center" width="80%"}
 
-![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_erc.png){#fig-features_relevance_erc fig-align="center" width="80%"}
+![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ckd.png){#fig-features_relevance_ckd fig-align="center" width="80%"}
 
 #### Prediction Models
 
 In the next example, we choose fitness, age, sex and copayment to try to predict a hospitalization with a time dependet Cox model, and the summary of it is:
 
 ```{python}
-#| label: create fitness by period table (erc)
+#| label: create fitness by period table (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3496,14 +3980,14 @@ con.close()
 ```
 
 ```{r}
-#| label: Time dependent COX (erc)
+#| label: Time dependent COX (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
 con <- dbConnect(duckdb(), dbdir = db_path)
 
-df <- dbGetQuery(con, paste0("SELECT period2fitness_",cond,".ID,period2fitness_",cond,".t_0,period2fitness_",cond,".t_1,period2fitness_",cond,".fitness,period2fitness_",cond,".status,patient_incidents_view.age,patient_incidents_view.sex,patient_incidents_view.copayment FROM period2fitness_",cond," LEFT JOIN patient_incidents_view ON period2fitness_",cond,".ID=patient_incidents_view.patient_id"))
+df <- dbGetQuery(con, paste0("SELECT period2fitness_",cond,".ID,period2fitness_",cond,".t_0,period2fitness_",cond,".t_1,period2fitness_",cond,".fitness,period2fitness_",cond,".status,period2fitness_",cond,".status2,patient_incidents_view.age,patient_incidents_view.sex,patient_incidents_view.copayment FROM period2fitness_",cond," LEFT JOIN patient_incidents_view ON period2fitness_",cond,".ID=patient_incidents_view.patient_id"))
 dbDisconnect(con, shutdown = TRUE)
 
 df$sex <- as.factor(df$sex)
@@ -3520,7 +4004,7 @@ summary(model)
 
 Using same predictive variables a joint latent class model of three classes is made:
 ```{r}
-#| label: JLCM model (erc)
+#| label: JLCM model (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -3528,18 +4012,18 @@ Using same predictive variables a joint latent class model of three classes is m
 
 ### 1 latent class
 
-mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
-                 survival = Surv(t_min,t_max,status) ~ age+sex, hazard="Weibull",
+mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
+                 survival = Surv(t_min,t_max,status2) ~ age+sex, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
                  B=c(1,1,0,0,0,0,1,0,1,1))
-### 3 latent class
+### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
-                  Jointlcmm(fixed= fitness ~ t_1 ,mixture =~ t_1,
-                            random=~t_1,subject="ID2",
-                            survival = Surv(t_min,t_max,status)~ age+sex,
+{mj3 <- gridsearch(rep = 10, maxiter = 10, minit = mj1, 
+                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
+                            random=~t_0,subject="ID2",
+                            survival = Surv(t_min,t_max,status2)~ age+sex,
                             hazard="Weibull",hazardtype="PH",
-                            ng=3,data=df, verbose=FALSE))
+                            ng=2,data=df, verbose=FALSE))
 
 summary(mj3)
 
@@ -3549,13 +4033,13 @@ png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("joint1_%s.png",
                                          cond))),
     width = 600, height = 750, units = "px")
-plot(mj3, which = "fit", var.time = "t_1", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
-     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,0.9))
+plot(mj3, which = "fit", var.time = "t_0", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
+     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,1.0))
 dev.off()
  
-d1 <- data.frame(t_1=seq(1,1000,length.out=100))
-data.new <-data.frame(d1,age=0,sex=0)
-mj3.pred <- predictY(mj3, data.new , var.time = "t_1")
+d1 <- data.frame(t_0=seq(1,1000,length.out=100))
+data.new <-data.frame(d1,age=65,sex=0)
+mj3.pred <- predictY(mj3, data.new , var.time = "t_0")
 
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("joint2_%s.png",
@@ -3577,11 +4061,11 @@ error = function(cond_) {
 )
 
 ```
-![Class-specific weighted marginal and subject-specific mean predicted trajectories](../../outputs/joint1_erc.png){#fig-joint1_erc fig-align="center" width="80%"}
+![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_ckd.png){#fig-joint1_ckd fig-align="center" width="80%"}
 
-![Class-specific fitness mean  predicted trajectory](../../outputs/joint2_erc.png){#fig-joint2_erc fig-align="center" width="80%"}
+![Class-specific mean predicted fitness trajectory](../../outputs/joint2_ckd.png){#fig-joint2_ckd fig-align="center" width="80%"}
 
-![Class-specific survival functions](../../outputs/joint3_erc.png){#fig-joint3_erc fig-align="center" width="80%"}
+![Class-specific survival functions](../../outputs/joint3_ckd.png){#fig-joint3_ckd fig-align="center" width="80%"}
 
 ### Frailty
 
@@ -3614,16 +4098,16 @@ cond <- 'f'
 con = duckdb.connect(db_path)
 if notnan_p>0.98:
   logging.info("Generate event log of %s patients from prescriptions", cond)
-  evlog_creation_prescriptions(
+  evlog_creation_by_prescriptions(
     con=con,
     cond=cond,
-    code2drug_path='./diabetes_drugs.csv')
+    code2drug_info_path='./diabetes_drugs.csv')
 else:
   logging.info("Generate event log of %s patients from dispensations", cond)
-  evlog_creation_dispensations(
+  evlog_creation_by_dispensations(
     con=con,
     cond=cond,
-    code2drug_path='./diabetes_drugs.csv',
+    code2drug_info_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv')
 ```
 
@@ -3696,7 +4180,7 @@ png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("activity_presence_%s.png",
                                          cond))),
     width = 600, height = 750, units = "px")
-plot(evLog %>% activity_presence()  )
+plot(evLog %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
 dev.off()
 ```
 
@@ -3868,7 +4352,7 @@ con.close()
 #| output: TRUE
 con <- dbConnect(duckdb(), dbdir = db_path)
 
-df <- dbGetQuery(con, paste0("SELECT period2fitness_",cond,".ID,period2fitness_",cond,".t_0,period2fitness_",cond,".t_1,period2fitness_",cond,".fitness,period2fitness_",cond,".status,patient_incidents_view.age,patient_incidents_view.sex,patient_incidents_view.copayment FROM period2fitness_",cond," LEFT JOIN patient_incidents_view ON period2fitness_",cond,".ID=patient_incidents_view.patient_id"))
+df <- dbGetQuery(con, paste0("SELECT period2fitness_",cond,".ID,period2fitness_",cond,".t_0,period2fitness_",cond,".t_1,period2fitness_",cond,".fitness,period2fitness_",cond,".status,period2fitness_",cond,".status2,patient_incidents_view.age,patient_incidents_view.sex,patient_incidents_view.copayment FROM period2fitness_",cond," LEFT JOIN patient_incidents_view ON period2fitness_",cond,".ID=patient_incidents_view.patient_id"))
 dbDisconnect(con, shutdown = TRUE)
 
 df$sex <- as.factor(df$sex)
@@ -3893,18 +4377,18 @@ Using same predictive variables a joint latent class model of three classes is m
 
 ### 1 latent class
 
-mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
-                 survival = Surv(t_min,t_max,status) ~ age+sex, hazard="Weibull",
+mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
+                 survival = Surv(t_min,t_max,status2) ~ age+sex, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
                  B=c(1,1,0,0,0,0,1,0,1,1))
-### 3 latent class
+### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
-                  Jointlcmm(fixed= fitness ~ t_1 ,mixture =~ t_1,
-                            random=~t_1,subject="ID2",
-                            survival = Surv(t_min,t_max,status)~ age+sex,
+{mj3 <- gridsearch(rep = 10, maxiter = 10, minit = mj1, 
+                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
+                            random=~t_0,subject="ID2",
+                            survival = Surv(t_min,t_max,status2)~ age+sex,
                             hazard="Weibull",hazardtype="PH",
-                            ng=3,data=df, verbose=FALSE))
+                            ng=2,data=df, verbose=FALSE))
 
 summary(mj3)
 
@@ -3914,13 +4398,13 @@ png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("joint1_%s.png",
                                          cond))),
     width = 600, height = 750, units = "px")
-plot(mj3, which = "fit", var.time = "t_1", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
-     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,0.9))
+plot(mj3, which = "fit", var.time = "t_0", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
+     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,1.0))
 dev.off()
  
-d1 <- data.frame(t_1=seq(1,1000,length.out=100))
-data.new <-data.frame(d1,age=0,sex=0)
-mj3.pred <- predictY(mj3, data.new , var.time = "t_1")
+d1 <- data.frame(t_0=seq(1,1000,length.out=100))
+data.new <-data.frame(d1,age=65,sex=0)
+mj3.pred <- predictY(mj3, data.new , var.time = "t_0")
 
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("joint2_%s.png",
@@ -3942,9 +4426,9 @@ error = function(cond_) {
 )
 
 ```
-![Class-specific weighted marginal and subject-specific mean predicted trajectories](../../outputs/joint1_f.png){#fig-joint1_f fig-align="center" width="80%"}
+![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_f.png){#fig-joint1_f fig-align="center" width="80%"}
 
-![Class-specific fitness mean  predicted trajectory](../../outputs/joint2_f.png){#fig-joint2_f fig-align="center" width="80%"}
+![Class-specific mean predicted fitness trajectory](../../outputs/joint2_f.png){#fig-joint2_f fig-align="center" width="80%"}
 
 ![Class-specific survival functions](../../outputs/joint3_f.png){#fig-joint3_f fig-align="center" width="80%"}
 
@@ -3979,16 +4463,16 @@ cond <- 'ob'
 con = duckdb.connect(db_path)
 if notnan_p>0.98:
   logging.info("Generate event log of %s patients from prescriptions", cond)
-  evlog_creation_prescriptions(
+  evlog_creation_by_prescriptions(
     con=con,
     cond=cond,
-    code2drug_path='./diabetes_drugs.csv')
+    code2drug_info_path='./diabetes_drugs.csv')
 else:
   logging.info("Generate event log of %s patients from dispensations", cond)
-  evlog_creation_dispensations(
+  evlog_creation_by_dispensations(
     con=con,
     cond=cond,
-    code2drug_path='./diabetes_drugs.csv',
+    code2drug_info_path='./diabetes_drugs.csv',
     nac_path='./Nomenclator_de_Facturacion.csv')
 ```
 
@@ -4061,7 +4545,7 @@ png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("activity_presence_%s.png",
                                          cond))),
     width = 600, height = 750, units = "px")
-plot(evLog %>% activity_presence()  )
+plot(evLog %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
 dev.off()
 ```
 
@@ -4233,7 +4717,7 @@ con.close()
 #| output: TRUE
 con <- dbConnect(duckdb(), dbdir = db_path)
 
-df <- dbGetQuery(con, paste0("SELECT period2fitness_",cond,".ID,period2fitness_",cond,".t_0,period2fitness_",cond,".t_1,period2fitness_",cond,".fitness,period2fitness_",cond,".status,patient_incidents_view.age,patient_incidents_view.sex,patient_incidents_view.copayment FROM period2fitness_",cond," LEFT JOIN patient_incidents_view ON period2fitness_",cond,".ID=patient_incidents_view.patient_id"))
+df <- dbGetQuery(con, paste0("SELECT period2fitness_",cond,".ID,period2fitness_",cond,".t_0,period2fitness_",cond,".t_1,period2fitness_",cond,".fitness,period2fitness_",cond,".status,period2fitness_",cond,".status2,patient_incidents_view.age,patient_incidents_view.sex,patient_incidents_view.copayment FROM period2fitness_",cond," LEFT JOIN patient_incidents_view ON period2fitness_",cond,".ID=patient_incidents_view.patient_id"))
 dbDisconnect(con, shutdown = TRUE)
 
 df$sex <- as.factor(df$sex)
@@ -4257,19 +4741,18 @@ Using same predictive variables a joint latent class model of three classes is m
 #| output: TRUE
 
 ### 1 latent class
-
-mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
-                 survival = Surv(t_min,t_max,status) ~ age+sex, hazard="Weibull",
+mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
+                 survival = Surv(t_min,t_max,status2) ~ age+sex, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
                  B=c(1,1,0,0,0,0,1,0,1,1))
-### 3 latent class
+### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
-                  Jointlcmm(fixed= fitness ~ t_1 ,mixture =~ t_1,
-                            random=~t_1,subject="ID2",
-                            survival = Surv(t_min,t_max,status)~ age+sex,
+{mj3 <- gridsearch(rep = 10, maxiter = 10, minit = mj1, 
+                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
+                            random=~t_0,subject="ID2",
+                            survival = Surv(t_min,t_max,status2)~ age+sex,
                             hazard="Weibull",hazardtype="PH",
-                            ng=3,data=df, verbose=FALSE))
+                            ng=2,data=df, verbose=FALSE))
 
 summary(mj3)
 
@@ -4279,13 +4762,13 @@ png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("joint1_%s.png",
                                          cond))),
     width = 600, height = 750, units = "px")
-plot(mj3, which = "fit", var.time = "t_1", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
-     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,0.9))
+plot(mj3, which = "fit", var.time = "t_0", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
+     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,1.0))
 dev.off()
  
-d1 <- data.frame(t_1=seq(1,1000,length.out=100))
-data.new <-data.frame(d1,age=0,sex=0)
-mj3.pred <- predictY(mj3, data.new , var.time = "t_1")
+d1 <- data.frame(t_0=seq(1,1000,length.out=100))
+data.new <-data.frame(d1,age=65,sex=0)
+mj3.pred <- predictY(mj3, data.new , var.time = "t_0")
 
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs",sprintf("joint2_%s.png",
@@ -4307,15 +4790,15 @@ error = function(cond_) {
 )
 
 ```
-![Class-specific weighted marginal and subject-specific mean predicted trajectories](../../outputs/joint1_ob.png){#fig-joint1_ob fig-align="center" width="80%"}
+![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_ob.png){#fig-joint1_ob fig-align="center" width="80%"}
 
-![Class-specific fitness mean  predicted trajectory](../../outputs/joint2_ob.png){#fig-joint2_ob fig-align="center" width="80%"}
+![Class-specific mean predicted fitness trajectory](../../outputs/joint2_ob.png){#fig-joint2_ob fig-align="center" width="80%"}
 
 ![Class-specific survival functions](../../outputs/joint3_ob.png){#fig-joint3_ob fig-align="center" width="80%"}
 
-### Process indicators analysis
+### Process indicators' analysis
 
-#### Event log's creation and description
+We selected incident patients with at least one year of follow-up to create a process indicator's event log. This log includes measures such as cholesterol, albumin-creatinine index, glycated hemoglobin, creatinine, triglycerides, and ophthalmologist visits.
 ```{python}
 #| label: Creating process indicators' event log (ob)
 #| eval: TRUE
@@ -4328,6 +4811,7 @@ evlog_process_ind(con)
 con.close()
 ```
 
+An activity presence analysis is done to see the percentage of presence of each indicator in analyzed traces.
 ```{r}
 #| label: activity presence of process indicators
 #| eval: TRUE
@@ -4357,7 +4841,8 @@ activity_presence_df <- eventlog %>%
       timestamp = "date", 
       resource_id = 'resource'
     ) %>% activity_presence()  
-plot(activity_presence_df[activity_presence_df$event != "yFIN",])
+plot(activity_presence_df[activity_presence_df$event != "yFIN",]
+     )+scale_y_continuous(limits = c(0, 1))
 dev.off()
 
 png(filename=gsub("src/analysis-scripts/","",
@@ -4382,7 +4867,8 @@ activity_presence_df <- eventlog %>%
       timestamp = "date", 
       resource_id = 'resource'
     ) %>% activity_presence()  
-plot(activity_presence_df[activity_presence_df$event != "yFIN",])
+plot(activity_presence_df[activity_presence_df$event != "yFIN",]
+     )+scale_y_continuous(limits = c(0, 1))
 dev.off()
 
 png(filename=gsub("src/analysis-scripts/","",
@@ -4407,7 +4893,8 @@ activity_presence_df <- eventlog %>%
       timestamp = "date", 
       resource_id = 'resource'
     ) %>% activity_presence()  
-plot(activity_presence_df[activity_presence_df$event != "yFIN",])
+plot(activity_presence_df[activity_presence_df$event != "yFIN",]
+     )+scale_y_continuous(limits = c(0, 1))
 dev.off()
 
 png(filename=gsub("src/analysis-scripts/","",
@@ -4432,7 +4919,8 @@ activity_presence_df <- eventlog %>%
       timestamp = "date", 
       resource_id = 'resource'
     ) %>% activity_presence()  
-plot(activity_presence_df[activity_presence_df$event != "yFIN",])
+plot(activity_presence_df[activity_presence_df$event != "yFIN",]
+     )+scale_y_continuous(limits = c(0, 1))
 dev.off()
 
 png(filename=gsub("src/analysis-scripts/","",
@@ -4457,14 +4945,27 @@ activity_presence_df <- eventlog %>%
       timestamp = "date", 
       resource_id = 'resource'
     ) %>% activity_presence()  
-plot(activity_presence_df[activity_presence_df$event != "yFIN",])
+plot(activity_presence_df[activity_presence_df$event != "yFIN",]
+     )+scale_y_continuous(limits = c(0, 1))
 dev.off()
 
 
 dbDisconnect(con, shutdown = TRUE)
 ```
+![Percentage of patients' traces an activity is present during the first year](../../outputs/activity_presence_process_indicators_year1.png){#fig-activity_presence_year1 fig-align="center" width="80%"}
+
+![Percentage of patients' traces an activity is present during the second year](../../outputs/activity_presence_process_indicators_year2.png){#fig-activity_presence_year2 fig-align="center" width="80%"}
+
+![Percentage of patients' traces an activity is present during the third year](../../outputs/activity_presence_process_indicators_year3.png){#fig-activity_presence_year3 fig-align="center" width="80%"}
+
+![Percentage of patients' traces an activity is present during the fourth year](../../outputs/activity_presence_process_indicators_year4.png){#fig-activity_presence_year4 fig-align="center" width="80%"}
+
+![Percentage of patients' traces an activity is present during the fifth year](../../outputs/activity_presence_process_indicators_year5.png){#fig-activity_presence_year5 fig-align="center" width="80%"}
+
 
 #### Conformace checking
+
+Similar to previous methods, in this section, the observed traces are compared with a specific theoretical process. However, instead of utilizing a single Petri net, five Petri nets are employed, one for each year, as the adherence is now considered in annual intervals from diabetes detection date.  
 
 ```{python}
 #| label: Creating process indicators' conformance analysis
@@ -4538,12 +5039,14 @@ boxplot1 = sns.boxplot(x = df2year['year'],
                        y = df2year['fitness'], 
                        palette = 'husl')
 fig1 = boxplot1.get_figure()
-fig1.savefig("fitness_by_year.png")
+fig1.savefig("../../outputs/fitness_by_year.png")
+plt.close(fig1)
 con.sql("DROP TABLE IF EXISTS period2process_fitness;")
 con.sql("CREATE TABLE period2process_fitness AS \
 SELECT ID, \
 DATEDIFF('day', initial_date,date) AS t_0, \
-DATEDIFF('day', initial_date,final_date) AS t_1, fitness, initial_date, status \
+DATEDIFF('day', initial_date,final_date) AS t_1, fitness, initial_date, \
+status, MAX(status) OVER (PARTITION BY ID) AS status2 \
 FROM (SELECT a.*,COALESCE(b.deregistration_date,'2022-12-31'),\
              COALESCE( LEAD(date, 1) OVER (PARTITION BY ID ORDER BY date), \
              LEAST(deregistration_date, \
@@ -4559,6 +5062,9 @@ FROM (SELECT a.*,COALESCE(b.deregistration_date,'2022-12-31'),\
                   LEFT JOIN patient_incidents_view b ON a.ID=b.patient_id) WHERE t_0!=t_1")
 ```
 
+![Boxplot of  process indicators' traces' fitness by cumulative years)](../../outputs/fitness_by_year.png){#fitness_by_year fig-align="center" width="80%"}
+
+Treatments' analysis' and process indicators' fitness are linked with the next plot:
 ```{python}
 #| label: Creating process indicators' conformance analysis by condition
 #| eval: TRUE
@@ -4580,14 +5086,16 @@ boxplot2 = sns.boxplot(x = df2cond['type'],
                       palette = 'husl')
 plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0, title='Year')
 fig2 = boxplot2.get_figure()
-fig2.savefig("fitness2cond_by_year.png")
-
+fig2.savefig("../../outputs/fitness2cond_by_year.png")
+plt.close(fig2)
 con.close()
 ```
 
+![Boxplot of process indicators' traces' fitness by cumulative year and by predominant clinical condition)](../../outputs/fitness2cond_by_year.png){#fitness2cond_by_year fig-align="center" width="80%"}
+
 #### Prediction Models
 
-In the next example, we choose fitness, age, sex and copayment to try to predict a hospitalization with a time dependet Cox model, and the summary of it is:
+In the next example, we choose fitness, age, sex and copayment to try to predict a hospitalization with a time dependent Cox model, and the summary of it is:
 
 
 ```{r}
@@ -4598,7 +5106,7 @@ In the next example, we choose fitness, age, sex and copayment to try to predict
 #| output: TRUE
 con <- dbConnect(duckdb(), dbdir = db_path)
 
-df <- dbGetQuery(con, paste0("SELECT period2process_fitness.ID, period2process_fitness.t_0, period2process_fitness.t_1, period2process_fitness.fitness, period2process_fitness.status, patient_incidents_view.age, patient_incidents_view.sex, patient_incidents_view.copayment FROM period2process_fitness LEFT JOIN patient_incidents_view ON period2process_fitness.ID=patient_incidents_view.patient_id"))
+df <- dbGetQuery(con, paste0("SELECT period2process_fitness.ID, period2process_fitness.t_0, period2process_fitness.t_1, period2process_fitness.fitness, period2process_fitness.status,period2process_fitness.status2, patient_incidents_view.age, patient_incidents_view.sex, patient_incidents_view.copayment FROM period2process_fitness LEFT JOIN patient_incidents_view ON period2process_fitness.ID=patient_incidents_view.patient_id"))
 dbDisconnect(con, shutdown = TRUE)
 
 df$sex <- as.factor(df$sex)
@@ -4623,18 +5131,18 @@ Using same predictive variables a joint latent class model of three classes is m
 
 ### 1 latent class
 
-mj1 <- Jointlcmm(fixed= fitness ~ t_1 ,random =~ t_1, subject="ID2",
-                 survival = Surv(t_min,t_max,status) ~ age+sex, hazard="Weibull",
+mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
+                 survival = Surv(t_min,t_max,status2) ~ age+sex, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,
                  B=c(1,1,0,0,0,0,1,0,1,1))
-### 3 latent class
+### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 10, maxiter = 15, minit = mj1, 
-                  Jointlcmm(fixed= fitness ~ t_1 ,mixture =~ t_1,
-                            random=~t_1,subject="ID2",
-                            survival = Surv(t_min,t_max,status)~ age+sex,
+{mj3 <- gridsearch(rep = 10, maxiter = 10, minit = mj1, 
+                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
+                            random=~t_0,subject="ID2",
+                            survival = Surv(t_min,t_max,status2)~ age+sex,
                             hazard="Weibull",hazardtype="PH",
-                            ng=3,data=df, verbose=FALSE))
+                            ng=2,data=df, verbose=FALSE))
 
 summary(mj3)
 
@@ -4643,13 +5151,14 @@ postprob(mj3)
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs/joint1_PI.png")),
     width = 600, height = 750, units = "px")
-plot(mj3, which = "fit", var.time = "t_1", marg = F, break.times = 5, bty = "l", legend.loc = 'bottomright',
-     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,0.9))
+plot(mj3, which = "fit", var.time = "t_0", marg = F, break.times = 5, bty = "l",
+     legend.loc = 'bottomright',ylab = "fitness",
+     xlab = "Time in days",shades=TRUE,ylim = c(0.1,1.0))
 dev.off()
  
-d1 <- data.frame(t_1=seq(1,1200,length.out=100))
-data.new <-data.frame(d1,age=0,sex=0)
-mj3.pred <- predictY(mj3, data.new , var.time = "t_1")
+d1 <- data.frame(t_0=seq(1,1200,length.out=100))
+data.new <-data.frame(d1,age=65,sex=0)
+mj3.pred <- predictY(mj3, data.new , var.time = "t_0")
 
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs/joint2_PI.png")),
@@ -4669,9 +5178,57 @@ error = function(cond_) {
 )
 
 ```
-![Class-specific weighted marginal and subject-specific mean predicted trajectories](../../outputs/joint1_PI.png){#fig-joint1_PI fig-align="center" width="80%"}
+![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_PI.png){#fig-joint1_PI fig-align="center" width="80%"}
 
-![Class-specific fitness mean  predicted trajectory](../../outputs/joint2_PI.png){#fig-joint2_PI fig-align="center" width="80%"}
+![Class-specific mean predicted fitness trajectory](../../outputs/joint2_PI.png){#fig-joint2_PI fig-align="center" width="80%"}
 
 ![Class-specific survival functions](../../outputs/joint3_PI.png){#fig-joint3_PI fig-align="center" width="80%"}
 
+### Joint latent class models' summary
+
+::: {#fig-summary .column-page layout-ncol=3}
+
+!['else' patients' class-specific weighted marginal and subject-specific mean predicted treatments' fitness trajectories](../../outputs/joint1_else.png){#fig-elsef1}
+
+!['else' patients' class-specific mean  predicted treatments' fitness trajectory](../../outputs/joint2_else.png){#fig-elsef2}
+
+!['else' patients' class-specific survival functions](../../outputs/joint3_else.png){#fig-elsef3}
+
+![cvd patients' class-specific weighted marginal and subject-specific mean predicted treatments' fitness trajectories](../../outputs/joint1_cvd.png){#fig-cvdf1}
+
+![cvd patients' class-specific mean  predicted treatments' fitness trajectory](../../outputs/joint2_cvd.png){#fig-cvdf2}
+
+![cvd patients' class-specific survival functions](../../outputs/joint3_cvd.png){#fig-cvdf3}
+
+![hf patients' class-specific weighted marginal and subject-specific mean predicted treatments' fitness trajectories](../../outputs/joint1_hf.png){#fig-hff1}
+
+![hf patients' class-specific fitness mean  predicted treatments' fitness trajectory](../../outputs/joint2_hf.png){#fig-hff2}
+
+![hf patients' class-specific survival functions](../../outputs/joint3_hf.png){#fig-hff3}
+
+![ckd patients' class-specific weighted marginal and subject-specific mean predicted treatments' fitness trajectories](../../outputs/joint1_ckd.png){#fig-ckdf1}
+
+![ckd patients' class-specific mean  predicted treatments' fitness trajectory](../../outputs/joint2_ckd.png){#fig-ckdf2}
+
+![ckd patients' class-specific survival functions](../../outputs/joint3_ckd.png){#fig-ckdf3}
+
+![Fragile patients' class-specific weighted marginal and subject-specific mean predicted treatments' fitness trajectories](../../outputs/joint1_f.png){#fig-ff1}
+
+![Fragile patients' class-specific mean  predicted treatments' fitness trajectory](../../outputs/joint2_f.png){#fig-ff2}
+
+![Fragile patients' class-specific survival functions](../../outputs/joint3_f.png){#fig-ff3}
+
+![Obese patients' class-specific weighted marginal and subject-specific mean predicted treatments' fitness trajectories](../../outputs/joint1_ob.png){#fig-obf1}
+
+![Obese patients' class-specific mean  predicted treatments' fitness trajectory](../../outputs/joint2_ob.png){#fig-obf2}
+
+![Obese patients' class-specific survival functions](../../outputs/joint3_ob.png){#fig-obf3}
+
+![Class-specific weighted marginal and subject-specific mean predicted process indicators' fitness trajectories](../../outputs/joint1_PI.png){#fig-pf1}
+
+![Class-specific mean  predicted process indicators' fitness trajectory](../../outputs/joint2_PI.png){#fig-pf2}
+
+![Class-specific survival functions](../../outputs/joint3_PI.png){#fig-pf3}
+
+Joint latent class models' plots' panel
+:::
