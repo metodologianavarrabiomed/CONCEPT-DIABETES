@@ -1107,25 +1107,6 @@
                     }
                 },
                 {
-                    "label": "consult_request_service",
-                    "description": "Indicates the service for which a consult_request_service was conducted",
-                    "standard_classification": "",
-                    "format": "String",
-                    "type": "Categorical",
-                    "units": "",
-                    "requirement_level": "Recommended",
-                    "characteristic": "Observed",
-                    "catalog_bl": true,
-                    "transformations_from_origin": "",
-                    "possible_data_source": "",
-                    "observations_comments": "",
-                    "examples": "",
-                    "catalog": {
-                        "column_name": "visit_service",
-                        "filename": "dm_ss_use_visit_service.csv"
-                    }
-                },
-                {
                     "label": "visit_date",
                     "description": "Date of the visit",
                     "standard_classification": "iso-8601",
@@ -1172,6 +1153,25 @@
                     "observations_comments": "",
                     "examples": "",
                     "catalog": null
+                },
+                {
+                    "label": "consult_request_service",
+                    "description": "Indicates the service for which a consult_request_service was conducted",
+                    "standard_classification": "",
+                    "format": "String",
+                    "type": "Categorical",
+                    "units": "",
+                    "requirement_level": "Recommended",
+                    "characteristic": "Observed",
+                    "catalog_bl": true,
+                    "transformations_from_origin": "",
+                    "possible_data_source": "",
+                    "observations_comments": "",
+                    "examples": "",
+                    "catalog": {
+                        "column_name": "visit_service",
+                        "filename": "dm_ss_use_visit_service.csv"
+                    }
                 }
             ],
             "rules": [

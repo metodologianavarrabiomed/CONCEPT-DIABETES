@@ -43,3 +43,6 @@ dependencies:
  - r-lcmm=1.9.5
  - r-duckdb=0.8.1_3
  - r-logger=0.2.2
+ - r-finalfit=1.0.6
+ - r-flextable=0.9.3
+ - r-knitr=1.42

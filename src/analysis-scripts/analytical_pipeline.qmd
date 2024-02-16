@@ -164,7 +164,6 @@ library(duckdb)
 library(logger)
 library(finalfit)
 library(flextable)
-library(readxl)
 library(knitr)
 
 ```
@@ -187,7 +186,8 @@ def general_preprocess(con):
     con.sql("DROP VIEW IF EXISTS param_incidents_view;")
     con.sql("DROP VIEW IF EXISTS param_cat_incidents_view;")    
     con.sql("DROP VIEW IF EXISTS patient_incidents_view;")
-    con.sql("DROP VIEW IF EXISTS treat_incidents_view;")   
+    con.sql("DROP VIEW IF EXISTS treat_incidents_view;")
+    con.sql("DROP VIEW IF EXISTS exams_incidents_view;")
 
 
     con.sql("CREATE VIEW cmbd_incidents_view AS SELECT * FROM main.cmbd \
@@ -219,6 +219,9 @@ def general_preprocess(con):
                 FROM main.patient WHERE patient_id IN (SELECT patient_id \
                         FROM main.patient WHERE dx_date >='2017-01-01')")
     con.sql("CREATE VIEW treat_incidents_view AS SELECT * FROM main.treat \
+            WHERE patient_id IN (SELECT patient_id FROM main.patient \
+                                 WHERE dx_date >='2017-01-01')")
+    con.sql("CREATE VIEW exams_incidents_view AS SELECT * FROM main.exams \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
                                  WHERE dx_date >='2017-01-01')")
                 
@@ -299,7 +302,6 @@ def general_preprocess(con):
                                         ORDER BY param_cat_date DESC) AS rn \
                           FROM param_cat_prevalents_pre_view) t WHERE rn = 1;") 
 
-
 ```
 
 ### Treatments' event log creation
@@ -310,7 +312,7 @@ For using process mining an event log is needed. The sort of functions below tak
 -   L=8 if age<65 and any cardiovascular disease, heart failure, chronic kidney disease or fragility.
 -   L=8.5 if else.
 
-As they are measures these events do not have any duration. In the case of treatments on the other hand a duration period exists. For treatments events definition it is based on drugs dispensing and a fixed time period after the dispensing date of the last dispensing date of the same drug if the dispensing is regularly produced. Functions below make an event logs. However the analysis of this document is thought to do by the predominant clinical condition of patients according to DM2 treatment algorithm. In other words, patients are grouped by their predominant clinical condition and the analysis is realized independently to each group.
+As they are measures these events do not have any duration. In the case of treatments on the other hand a duration period exists. For treatments, events definition is based on drugs prescriptions if exists or dispensing dates and a fixed period time if else. Functions below make event logs with the previous considerations. Treatment analysis of this document is thought to do by the predominant clinical condition of patients according to DM2 treatment algorithm. In other words, patients are grouped by their predominant clinical condition and the analysis is realized independently to each group.
 
 
 ```{python, warning: FALSE}
@@ -1125,7 +1127,7 @@ def nac2comprimidos(nac_path,code_set):
 
 ### Process indicators' event log creation
 
-With the objective of studying process indicators a function to make a process indicators' event log is coded above. There, in addition to laboratory measures, specialist visits, and patient interviews, three artificial events have been included to aid the analysis.'INI' event denotes each patient's diabetes diagnosis date, 'yFIN' events indicate the end of each annual interval and 'FIN' event is the date of the end of the last completed annual interval.
+With the objective of studying process indicators a function to make a process indicators' event log is coded above. There, in addition to laboratory measures and realized exams, three artificial events have been included to aid the analysis.'INI' event denotes each patient's diabetes diagnosis date, 'yFIN' events indicate the end of each annual interval and 'FIN' event is the date of the end of the last completed annual interval.
 
 ```{python, warning: FALSE}
 #| label: process indicators' event log creation
@@ -1154,18 +1156,24 @@ def evlog_process_ind(con):
             UNION ALL SELECT DISTINCT patient_id,'col' AS event, \
                     CAST(param_date AS TIMESTAMP) + INTERVAL 120 SECOND AS date \
             FROM param_incidents_view WHERE param_name IN  ('col','hdl','ldl') \
-            UNION ALL SELECT DISTINCT patient_id,'trgl' AS event, \
+            UNION ALL SELECT DISTINCT patient_id,'blood_p' AS event, \
                     CAST(param_date AS TIMESTAMP) + INTERVAL 180 SECOND AS date \
-            FROM param_incidents_view WHERE param_name='trgl' \
-            UNION ALL SELECT DISTINCT patient_id,'creat' AS event, \
+            FROM param_incidents_view WHERE param_name IN  ('sbp','dbp') \
+            UNION ALL SELECT DISTINCT patient_id,'indalbcr' AS event, \
                     CAST(param_date AS TIMESTAMP) + INTERVAL 240 SECOND AS date \
-            FROM param_incidents_view WHERE param_name='creat' \
-            UNION ALL SELECT DISTINCT patient_id,'alb' AS event, \
+            FROM param_incidents_view WHERE param_name='indalbcr' \
+            UNION ALL SELECT DISTINCT patient_id,'filtglom' AS event, \
                     CAST(param_date AS TIMESTAMP) + INTERVAL 300 SECOND AS date \
-            FROM param_incidents_view WHERE param_name='alb' \
-            UNION ALL SELECT DISTINCT patient_id,'ophtalmologist' AS event, \
-                    CAST(visit_date AS TIMESTAMP) + INTERVAL 360 SECOND AS date \
-            FROM ss_use_incidents_view WHERE visit_service='OFT' \
+            FROM param_incidents_view WHERE param_name='filtglom' \
+            UNION ALL SELECT DISTINCT patient_id,'bmi' AS event, \
+                    CAST(param_date AS TIMESTAMP) + INTERVAL 360 SECOND AS date \
+            FROM param_incidents_view WHERE param_name IN ('bmi','weight') \
+            UNION ALL SELECT DISTINCT patient_id,'ocular_exam' AS event, \
+                    CAST(test_date AS TIMESTAMP) + INTERVAL 420 SECOND AS date \
+            FROM exams_incidents_view WHERE test_name='ocular_exam_PC' \
+            UNION ALL SELECT DISTINCT patient_id,'foot_exam' AS event, \
+                    CAST(test_date AS TIMESTAMP) + INTERVAL 480 SECOND AS date \
+            FROM exams_incidents_view WHERE test_name='foot_exam' \
             UNION ALL SELECT patient_id,'INI' AS event, \
                     CAST(dx_date AS TIMESTAMP) AS date \
             FROM patient_incidents_view \
@@ -1238,7 +1246,7 @@ def evlog_process_ind(con):
 
 ### Distances
 
-One of the most important aim of process mining is to show and explain the processes. However, the great variety of traces does not allow us to draw any clear conclusions and it is often necessary to simplify our data. Another option that we can do before simplifying, to avoid the excessive losing of information and give another perspective to the analysis, is to cluster the traces and to analyze them by cluster. To do that we have to measure somehow the differences between the traces, the distance between them. This is not evident if we take into account that traces are categorical sequences of different lengths. Nevertheless, there are some distances that we can use to this task: edit distances, vector term similarity, LDA based distances, embedding based distances... Some of them are shown below as functions to calculate the distance matrix of traces:
+One of the most important aim of process mining is to show and explain the processes. However, the great variety of traces does not allow us to draw any clear conclusions and it is often necessary to simplify our data. Another option that we can do before simplifying, to avoid the excessive losing of information and give another perspective to the analysis, is to cluster the traces and to analyze them by cluster. To do that we have to measure somehow the differences between the traces; the distance between them. There are some distances that we can use to this task: edit distances, vector term similarity, LDA based distances, embedding based distances... Some of them are shown below as functions to calculate the distance matrix of traces:
 
 ```{python}
 #| label: Distance matrix functions
@@ -2165,7 +2173,6 @@ con.close()
 #| warning: FALSE
 #| output: FALSE
 #db_path <- '../../inputs/data.duckdb'
-
 db_path <- 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
 con <- dbConnect(duckdb(), dbdir = db_path)
 country2cont = read.csv('./country2continent.csv') %>% 
@@ -2186,7 +2193,9 @@ patient_inc <- patient_inc %>%
   left_join( country2cont %>% select(country, CC), by = "country") %>%
   mutate(education=factor(education, levels=c(0,1,2,3),
       labels=c("Without studies","Primary school",
-               "High school","University")))
+               "High school","University")),
+      copayment=factor(copayment,levels=c(0,1),
+                       labels=c("less than 18000","more or equal than 18000")))
 patient_inc$CC[patient_inc$country == 724] <- 'Spain'
 dependent="sexo"
 explanatory=c("age","age_dx","CC","copayment","education", "avg_income")  
@@ -2244,8 +2253,7 @@ param_inc_tab <- rbind(
                        include_col_totals_percent	=FALSE,add_col_totals = TRUE),
   param_cat_inc2unnest %>%
     summary_factorlist(dependent ,
-                       c("physical_activity","smoking_status","alcohol",
-                         "vaccination_covid","vaccination_flu",'working_status'),
+                       c("physical_activity","smoking_status","alcohol","vaccination_flu",'working_status'),
                        total_col = TRUE,cont="mean",na_include = TRUE,
                        na_to_prop =  FALSE,cont_cut=8,add_row_totals = TRUE,
                        include_row_missing_col = TRUE))
@@ -2261,7 +2269,8 @@ patient_inc$deregistration_date <- patient_inc$deregistration_date %>%
   replace_na(as.Date('2023-01-01'))
 patient_inc <- patient_inc %>% 
   mutate(follow_up_time=as.numeric(difftime(deregistration_date,
-                                            dx_date,units="days")/365.25))
+                                            dx_date,units="days")/365.25)) %>%
+  filter(follow_up_time!=0)
 
 ss_use_inc <- dbGetQuery(con," SELECT * FROM main.ss_use \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
@@ -2374,7 +2383,9 @@ patient_pre <- patient_pre %>%
   left_join( country2cont %>% select(country, CC), by = "country") %>%
   mutate(education=factor(education, levels=c(0,1,2,3),
       labels=c("Without studies","Primary school",
-               "High school","University")))
+               "High school","University")),
+      copayment=factor(copayment,levels=c(0,1),
+                       labels=c("less than 18000","more or equal than 18000")))
 patient_pre$CC[patient_pre$country == 724] <- 'Spain'
 dependent="sexo"
 explanatory=c("age","age_dx","CC","copayment","education", "avg_income")  
@@ -2431,8 +2442,7 @@ param_pre_tab <- rbind(
                        include_col_totals_percent	=FALSE,add_col_totals = TRUE),
   param_cat_pre2unnest %>%
     summary_factorlist(dependent ,
-                       c("physical_activity","smoking_status","alcohol",
-                         "vaccination_covid","vaccination_flu",'working_status'),
+                       c("physical_activity","smoking_status","alcohol","vaccination_flu",'working_status'),
                        total_col = TRUE,cont="mean",na_include = TRUE,
                        na_to_prop =  FALSE,cont_cut=8,add_row_totals = TRUE,
                        include_row_missing_col = TRUE))
@@ -2447,7 +2457,8 @@ kable(param_pre_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 patient_pre$deregistration_date <- patient_pre$deregistration_date %>%
   replace_na(as.Date('2023-01-01'))
 patient_pre <- patient_pre %>% 
-  mutate(follow_up_time=as.numeric(difftime(deregistration_date,                                          as.Date('2016-12-31'),units="days")/365.25))
+  mutate(follow_up_time=as.numeric(difftime(deregistration_date,                                          as.Date('2016-12-31'),units="days")/365.25))%>%
+  filter(follow_up_time!=0)
 
 
 
@@ -2551,6 +2562,7 @@ kable(use_pre_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 #| warning: FALSE
 #| output: FALSE
 dbDisconnect(con, shutdown = TRUE)
+rm(param_cat_inc,param_cat_inc2unnest,param_cat_pre,param_cat_pre2unnest,param_inc,param_inc_tab,param_inc2unnest,param_pre,param_pre_tab,param_pre2unnest,patient_inc,patient_inc_tab,patient_pre,patient_pre_tab,ss_use_inc,ss_use_inc1,ss_use_inc2,ss_use_inc3,ss_use_pre,ss_use_pre1,ss_use_pre2,ss_use_pre3,use_inc_freq1,use_inc_freq1_time,use_inc_freq2,use_inc_freq2_time,use_inc_freq3,use_inc_freq3_time,use_inc_tab,use_pre_freq1,use_pre_freq1_time,use_pre_freq2,use_pre_freq2_time,use_pre_freq3,use_pre_freq3_time,use_pre_tab)
 ```
 
 ### Patients without predominant clinical condition
@@ -2664,7 +2676,7 @@ evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
 dbDisconnect(con, shutdown = TRUE)
 ```
 
-Choosing patients without any predominant clinical condition and after some preprocessing we obtain an event log that can be reproduced in the below process map @fig-pm1_else. There is shown how the events are connected, the mean number of days patients spent in each event (or treatment), percentage of patients who made each transition and the mean number of days it took to make the transition. However, a spaghetti map is obtained and nothing can be concluded. Therefore, we have to simplify the process map and for example only show the most frequent traces covering 20% of the event log as in @fig-pm02_else. Moreover, in @fig-activity_presence_else we show percentage of patients' traces each activity is present.
+Choosing patients without any predominant clinical condition and after some preprocessing we obtain an event log that can be represented in the below process map @fig-pm1_else. There is shown how the events are connected, the mean number of days patients spent in each event (or treatment), percentage of patients who made each transition and the mean number of days it took to make the transition. However, a spaghetti map is obtained and nothing can be concluded. Therefore, we have to simplify the process map and for example only show the most frequent traces covering 20% of the event log as in @fig-pm02_else. Moreover, in @fig-activity_presence_else we show percentage of patients' traces each activity is present.
 
 ```{r}
 #| label: proces map 1 (else)
@@ -2712,7 +2724,7 @@ dev.off()
 
 #### Clustering traces
 
-Once the set of traces to analyze are selected, there is a need to choose a distance measure to clustering. In this example Jaccard similarity is chosen to calculate the distance matrix.
+Once the set of traces to analyze are selected, there is a need to choose a distance measure to clustering. In this example Levenshtein similarity is chosen to calculate the distance matrix.
 
 ```{python}
 #| label: dm calculation (else)
@@ -4798,7 +4810,7 @@ error = function(cond_) {
 
 ### Process indicators' analysis
 
-We selected incident patients with at least one year of follow-up to create a process indicator's event log. This log includes measures such as cholesterol, albumin-creatinine index, glycated hemoglobin, creatinine, triglycerides, and ophthalmologist visits.
+We selected incident patients with at least one year of follow-up to create a process indicator's event log. This log includes cholesterol, albumin-creatinine index, glycated hemoglobin, body mass index, blood pressure and glomerular filtration measures, and foot and eye examinations.
 ```{python}
 #| label: Creating process indicators' event log (ob)
 #| eval: TRUE
@@ -4965,7 +4977,7 @@ dbDisconnect(con, shutdown = TRUE)
 
 #### Conformace checking
 
-Similar to previous methods, in this section, the observed traces are compared with a specific theoretical process. However, instead of utilizing a single Petri net, five Petri nets are employed, one for each year, as the adherence is now considered in annual intervals from diabetes detection date.  
+As has been done before, in this section, the observed traces are compared with a specific theoretical process. However, instead of utilizing a single Petri net, five Petri nets are employed, one for each year, as the adherence is now considered in annual intervals from diabetes detection date.  
 
 ```{python}
 #| label: Creating process indicators' conformance analysis
