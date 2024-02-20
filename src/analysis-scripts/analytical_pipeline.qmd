@@ -1987,6 +1987,7 @@ Process indicators can also be represented in a Petri Net. Therefore we created 
 ![Petri Net of process indicators of the first four years](../../outputs/PN_process4.png){#fig-petrinet_process4 fig-align="center" width="100%"}
 
 ![Petri Net of process indicators of the first five years](../../outputs/PN_process5.png){#fig-petrinet_process5 fig-align="center" width="100%"}
+
 The function below takes a process indicators' event log and returns each patient's fitness by year. The method to calculate the fitness in this case is the token base replay method.
 
 ```{python}
@@ -2934,7 +2935,7 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 10, maxiter = 10, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
@@ -3298,7 +3299,7 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 10, maxiter = 10, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
@@ -3663,7 +3664,7 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 10, maxiter = 10, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
@@ -4030,7 +4031,7 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 10, maxiter = 10, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
@@ -4395,7 +4396,7 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 10, maxiter = 10, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
@@ -4759,7 +4760,7 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 10, maxiter = 10, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
@@ -5149,7 +5150,7 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 10, maxiter = 10, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
