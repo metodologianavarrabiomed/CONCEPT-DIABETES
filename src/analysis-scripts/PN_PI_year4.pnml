@@ -2,45 +2,45 @@
 <pnml>
   <net id="net1" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel">
     <name>
-      <text>PN_PI_year4</text>
+      <text>PN_PI_year3</text>
     </name>
     <page id="n0">
       <place id="place6">
         <graphics>
-          <position x="430" y="720" />
+          <position x="430" y="1000" />
           <dimension x="30" y="30" />
         </graphics>
       </place>
       <transition id="transition14">
         <name>
-          <text>ophtalmologist</text>
+          <text>ocular_exam</text>
         </name>
         <graphics>
-          <position x="610" y="710" />
+          <position x="610" y="990" />
           <dimension x="35" y="35" />
         </graphics>
       </transition>
       <place id="place30">
         <graphics>
-          <position x="490" y="20" />
+          <position x="490" y="300" />
           <dimension x="30" y="30" />
         </graphics>
       </place>
       <place id="place31">
         <graphics>
-          <position x="490" y="160" />
+          <position x="490" y="440" />
           <dimension x="30" y="30" />
         </graphics>
       </place>
       <place id="place32">
         <graphics>
-          <position x="490" y="300" />
+          <position x="490" y="580" />
           <dimension x="30" y="30" />
         </graphics>
       </place>
       <place id="place33">
         <graphics>
-          <position x="490" y="440" />
+          <position x="490" y="720" />
           <dimension x="30" y="30" />
         </graphics>
       </place>
@@ -49,34 +49,34 @@
           <text>col</text>
         </name>
         <graphics>
-          <position x="610" y="10" />
+          <position x="610" y="290" />
           <dimension x="35" y="35" />
         </graphics>
       </transition>
       <transition id="transition53">
         <name>
-          <text>trgl</text>
+          <text>blood_p</text>
         </name>
         <graphics>
-          <position x="610" y="150" />
+          <position x="610" y="430" />
           <dimension x="35" y="35" />
         </graphics>
       </transition>
       <transition id="transition55">
         <name>
-          <text>alb</text>
+          <text>indalbcr</text>
         </name>
         <graphics>
-          <position x="610" y="290" />
+          <position x="610" y="570" />
           <dimension x="35" y="35" />
         </graphics>
       </transition>
       <transition id="transition57">
         <name>
-          <text>creat</text>
+          <text>filtglom</text>
         </name>
         <graphics>
-          <position x="610" y="430" />
+          <position x="610" y="710" />
           <dimension x="35" y="35" />
         </graphics>
       </transition>
@@ -85,13 +85,13 @@
           <text>hba1c</text>
         </name>
         <graphics>
-          <position x="610" y="570" />
+          <position x="610" y="850" />
           <dimension x="35" y="35" />
         </graphics>
       </transition>
       <place id="place35">
         <graphics>
-          <position x="490" y="580" />
+          <position x="490" y="860" />
           <dimension x="30" y="30" />
         </graphics>
       </place>
@@ -100,7 +100,7 @@
           <text>INI</text>
         </name>
         <graphics>
-          <position x="370" y="290" />
+          <position x="370" y="570" />
           <dimension x="35" y="35" />
         </graphics>
       </transition>
@@ -109,7 +109,7 @@
           <text>ini</text>
         </name>
         <graphics>
-          <position x="130" y="300" />
+          <position x="148.27055" y="477.019823" />
           <dimension x="30" y="30" />
         </graphics>
         <initialMarking>
@@ -118,25 +118,25 @@
       </place>
       <place id="place142">
         <graphics>
-          <position x="670" y="20" />
+          <position x="670" y="300" />
           <dimension x="30" y="30" />
         </graphics>
       </place>
       <place id="place143">
         <graphics>
-          <position x="670" y="160" />
+          <position x="670" y="440" />
           <dimension x="30" y="30" />
         </graphics>
       </place>
       <place id="place144">
         <graphics>
-          <position x="670" y="300" />
+          <position x="670" y="580" />
           <dimension x="30" y="30" />
         </graphics>
       </place>
       <place id="place145">
         <graphics>
-          <position x="670" y="440" />
+          <position x="670" y="720" />
           <dimension x="30" y="30" />
         </graphics>
       </place>
@@ -145,37 +145,37 @@
           <text>inv_col</text>
         </name>
         <graphics>
-          <position x="610" y="80" />
+          <position x="610" y="360" />
           <dimension x="35" y="35" />
         </graphics>
         <toolspecific tool="ProM" version="6.4" activity="$invisible$" localNodeID="68ed91e8-6fdc-47b7-8f7a-7dbcc16ca1e3"/>
       </transition>
       <transition id="transition206">
         <name>
-          <text>inv_trgl</text>
+          <text>inv_blood_p</text>
         </name>
         <graphics>
-          <position x="610" y="220" />
+          <position x="610" y="500" />
           <dimension x="35" y="35" />
         </graphics>
         <toolspecific tool="ProM" version="6.4" activity="$invisible$" localNodeID="68ed91e8-6fdc-47b7-8f7a-7dbcc16ca1e3"/>
       </transition>
       <transition id="transition207">
         <name>
-          <text>inv_alb</text>
+          <text>inv_indalbcr</text>
         </name>
         <graphics>
-          <position x="610" y="360" />
+          <position x="610" y="640" />
           <dimension x="35" y="35" />
         </graphics>
         <toolspecific tool="ProM" version="6.4" activity="$invisible$" localNodeID="68ed91e8-6fdc-47b7-8f7a-7dbcc16ca1e3"/>
       </transition>
       <transition id="transition208">
         <name>
-          <text>inv_creat</text>
+          <text>inv_filtglom</text>
         </name>
         <graphics>
-          <position x="610" y="500" />
+          <position x="610" y="780" />
           <dimension x="35" y="35" />
         </graphics>
         <toolspecific tool="ProM" version="6.4" activity="$invisible$" localNodeID="68ed91e8-6fdc-47b7-8f7a-7dbcc16ca1e3"/>
@@ -185,30 +185,30 @@
           <text>inv_hba1c</text>
         </name>
         <graphics>
-          <position x="610" y="640" />
+          <position x="610" y="920" />
           <dimension x="35" y="35" />
         </graphics>
         <toolspecific tool="ProM" version="6.4" activity="$invisible$" localNodeID="68ed91e8-6fdc-47b7-8f7a-7dbcc16ca1e3"/>
       </transition>
       <place id="place146">
         <graphics>
-          <position x="670" y="580" />
+          <position x="670" y="860" />
           <dimension x="30" y="30" />
         </graphics>
       </place>
       <transition id="transition211">
         <name>
-          <text>inv_ophtalmologist</text>
+          <text>inv_ocular_exam</text>
         </name>
         <graphics>
-          <position x="490" y="780" />
+          <position x="490" y="1060" />
           <dimension x="35" y="35" />
         </graphics>
         <toolspecific tool="ProM" version="6.4" activity="$invisible$" localNodeID="68ed91e8-6fdc-47b7-8f7a-7dbcc16ca1e3"/>
       </transition>
       <place id="place147">
         <graphics>
-          <position x="850" y="720" />
+          <position x="850" y="1000" />
           <dimension x="30" y="30" />
         </graphics>
       </place>
@@ -217,13 +217,13 @@
           <text>fin</text>
         </name>
         <graphics>
-          <position x="1150" y="300" />
+          <position x="1168.27055" y="477.019823" />
           <dimension x="30" y="30" />
         </graphics>
       </place>
       <place id="place185">
         <graphics>
-          <position x="1034" y="293.06" />
+          <position x="1052.27055" y="470.079823" />
           <dimension x="30" y="30" />
         </graphics>
       </place>
@@ -232,7 +232,7 @@
           <text>FIN</text>
         </name>
         <graphics>
-          <position x="1090" y="430" />
+          <position x="1108.27055" y="607.019823" />
           <dimension x="35" y="35" />
         </graphics>
       </transition>
@@ -241,10 +241,72 @@
           <text>yFIN</text>
         </name>
         <graphics>
-          <position x="798" y="244.06" />
+          <position x="790" y="500" />
           <dimension x="35" y="35" />
         </graphics>
       </transition>
+      <transition id="transition17">
+        <name>
+          <text>bmi</text>
+        </name>
+        <graphics>
+          <position x="610" y="150" />
+          <dimension x="35" y="35" />
+        </graphics>
+      </transition>
+      <transition id="transition18">
+        <name>
+          <text>inv_bmi</text>
+        </name>
+        <graphics>
+          <position x="610" y="220" />
+          <dimension x="35" y="35" />
+        </graphics>
+        <toolspecific tool="ProM" version="6.4" activity="$invisible$" localNodeID="68ed91e8-6fdc-47b7-8f7a-7dbcc16ca1e3"/>
+      </transition>
+      <place id="place16">
+        <graphics>
+          <position x="490" y="160" />
+          <dimension x="30" y="30" />
+        </graphics>
+      </place>
+      <place id="place17">
+        <graphics>
+          <position x="670" y="160" />
+          <dimension x="30" y="30" />
+        </graphics>
+      </place>
+      <transition id="transition19">
+        <name>
+          <text>foot_exam</text>
+        </name>
+        <graphics>
+          <position x="610" y="10" />
+          <dimension x="35" y="35" />
+        </graphics>
+      </transition>
+      <transition id="transition20">
+        <name>
+          <text>inv_foot_exam</text>
+        </name>
+        <graphics>
+          <position x="610" y="80" />
+          <dimension x="35" y="35" />
+        </graphics>
+        <toolspecific tool="ProM" version="6.4" activity="$invisible$" localNodeID="68ed91e8-6fdc-47b7-8f7a-7dbcc16ca1e3"/>
+      </transition>
+      <place id="place18">
+        <graphics>
+          <position x="670" y="20" />
+          <dimension x="30" y="30" />
+        </graphics>
+      </place>
+      <place id="place19">
+        <graphics>
+          <position x="490" y="20" />
+          <dimension x="30" y="30" />
+        </graphics>
+      </place>
       <arc id="arc7" source="place6" target="transition14">
         <name>
           <text>1</text>
@@ -441,14 +503,6 @@
         <inscription>
           <text>2</text>
         </inscription>
-        <name>
-          <text>1</text>
-        </name>
-        <arctype>
-          <text>normal</text>
-        </arctype>
-      </arc>
-      <arc id="arc612" source="place147" target="transition247">
         <name>
           <text>1</text>
         </name>
@@ -653,6 +707,142 @@
         <inscription>
           <text>2</text>
         </inscription>
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc53" source="transition61" target="place16">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc54" source="place16" target="transition17">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc55" source="transition17" target="place17">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc56" source="place17" target="transition18">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc57" source="transition18" target="place16">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc58" source="place17" target="transition16">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc59" source="transition16" target="place16">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc60" source="place16" target="transition247">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc61" source="place19" target="transition19">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc62" source="transition19" target="place18">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc63" source="place18" target="transition20">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc64" source="transition20" target="place19">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc65" source="transition61" target="place19">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc66" source="place18" target="transition16">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc67" source="transition16" target="place19">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc68" source="place19" target="transition247">
+        <name>
+          <text>1</text>
+        </name>
+        <arctype>
+          <text>normal</text>
+        </arctype>
+      </arc>
+      <arc id="arc283" source="place147" target="transition247">
         <name>
           <text>1</text>
         </name>
