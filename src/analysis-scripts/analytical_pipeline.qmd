@@ -2159,8 +2159,8 @@ Joint models are used to analyse simultaneously two related phenomena, the evolu
 #| warning: FALSE
 #| output: FALSE
 logging.info('Preprocess of the initial dataframes')
-#db_path = '../../inputs/data.duckdb'
-db_path = 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
+db_path = '../../inputs/data.duckdb'
+#db_path = 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
 con = duckdb.connect(db_path)
 general_preprocess(con)
 notnan_p = separate_patients_by_condition(con)
@@ -2173,8 +2173,8 @@ con.close()
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-#db_path <- '../../inputs/data.duckdb'
-db_path <- 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
+db_path <- '../../inputs/data.duckdb'
+#db_path <- 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
 con <- dbConnect(duckdb(), dbdir = db_path)
 country2cont = read.csv('./country2continent.csv') %>% 
   transform(country = as.numeric(country))
