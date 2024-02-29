@@ -2,8 +2,8 @@ import json
 import logging
 import os
 
-import duckdb  # duckdb-0.8.1
-from ydata_profiling import ProfileReport  # ydata-profiling-4.1.1
+import duckdb
+from ydata_profiling import ProfileReport 
 
 if __name__ == '__main__':
     # Do not modify if you use the deployment container!
@@ -24,7 +24,15 @@ if __name__ == '__main__':
     except FileNotFoundError as e:
         logging.error("Configuration file "" is missing!")
         exit(1)
-    logging.info("Configuration file loaded.")
+    logging.info("Configuration file loaded\n")
+    CDMB_VERSION = configuration_file["cdmb_version"] if "cdmb_version" in configuration_file else "Non-versioned"
+    ASPIRE_VERSION = os.environ.get('ASPIRE_VERSION', 'Non-versioned')
+    PIPELINE_VERSION = os.environ.get('PIPELINE_VERSION', 'Non-versioned')
+    logging.info("#########################################")
+    logging.info(f"# CDMB version: {CDMB_VERSION}")
+    logging.info(f"# ASPIRE version: {ASPIRE_VERSION}")
+    logging.info(f"# PIPELINE version: {PIPELINE_VERSION}")
+    logging.info("#########################################\n")
 
     if 'metadata' not in configuration_file:
         logging.error(
@@ -49,8 +57,10 @@ if __name__ == '__main__':
             exit(1)
         entity_name = entity['name']
         title = configuration_file['metadata']['use_case'] + ' - ' + entity_name + ' | Profiling Report'
+        categorical_variables = [variable["label"] for variable in entity['variables'] if variable['type'] == "Categorical"]
         query = "Select * from {entity}".format(entity=entity_name)
         df_entity = con.query(query).to_df()
+        df_entity[categorical_variables] = df_entity[categorical_variables].astype('category')
         logging.info(f"\"{entity_name}\" entity contains {len(df_entity)} records")
         if len(df_entity) > 0:
             profile = ProfileReport(df_entity, title=title, minimal=True)
