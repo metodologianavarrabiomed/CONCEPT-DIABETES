@@ -35,3 +35,6 @@ jobs:
           push: true
           tags: ghcr.io/metodologianavarrabiomed/concept-diabetes:${{env.TAG_NAME}},ghcr.io/metodologianavarrabiomed/concept-diabetes:latest
           file: ./Dockerfile
+          build-args: |
+            pipeline_version=${{ env.TAG_NAME }}
+

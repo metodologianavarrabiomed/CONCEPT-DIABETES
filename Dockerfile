@@ -33,7 +33,7 @@ ENV RETICULATE_PYTHON=/opt/conda/envs/aspire/bin/python
 # Installing R packages not found in conda-forge
 # RUN micromamba run -n aspire pip install pm4py
 
-COPY --chown=$MAMBA_USER:$MAMBA_USER . /home/$MAMBA_USER/projects/concept-stroke
+COPY --chown=$MAMBA_USER:$MAMBA_USER . /home/$MAMBA_USER/projects/concept-diabetes
 
 # add concept logo 
 COPY --chown=$MAMBA_USER:$MAMBA_USER main_logo.png /temp/main_logo.png

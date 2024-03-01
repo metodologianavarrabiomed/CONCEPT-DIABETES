@@ -179,37 +179,27 @@ def general_preprocess(con):
     Args:
         con : db connector variable
     '''
-    con.sql("DROP VIEW IF EXISTS cmbd_incidents_view;")
-    con.sql("DROP VIEW IF EXISTS comorb_incidents_view;")    
-    con.sql("DROP VIEW IF EXISTS ss_use_incidents_view;")
-    con.sql("DROP VIEW IF EXISTS param_incidents_view_;")
-    con.sql("DROP VIEW IF EXISTS param_incidents_view;")
-    con.sql("DROP VIEW IF EXISTS param_cat_incidents_view;")    
-    con.sql("DROP VIEW IF EXISTS patient_incidents_view;")
-    con.sql("DROP VIEW IF EXISTS treat_incidents_view;")
-    con.sql("DROP VIEW IF EXISTS exams_incidents_view;")
 
-
-    con.sql("CREATE VIEW cmbd_incidents_view AS SELECT * FROM main.cmbd \
+    con.sql("CREATE OR REPLACE VIEW cmbd_incidents_view AS SELECT * FROM main.cmbd \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
                                  WHERE dx_date >='2017-01-01')")
-    con.sql("CREATE VIEW ss_use_incidents_view AS SELECT * FROM main.ss_use \
+    con.sql("CREATE OR REPLACE VIEW ss_use_incidents_view AS SELECT * FROM main.ss_use \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
                                  WHERE dx_date >='2017-01-01')")
-    con.sql("CREATE VIEW comorb_incidents_view AS SELECT * FROM main.comorb \
+    con.sql("CREATE OR REPLACE VIEW comorb_incidents_view AS SELECT * FROM main.comorb \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
                                  WHERE dx_date >='2017-01-01')")
-    con.sql("CREATE VIEW param_incidents_view_ AS SELECT DISTINCT * FROM main.param \
+    con.sql("CREATE OR REPLACE VIEW param_incidents_view_ AS SELECT DISTINCT * FROM main.param \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
                                  WHERE dx_date >='2017-01-01') \
                 AND (param_value!=0 OR param_name!='bmi')")
-    con.sql("CREATE VIEW param_incidents_view AS \
+    con.sql("CREATE OR REPLACE VIEW param_incidents_view AS \
             SELECT DISTINCT patient_id,param_name,MAX(param_value) AS param_value,param_date\
         FROM param_incidents_view_ GROUP BY patient_id,param_name,param_date")
-    con.sql("CREATE VIEW param_cat_incidents_view AS SELECT DISTINCT * FROM main.param_cat \
+    con.sql("CREATE OR REPLACE VIEW param_cat_incidents_view AS SELECT DISTINCT * FROM main.param_cat \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
                                  WHERE dx_date >='2017-01-01')")
-    con.sql("CREATE VIEW patient_incidents_view AS SELECT *,\
+    con.sql("CREATE OR REPLACE VIEW patient_incidents_view AS SELECT *,\
             FLOOR(DATEDIFF('day',month_nac,DATE '2017-01-01') / 365.25) \
                 AS 'age', \
             FLOOR(DATEDIFF('day',month_nac, dx_date) / 365.25) \
@@ -218,42 +208,37 @@ def general_preprocess(con):
             DATE_ADD(month_nac, INTERVAL 65 YEAR) AS 'turn_to_65' \
                 FROM main.patient WHERE patient_id IN (SELECT patient_id \
                         FROM main.patient WHERE dx_date >='2017-01-01')")
-    con.sql("CREATE VIEW treat_incidents_view AS SELECT * FROM main.treat \
+    con.sql("CREATE OR REPLACE VIEW treat_incidents_view AS SELECT * FROM main.treat \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
                                  WHERE dx_date >='2017-01-01')")
-    con.sql("CREATE VIEW exams_incidents_view AS SELECT * FROM main.exams \
+    con.sql("CREATE OR REPLACE VIEW exams_incidents_view AS SELECT * FROM main.exams \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
                                  WHERE dx_date >='2017-01-01')")
                 
-    con.sql("DROP VIEW IF EXISTS param_incidents_view_age_date;")    
-    con.sql("CREATE VIEW param_incidents_view_age_date AS SELECT param_incidents_view.patient_id, \
+    con.sql("CREATE OR REPLACE VIEW param_incidents_view_age_date AS SELECT param_incidents_view.patient_id, \
             param_name, param_value, param_date, turn_to_65, turn_to_75 FROM \
                 param_incidents_view LEFT JOIN patient_incidents_view ON \
          param_incidents_view.patient_id = patient_incidents_view.patient_id")
 
-    con.sql("DROP VIEW IF EXISTS cmbd_incidents_postdx_view")
-    con.sql("CREATE VIEW cmbd_incidents_postdx_view AS \
+    con.sql("CREATE OR REPLACE VIEW cmbd_incidents_postdx_view AS \
             SELECT * FROM cmbd_incidents_view \
                 WHERE admission_date > (SELECT dx_date \
                                         FROM patient_incidents_view \
     WHERE patient_incidents_view.patient_id = cmbd_incidents_view.patient_id)")
                     
-    con.sql("DROP VIEW IF EXISTS cmbd_incidents_postdx_first_view")
-    con.sql("CREATE VIEW cmbd_incidents_postdx_first_view AS \
+    con.sql("CREATE OR REPLACE VIEW cmbd_incidents_postdx_first_view AS \
             SELECT patient_id, admission_date, diagnosis1_code FROM (SELECT *,\
                       ROW_NUMBER() OVER(PARTITION BY patient_id \
                                         ORDER BY admission_date) AS rn \
                           FROM cmbd_incidents_postdx_view) t WHERE rn = 1;")
                 
-    con.sql("DROP VIEW IF EXISTS param_incidents_predx_view;")
-    con.sql("CREATE VIEW param_incidents_predx_view AS SELECT * FROM (\
+    con.sql("CREATE OR REPLACE VIEW param_incidents_predx_view AS SELECT * FROM (\
             SELECT * FROM (SELECT patient_id, param_name, param_value, param_date \
                             FROM param_incidents_view) sub \
                 WHERE param_date <= (SELECT dx_date FROM patient_incidents_view \
                     WHERE patient_incidents_view.patient_id = sub.patient_id));")
         
-    con.sql("DROP VIEW IF EXISTS param_incidents_predx_last_view;")        
-    con.sql("CREATE VIEW param_incidents_predx_last_view AS \
+    con.sql("CREATE OR REPLACE VIEW param_incidents_predx_last_view AS \
             SELECT patient_id, param_name, param_date, param_value \
                 FROM (SELECT patient_id, param_name, param_date, param_value,\
                       ROW_NUMBER() OVER(PARTITION BY patient_id, param_name \
@@ -261,27 +246,23 @@ def general_preprocess(con):
                           FROM param_incidents_predx_view \
                           WHERE param_value!=9999) t WHERE rn = 1;")
                     
-    con.sql("DROP VIEW IF EXISTS param_cat_incidents_predx_view;")                    
-    con.sql("CREATE VIEW param_cat_incidents_predx_view AS SELECT * FROM (\
+    con.sql("CREATE OR REPLACE VIEW param_cat_incidents_predx_view AS SELECT * FROM (\
             SELECT * FROM (SELECT patient_id, param_cat_name, param_cat_value, param_cat_date \
                             FROM param_cat_incidents_view) sub \
                 WHERE param_cat_date <= (SELECT dx_date FROM patient_incidents_view \
                     WHERE patient_incidents_view.patient_id = sub.patient_id));")
-    con.sql("DROP VIEW IF EXISTS param_cat_incidents_predx_last_view;")
-    con.sql("CREATE VIEW param_cat_incidents_predx_last_view AS \
+    con.sql("CREATE OR REPLACE VIEW param_cat_incidents_predx_last_view AS \
             SELECT patient_id, param_cat_name, param_cat_date, param_cat_value \
                 FROM (SELECT patient_id, param_cat_name, param_cat_date, param_cat_value,\
                       ROW_NUMBER() OVER(PARTITION BY patient_id, param_cat_name \
                                         ORDER BY param_cat_date DESC) AS rn \
                           FROM param_cat_incidents_predx_view) t WHERE rn = 1;") 
                     
-    con.sql("DROP VIEW IF EXISTS param_prevalents_pre_view;")
-    con.sql("CREATE VIEW param_prevalents_pre_view AS \
+    con.sql("CREATE OR REPLACE VIEW param_prevalents_pre_view AS \
             SELECT DISTINCT patient_id, param_name, param_value, param_date FROM main.param \
              WHERE param_date < '2017-01-01' AND patient_id IN (\
                 SELECT patient_id FROM main.patient WHERE dx_date < '2017-01-01')")
-    con.sql("DROP VIEW IF EXISTS param_prevalents_pre_last_view;")
-    con.sql("CREATE VIEW param_prevalents_pre_last_view AS \
+    con.sql("CREATE OR REPLACE VIEW param_prevalents_pre_last_view AS \
             SELECT patient_id, param_name, param_date, param_value \
                 FROM (SELECT patient_id, param_name, param_date, param_value,\
                       ROW_NUMBER() OVER(PARTITION BY patient_id, param_name \
@@ -289,13 +270,11 @@ def general_preprocess(con):
                           FROM param_prevalents_pre_view \
                               WHERE param_value!=9999) t WHERE rn = 1;")
                     
-    con.sql("DROP VIEW IF EXISTS param_cat_prevalents_pre_view;")
-    con.sql("CREATE VIEW param_cat_prevalents_pre_view AS \
+    con.sql("CREATE OR REPLACE VIEW param_cat_prevalents_pre_view AS \
             SELECT DISTINCT * FROM main.param_cat \
              WHERE param_cat_date < '2017-01-01' AND patient_id IN (\
                 SELECT patient_id FROM main.patient WHERE dx_date < '2017-01-01')")
-    con.sql("DROP VIEW IF EXISTS param_cat_prevalents_pre_last_view;")
-    con.sql("CREATE VIEW param_cat_prevalents_pre_last_view AS \
+    con.sql("CREATE OR REPLACE VIEW param_cat_prevalents_pre_last_view AS \
             SELECT patient_id, param_cat_name, param_cat_date, param_cat_value \
                 FROM (SELECT patient_id, param_cat_name, param_cat_date, param_cat_value,\
                       ROW_NUMBER() OVER(PARTITION BY patient_id, param_cat_name \
@@ -354,14 +333,12 @@ def separate_patients_by_condition(con):
     cie2ciap = pd.concat([cie9_df[['comorb_codif','CIE','CIAP']],
                           cie10_df[['comorb_codif','CIE','CIAP']]])
     
-    con.sql("DROP VIEW IF EXISTS comorb_incidents_ciap_view;")    
-    con.sql("DROP VIEW IF EXISTS comorb_incidents_active_view;")    
-    con.sql("CREATE VIEW comorb_incidents_ciap_view AS \
+    con.sql("CREATE OR REPLACE VIEW comorb_incidents_ciap_view AS \
             SELECT * FROM comorb_incidents_view \
                 LEFT JOIN cie2ciap \
                     ON comorb_incidents_view.comorb_codif = cie2ciap.comorb_codif \
                         AND comorb_incidents_view.comorb_code = cie2ciap.CIAP")
-    con.sql("CREATE VIEW comorb_incidents_active_view AS SELECT *, \
+    con.sql("CREATE OR REPLACE VIEW comorb_incidents_active_view AS SELECT *, \
             CASE WHEN comorb_codif = 'CIAP2' THEN comorb_code ELSE CIAP END AS CIAP2 \
                 FROM comorb_incidents_ciap_view WHERE comorb_date_end IS NULL;")
 
@@ -434,8 +411,7 @@ def separate_patients_by_condition(con):
                                ].rename(columns={
                                    'param_name':'code',
                                    'param_date':'admission_date'})
-    con.sql("DROP VIEW IF EXISTS cmbd_incidents_long_view;")
-    con.sql("CREATE VIEW cmbd_incidents_long_view AS SELECT *,\
+    con.sql("CREATE OR REPLACE VIEW cmbd_incidents_long_view AS SELECT *,\
             COALESCE(t.order, 404) AS relevance FROM\
             (SELECT patient_id, admission_date, diagnosis1_code AS code \
                 FROM cmbd_incidents_view WHERE diagnosis1_code IS NOT NULL \
@@ -463,8 +439,7 @@ def separate_patients_by_condition(con):
     f_list.update(set(con.sql("SELECT DISTINCT patient_id \
                               FROM patient_incidents_view WHERE turn_to_75<=dx_date"
                               ).df()['patient_id']))
-    con.sql("DROP VIEW IF EXISTS ob_events;")
-    con.sql(f"CREATE VIEW ob_events AS SELECT * \
+    con.sql(f"CREATE OR REPLACE VIEW ob_events AS SELECT * \
             FROM cmbd_incidents_long_view sub \
                 WHERE code IN {to_list(to_ob_change_list)} \
                     AND admission_date <= (SELECT dx_date \
@@ -518,8 +493,7 @@ def separate_patients_by_condition(con):
                          ).difference(cvd_list+hf_list+ckd_list+f_list+ob_list))
                
     # When is a change on predominant clinical condition made?  
-    con.sql("DROP VIEW IF EXISTS cmbd_incidents_long_view_dx")
-    con.sql(f"CREATE VIEW cmbd_incidents_long_view_dx AS SELECT * \
+    con.sql(f"CREATE OR REPLACE VIEW cmbd_incidents_long_view_dx AS SELECT * \
             FROM cmbd_incidents_long_view sub \
                 WHERE admission_date > (SELECT dx_date \
                     FROM patient_incidents_view \
@@ -540,8 +514,7 @@ def separate_patients_by_condition(con):
             SELECT patient_id, '***' AS type,code, admission_date AS date \
                 FROM rankedevents__*** WHERE  event_rank=1 AND code='end')\
                 ".replace('***',cond)
-    con.sql("DROP TABLE IF EXISTS patient_condition;")    
-    con.sql(eval('f"CREATE TABLE patient_condition AS {}"'.format(' UNION ALL '.join(
+    con.sql(eval('f"CREATE OR REPLACE TABLE patient_condition AS {}"'.format(' UNION ALL '.join(
         [query_function(cond) for cond in ['cvd','hf','ckd','f','ob','else']]))))    
     return presc_data_p
                 
@@ -577,7 +550,6 @@ def evlog_creation_by_prescriptions(con,
         o SGLT-2 inhibitors (iSGLP-2)
 
     '''
-    con.sql(f"DROP TABLE IF EXISTS evlog_raw_{cond}")
     fin_date = con.sql(f"SELECT patient_id,date FROM patient_condition \
                        WHERE type = '{cond}'").df()
     dx_date = con.sql(f"SELECT patient_id, dx_date FROM  patient_incidents_view \
@@ -594,7 +566,8 @@ def evlog_creation_by_prescriptions(con,
                        WHERE patient_id IN (SELECT patient_id \
                                             FROM patient_condition \
                                                 WHERE patient_condition.type = '{cond}') \
-                           AND substring(atc_code,1,3) = 'A10'").df()
+                           AND substring(atc_code,1,3) = 'A10' \
+                           AND prescription_date_ini IS NOT NULL").df()
     treat_df['Event'] = treat_df['atc_code'].apply(code2drug_f)
     treat_df = treat_df[~treat_df['Event'].isin(['NONE','NONE2'])
                         ].drop_duplicates(subset=['patient_id',
@@ -608,12 +581,13 @@ def evlog_creation_by_prescriptions(con,
     treat_df_end = treat_df[['patient_id','prescription_date_end',
                               'Event','actins']].rename(columns = 
                                        {'prescription_date_end':'date'})
+    
     treat_df_start['cycle'] = 'start'
     treat_df_end['cycle'] = 'end'
     treat_df_end['date'] = treat_df_end['date'].fillna(
         datetime.strptime('2022-12-31', "%Y-%m-%d")).apply(
-        lambda x: min([x,datetime.strptime('2023-01-01', "%Y-%m-%d")])).apply(
-                                              lambda x: x-timedelta(days=1))
+    lambda x: min([x,datetime.strptime('2023-01-01', "%Y-%m-%d")])-timedelta(days=1))
+            
     act_n = max(treat_df['actins'])
     if cond in ['cvd','hf','ckd','f']:
         param_df = con.sql(f"SELECT patient_id,param_date AS date, \
@@ -629,7 +603,8 @@ def evlog_creation_by_prescriptions(con,
                                     FROM patient_condition \
                                         WHERE patient_condition.type = '{cond}') \
                                     AND param_name = 'hba1c' \
-                                    AND param_value IS NOT NULL").df()
+                                    AND param_value IS NOT NULL \
+                                    AND param_date IS NOT NULL").df()
     else:
         param_df = con.sql(f"SELECT patient_id,param_date AS date, \
                            CASE WHEN param_value < {7} THEN 'HBA<L' \
@@ -644,7 +619,8 @@ def evlog_creation_by_prescriptions(con,
                                     FROM patient_condition \
                                         WHERE patient_condition.type = '{cond}') \
                                     AND param_name = 'hba1c' \
-                                    AND param_value IS NOT NULL").df()        
+                                    AND param_value IS NOT NULL \
+                                    AND param_date IS NOT NULL").df()        
 
     param_df_start = param_df.copy()
     param_df_start['cycle'] = 'start'
@@ -766,7 +742,7 @@ def evlog_creation_by_prescriptions(con,
     evlog.index = range(len(evlog))
     evlog['cycle'] = ['start','end']*int(0.5*len(evlog))
     evlog['actins'] = [n//2 for n in range(len(evlog))]
-    con.sql(f"CREATE TABLE evlog_raw_{cond} AS SELECT * FROM evlog")
+    con.sql(f"CREATE OR REPLACE TABLE evlog_raw_{cond} AS SELECT * FROM evlog")
  
 def evlog_creation_by_dispensations(con, 
                               cond,
@@ -802,7 +778,6 @@ def evlog_creation_by_dispensations(con,
     
     '''
 
-    con.sql(f"DROP TABLE IF EXISTS evlog_raw_{cond}")
     treat_min_days = 2
     days_error = 60-treat_min_days
     days_after_m = 7
@@ -822,7 +797,8 @@ def evlog_creation_by_dispensations(con,
                        WHERE patient_id IN (SELECT patient_id \
                                             FROM patient_condition \
                                                 WHERE patient_condition.type = '{cond}') \
-                           AND substring(atc_code,1,3) = 'A10'").df()
+                           AND substring(atc_code,1,3) = 'A10' \
+                           AND dispensing_date IS NOT NULL").df()
     treat_df['Event'] = treat_df['atc_code'].apply(code2drug_f)
     treat_df = treat_df[~treat_df['Event'].isin(['NONE','NONE2'])]
     nac_dict = nac2comprimidos(nac_path,set(treat_df['nac_code']))
@@ -851,6 +827,7 @@ def evlog_creation_by_dispensations(con,
                                         WHERE patient_condition.type = '{cond}') \
                                        AND param_name = 'hba1c' \
                                     AND param_value IS NOT NULL \
+                                    AND param_date IS NOT NULL\
                                 UNION ALL SELECT * FROM treat_df) \
                     UNION ALL SELECT patient_id, date, Event, nac_code, 'end' AS cycle,\
                      ROW_NUMBER() OVER (ORDER BY patient_id, param_date) AS actins \
@@ -867,6 +844,7 @@ def evlog_creation_by_dispensations(con,
                                         WHERE patient_condition.type = '{cond}') \
                                        AND param_name = 'hba1c' \
                                     AND param_value IS NOT NULL \
+                                    AND param_date IS NOT NULL\
                                 UNION ALL SELECT patient_id,\
                                 CAST(date AS TIMESTAMP)+INTERVAL {treat_min_days} \
                                     DAYS AS date, date AS param_date, \
@@ -1055,7 +1033,7 @@ def evlog_creation_by_dispensations(con,
     evlog.index = range(len(evlog))
     evlog['cycle'] = ['start','end']*int(0.5*len(evlog))
     evlog['actins'] = [n//2 for n in range(len(evlog))]
-    con.sql(f"CREATE TABLE evlog_raw_{cond} AS SELECT * FROM evlog")
+    con.sql(f"CREATE OR REPLACE TABLE evlog_raw_{cond} AS SELECT * FROM evlog")
   
 def change_matrix_values(matrix,list_rows,list_cols, new_value=0):
     '''change selected rows' and columns' matrix`s values
@@ -1138,17 +1116,8 @@ def evlog_process_ind(con):
     Args:
       con : db connector variable
     '''
-    con.sql("DROP VIEW IF EXISTS pre_process_ind;")
-    con.sql("DROP TABLE IF EXISTS process_ind;")
-    con.sql("DROP TABLE IF EXISTS process_ind1;")
-    con.sql("DROP TABLE IF EXISTS process_ind2;")
-    con.sql("DROP TABLE IF EXISTS process_ind3;")
-    con.sql("DROP TABLE IF EXISTS process_ind4;")
-    con.sql("DROP TABLE IF EXISTS process_ind5;")
-
-
     
-    con.sql("CREATE VIEW pre_process_ind AS SELECT *,'start' AS cycle,\
+    con.sql("CREATE OR REPLACE VIEW pre_process_ind AS SELECT *,'start' AS cycle,\
                 ROW_NUMBER() OVER (ORDER BY patient_id,date) AS actins \
             FROM (SELECT DISTINCT patient_id,'hba1c' AS event, \
             CAST(param_date AS TIMESTAMP) + INTERVAL 60 SECOND AS date \
@@ -1199,42 +1168,42 @@ def evlog_process_ind(con):
     
     
     
-    con.sql("CREATE TABLE process_ind AS SELECT a.* FROM pre_process_ind a \
+    con.sql("CREATE OR REPLACE TABLE process_ind AS SELECT a.* FROM pre_process_ind a \
             JOIN (SELECT patient_id, MIN(date) as ini_date,MAX(date) as fin_date \
             FROM pre_process_ind d WHERE event IN ('INI', 'yFIN') AND \
                 date<(SELECT c.date FROM pre_process_ind c \
                       WHERE c.event = 'FIN' AND c.patient_id = d.patient_id) \
             GROUP BY patient_id) b ON a.patient_id = b.patient_id \
             WHERE (a.date BETWEEN b.ini_date AND b.fin_date) OR a.event = 'FIN'")
-    con.sql("CREATE TABLE process_ind1 AS SELECT * FROM \
+    con.sql("CREATE OR REPLACE TABLE process_ind1 AS SELECT * FROM \
             (WITH RankedActions AS (SELECT patient_id, date, event,\
                     ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY date) AS rn \
                         FROM process_ind WHERE event = 'yFIN') \
              SELECT DISTINCT A.* FROM process_ind A \
                  JOIN RankedActions R ON A.patient_id = R.patient_id WHERE \
                      R.rn = 1 AND (A.date <= R.date OR A.event = 'FIN'))")  
-    con.sql("CREATE TABLE process_ind2 AS SELECT * FROM \
+    con.sql("CREATE OR REPLACE TABLE process_ind2 AS SELECT * FROM \
             (WITH RankedActions AS (SELECT patient_id, date, event,\
                     ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY date) AS rn \
                         FROM process_ind WHERE event = 'yFIN') \
              SELECT DISTINCT A.* FROM process_ind A \
                  JOIN RankedActions R ON A.patient_id = R.patient_id WHERE \
                      R.rn = 2 AND (A.date <= R.date OR A.event = 'FIN'))")        
-    con.sql("CREATE TABLE process_ind3 AS SELECT * FROM \
+    con.sql("CREATE OR REPLACE TABLE process_ind3 AS SELECT * FROM \
             (WITH RankedActions AS (SELECT patient_id, date, event,\
                     ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY date) AS rn \
                         FROM process_ind WHERE event = 'yFIN') \
              SELECT DISTINCT A.* FROM process_ind A \
                  JOIN RankedActions R ON A.patient_id = R.patient_id WHERE \
                      R.rn = 3 AND (A.date <= R.date OR A.event = 'FIN'))")        
-    con.sql("CREATE TABLE process_ind4 AS SELECT * FROM \
+    con.sql("CREATE OR REPLACE TABLE process_ind4 AS SELECT * FROM \
             (WITH RankedActions AS (SELECT patient_id, date, event,\
                     ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY date) AS rn \
                         FROM process_ind WHERE event = 'yFIN') \
              SELECT DISTINCT A.* FROM process_ind A \
                  JOIN RankedActions R ON A.patient_id = R.patient_id WHERE \
                      R.rn = 4 AND (A.date <= R.date OR A.event = 'FIN'))")        
-    con.sql("CREATE TABLE process_ind5 AS SELECT * FROM \
+    con.sql("CREATE OR REPLACE TABLE process_ind5 AS SELECT * FROM \
             (WITH RankedActions AS (SELECT patient_id, date, event,\
                     ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY date) AS rn \
                         FROM process_ind WHERE event = 'yFIN') \
@@ -1902,8 +1871,7 @@ def id2treat_fitness_by_interval(con,
     period2fitness['fitness'] = fitness
     period2fitness['ini_date'] = date_0
     period2fitness['status'] = status
-    con.sql(f"DROP TABLE IF EXISTS period2fitness_{cond}")
-    con.sql(f"CREATE TABLE period2fitness_{cond} AS SELECT *,\
+    con.sql(f"CREATE OR REPLACE TABLE period2fitness_{cond} AS SELECT *,\
             MAX(status) OVER (PARTITION BY ID) AS status2  FROM period2fitness \
             WHERE t_0!=t_1") 
 ```
@@ -1956,8 +1924,7 @@ def treatments_clusters_boxplot(con,
   df['aligned_fitness'] = pd.to_numeric(df['aligned_fitness'])
   df['cluster'] = pd.to_numeric(df['cluster'])
   df['ID'] = df['ID'].astype("string")
-  con.sql(f"DROP TABLE IF EXISTS eventlog_{cond}_byclust")                
-  con.sql(f"CREATE TABLE eventlog_{cond}_byclust AS \
+  con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond}_byclust AS \
   SELECT * FROM df")
   data = [list(df['aligned_fitness'][df[clust_col]==i])
           for i in sorted(set(df[clust_col]))]
@@ -2160,7 +2127,6 @@ Joint models are used to analyse simultaneously two related phenomena, the evolu
 #| output: FALSE
 logging.info('Preprocess of the initial dataframes')
 db_path = '../../inputs/data.duckdb'
-#db_path = 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
 con = duckdb.connect(db_path)
 general_preprocess(con)
 notnan_p = separate_patients_by_condition(con)
@@ -2174,7 +2140,6 @@ con.close()
 #| warning: FALSE
 #| output: FALSE
 db_path <- '../../inputs/data.duckdb'
-#db_path <- 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
 con <- dbConnect(duckdb(), dbdir = db_path)
 country2cont = read.csv('./country2continent.csv') %>% 
   transform(country = as.numeric(country))
@@ -2220,7 +2185,44 @@ kable(patient_inc_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 #| tbl-cap: "Demographic and socioeconomic characteristics of incidents patients "
 #| tbl-colwidths: [60,40]
 param_inc <- dbGetQuery(con,"SELECT * FROM param_incidents_predx_last_view")
-param_cat_inc <- dbGetQuery(con,"SELECT * FROM param_cat_incidents_predx_last_view")
+param_list <- sort(unique(param_inc$param_name))
+param_cat_inc <- dbGetQuery(con,
+  "SELECT *, \
+  CASE WHEN param_cat_name='physical_activity' AND param_cat_value=0 \
+  THEN 'Incapacity' \
+  WHEN param_cat_name='physical_activity' AND param_cat_value=1 \
+  THEN 'Inactive' \
+  WHEN param_cat_name='physical_activity' AND param_cat_value=2 \
+  THEN 'Partially Active' \
+  WHEN param_cat_name='physical_activity' AND param_cat_value=3 \
+  THEN 'Active' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=0 \
+  THEN 'Non Smoker' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=1 \
+  THEN 'Ex-smoker < 1 year' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=2 \
+  THEN 'Ex-smoker >= 1 year' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=3 \
+  THEN 'Smoker' \
+  WHEN param_cat_name='alcohol' AND param_cat_value=0 \
+  THEN 'Abstinent' \
+  WHEN param_cat_name='alcohol' AND param_cat_value=1 \
+  THEN 'Moderate Drinker' \
+  WHEN param_cat_name='alcohol' AND param_cat_value=2 \
+  THEN 'Heavy Drinker' \
+  WHEN param_cat_name='vaccination_flu' AND param_cat_value=0 \
+  THEN 'No' \
+  WHEN param_cat_name='vaccination_flu' AND param_cat_value=1 \
+  THEN 'Yes' \
+  WHEN param_cat_name='working_status' AND param_cat_value=0 \
+  THEN 'Active' \
+  WHEN param_cat_name='working_status' AND param_cat_value=1 \
+  THEN 'Unemployed' \
+  WHEN param_cat_name='working_status' AND param_cat_value=2 \
+  THEN 'Pensionist' \
+  ELSE '' END AS param_cat_value_str
+  FROM param_cat_incidents_predx_last_view WHERE param_cat_name!='vaccination_covid'")
+param_cat_list <- sort(unique(param_cat_inc$param_cat_name))
 dependent="sexo"
 
 
@@ -2228,33 +2230,21 @@ param_inc2unnest <- param_inc %>%
   pivot_wider( id_cols=patient_id,names_from=param_name,values_from=param_value)%>%
   left_join( patient_inc %>% select(patient_id, sexo), by = "patient_id")
 
-param_cat_inc$param_cat_value = as.numeric(as.character(param_cat_inc$param_cat_value))
 param_cat_inc2unnest <- param_cat_inc %>% 
-  pivot_wider( id_cols=patient_id,names_from=param_cat_name,values_from=param_cat_value)%>%
-  left_join( patient_inc %>% select(patient_id, sexo), by = "patient_id") %>%
-  mutate(physical_activity=factor(physical_activity, levels=c(0,1,2,3),
-                                  labels=c("Incapacity", "Inactive", "Partially Active","Active")),
-         smoking_status=factor(smoking_status, levels=c(0,1,2,3),
-                               labels=c("Non Smoker", "Ex-smoker < 1 year", "Ex-smoker >= 1 year","Smoker")),
-         alcohol=factor(alcohol, levels=c(0,1,2),
-                        labels=c("Abstinent", "Moderate Drinker","Heavy Drinker")),
-         vaccination_covid=factor(vaccination_covid, levels=c(0,1,2,3,4,5,6,7),
-                                  labels=c("No", "Yes, BioNTech-Pfizer","Yes, Moderna","Yes, Astrazeneca","Yes, Johnson-Johnson","Yes, Novavax","Yes, Other","Yes, Unknown type")),
-         vaccination_flu=factor(vaccination_flu, levels=c(0,1), labels=c("No", "Yes")),
-         working_status=factor(working_status,levels=c(0,1,2),labels=c('Active','Unemployed','Pensionist')))
+  pivot_wider( id_cols=patient_id,names_from=param_cat_name,values_from=param_cat_value_str)%>%
+  left_join( patient_inc %>% select(patient_id, sexo), by = "patient_id") 
 
 param_inc_tab <- rbind(
   param_inc2unnest %>%
     summary_factorlist(dependent ,
-                       c("bmi","height","weight","sbp","dbp","hba1c","col",
-                         "hdl","ldl","trgl","creat","indalbcr","alb"),
+                       param_list,
                        total_col = TRUE,cont="mean",na_include = TRUE,
                        na_to_prop =  FALSE,add_row_totals = TRUE,
                        include_row_missing_col = TRUE,
                        include_col_totals_percent	=FALSE,add_col_totals = TRUE),
   param_cat_inc2unnest %>%
     summary_factorlist(dependent ,
-                       c("physical_activity","smoking_status","alcohol","vaccination_flu",'working_status'),
+                       param_cat_list,
                        total_col = TRUE,cont="mean",na_include = TRUE,
                        na_to_prop =  FALSE,cont_cut=8,add_row_totals = TRUE,
                        include_row_missing_col = TRUE))
@@ -2408,8 +2398,46 @@ kable(patient_pre_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 #| label: tbl-param_pre
 #| tbl-cap: "Clinical and lifestyle characteristics of prevalent patients"
 #| tbl-colwidths: [60,40]
+
 param_pre <- dbGetQuery(con,"SELECT * FROM param_prevalents_pre_last_view")
-param_cat_pre <- dbGetQuery(con,"SELECT * FROM param_cat_prevalents_pre_last_view")
+param_list <- sort(unique(param_pre$param_name))
+param_cat_pre <- dbGetQuery(con,
+  "SELECT *, \
+  CASE WHEN param_cat_name='physical_activity' AND param_cat_value=0 \
+  THEN 'Incapacity' \
+  WHEN param_cat_name='physical_activity' AND param_cat_value=1 \
+  THEN 'Inactive' \
+  WHEN param_cat_name='physical_activity' AND param_cat_value=2 \
+  THEN 'Partially Active' \
+  WHEN param_cat_name='physical_activity' AND param_cat_value=3 \
+  THEN 'Active' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=0 \
+  THEN 'Non Smoker' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=1 \
+  THEN 'Ex-smoker < 1 year' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=2 \
+  THEN 'Ex-smoker >= 1 year' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=3 \
+  THEN 'Smoker' \
+  WHEN param_cat_name='alcohol' AND param_cat_value=0 \
+  THEN 'Abstinent' \
+  WHEN param_cat_name='alcohol' AND param_cat_value=1 \
+  THEN 'Moderate Drinker' \
+  WHEN param_cat_name='alcohol' AND param_cat_value=2 \
+  THEN 'Heavy Drinker' \
+  WHEN param_cat_name='vaccination_flu' AND param_cat_value=0 \
+  THEN 'No' \
+  WHEN param_cat_name='vaccination_flu' AND param_cat_value=1 \
+  THEN 'Yes' \
+  WHEN param_cat_name='working_status' AND param_cat_value=0 \
+  THEN 'Active' \
+  WHEN param_cat_name='working_status' AND param_cat_value=1 \
+  THEN 'Unemployed' \
+  WHEN param_cat_name='working_status' AND param_cat_value=2 \
+  THEN 'Pensionist' \
+  ELSE '' END AS param_cat_value_str
+  FROM param_cat_prevalents_pre_last_view WHERE param_cat_name!='vaccination_covid'")
+param_cat_list <- sort(unique(param_cat_pre$param_cat_name))
 dependent="sexo"
 
 
@@ -2417,33 +2445,21 @@ param_pre2unnest <- param_pre %>%
   pivot_wider( id_cols=patient_id,names_from=param_name,values_from=param_value)%>%
   left_join( patient_pre %>% select(patient_id, sexo), by = "patient_id")
 
-param_cat_pre$param_cat_value = as.numeric(as.character(param_cat_pre$param_cat_value))
 param_cat_pre2unnest <- param_cat_pre %>% 
-  pivot_wider( id_cols=patient_id,names_from=param_cat_name,values_from=param_cat_value)%>%
-  left_join( patient_pre %>% select(patient_id, sexo), by = "patient_id") %>%
-  mutate(physical_activity=factor(physical_activity, levels=c(0,1,2,3),
-                                  labels=c("Incapacity", "Inactive", "Partially Active","Active")),
-         smoking_status=factor(smoking_status, levels=c(0,1,2,3),
-                               labels=c("Non Smoker", "Ex-smoker < 1 year", "Ex-smoker >= 1 year","Smoker")),
-         alcohol=factor(alcohol, levels=c(0,1,2),
-                        labels=c("Abstinent", "Moderate Drinker","Heavy Drinker")),
-         vaccination_covid=factor(vaccination_covid, levels=c(0,1,2,3,4,5,6,7),
-                                  labels=c("No", "Yes, BioNTech-Pfizer","Yes, Moderna","Yes, Astrazeneca","Yes, Johnson-Johnson","Yes, Novavax","Yes, Other","Yes, Unknown type")),
-         vaccination_flu=factor(vaccination_flu, levels=c(0,1), labels=c("No", "Yes")),
-         working_status=factor(working_status,levels=c(0,1,2),labels=c('Active','Unemployed','Pensionist')))
+  pivot_wider( id_cols=patient_id,names_from=param_cat_name,values_from=param_cat_value_str)%>%
+  left_join( patient_pre %>% select(patient_id, sexo), by = "patient_id") 
 
 param_pre_tab <- rbind(
   param_pre2unnest %>%
     summary_factorlist(dependent ,
-                       c("bmi","height","weight","sbp","dbp","hba1c","col",
-                         "hdl","ldl","trgl","creat","indalbcr","alb"),
+                       param_list,
                        total_col = TRUE,cont="mean",na_include = TRUE,
                        na_to_prop =  FALSE,add_row_totals = TRUE,
                        include_row_missing_col = TRUE,
                        include_col_totals_percent	=FALSE,add_col_totals = TRUE),
   param_cat_pre2unnest %>%
     summary_factorlist(dependent ,
-                       c("physical_activity","smoking_status","alcohol","vaccination_flu",'working_status'),
+                       param_cat_list,
                        total_col = TRUE,cont="mean",na_include = TRUE,
                        na_to_prop =  FALSE,cont_cut=8,add_row_totals = TRUE,
                        include_row_missing_col = TRUE))
@@ -2658,8 +2674,7 @@ def df2dict(df_):
   return df_,id2trace_
 
 df_, id2trace = df2dict(df_)
-con.sql(f"DROP TABLE IF EXISTS eventlog_{cond}")
-con.sql(f"CREATE TABLE eventlog_{cond} AS SELECT * FROM df_")
+con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond} AS SELECT * FROM df_")
 patients = sorted(id2trace.keys())
 traces = list(id2trace[id] for id in patients)     
 con.close()
@@ -2771,18 +2786,14 @@ else:
 logging.info("Make clustering of %s patients", cond)
 con = duckdb.connect(db_path)
 df_ = clust(n_clusters,dm,df_,id2trace,patients)
-con.sql(f"DROP TABLE IF EXISTS clust_{cond}")
-con.sql(f"CREATE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
-con.sql(f"DROP VIEW IF EXISTS eventlog_{cond}_clust")
-con.sql(f"CREATE VIEW eventlog_{cond}_clust AS SELECT \
+con.sql(f"CREATE OR REPLACE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust AS SELECT \
   eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
   LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
-con.sql(f"DROP VIEW IF EXISTS cluster_histogram_{cond}")
-con.sql(f"CREATE VIEW cluster_histogram_{cond} AS\
+con.sql(f"CREATE OR REPLACE VIEW cluster_histogram_{cond} AS\
   SELECT cluster, COUNT(DISTINCT ID) AS freq \
   FROM eventlog_{cond}_clust GROUP BY cluster")
-con.sql(f"DROP VIEW IF EXISTS eventlog_{cond}_clust_filtered")
-con.sql(f"CREATE VIEW eventlog_{cond}_clust_filtered AS \
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
    SELECT * FROM eventlog_{cond}_clust \
   WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
   WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
@@ -2935,12 +2946,12 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
                             hazard="Weibull",hazardtype="PH",
-                            ng=2,data=df, verbose=FALSE))
+                            ng=2,data=df, verbose=FALSE),cl=4)
 
 summary(mj3)
 
@@ -3037,8 +3048,7 @@ logging.info("Filter event log of %s patients", cond)
 df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
 
 df_, id2trace = df2dict(df_)
-con.sql(f"DROP TABLE IF EXISTS eventlog_{cond}")
-con.sql(f"CREATE TABLE eventlog_{cond} AS SELECT * FROM df_")
+con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond} AS SELECT * FROM df_")
 patients = sorted(id2trace.keys())
 traces = list(id2trace[id] for id in patients)     
 con.close()
@@ -3146,18 +3156,14 @@ else:
 logging.info("Make clustering of %s patients", cond)
 con = duckdb.connect(db_path)
 df_ = clust(n_clusters,dm,df_,id2trace,patients)
-con.sql(f"DROP TABLE IF EXISTS clust_{cond}")
-con.sql(f"CREATE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
-con.sql(f"DROP VIEW IF EXISTS eventlog_{cond}_clust")
-con.sql(f"CREATE VIEW eventlog_{cond}_clust AS SELECT \
+con.sql(f"CREATE OR REPLACE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust AS SELECT \
   eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
   LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
-con.sql(f"DROP VIEW IF EXISTS cluster_histogram_{cond}")
-con.sql(f"CREATE VIEW cluster_histogram_{cond} AS\
+con.sql(f"CREATE OR REPLACE VIEW cluster_histogram_{cond} AS\
   SELECT cluster, COUNT(DISTINCT ID) AS freq \
   FROM eventlog_{cond}_clust GROUP BY cluster")
-con.sql(f"DROP VIEW IF EXISTS eventlog_{cond}_clust_filtered")
-con.sql(f"CREATE VIEW eventlog_{cond}_clust_filtered AS \
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
    SELECT * FROM eventlog_{cond}_clust \
   WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
   WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
@@ -3299,12 +3305,12 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
                             hazard="Weibull",hazardtype="PH",
-                            ng=2,data=df, verbose=FALSE))
+                            ng=2,data=df, verbose=FALSE),cl=4)
 
 summary(mj3)
 
@@ -3402,8 +3408,7 @@ logging.info("Filter event log of %s patients", cond)
 df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
 
 df_, id2trace = df2dict(df_)
-con.sql(f"DROP TABLE IF EXISTS eventlog_{cond}")
-con.sql(f"CREATE TABLE eventlog_{cond} AS SELECT * FROM df_")
+con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond} AS SELECT * FROM df_")
 patients = sorted(id2trace.keys())
 traces = list(id2trace[id] for id in patients)     
 con.close()
@@ -3511,18 +3516,14 @@ else:
 logging.info("Make clustering of %s patients", cond)
 con = duckdb.connect(db_path)
 df_ = clust(n_clusters,dm,df_,id2trace,patients)
-con.sql(f"DROP TABLE IF EXISTS clust_{cond}")
-con.sql(f"CREATE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
-con.sql(f"DROP VIEW IF EXISTS eventlog_{cond}_clust")
-con.sql(f"CREATE VIEW eventlog_{cond}_clust AS SELECT \
+con.sql(f"CREATE OR REPLACE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust AS SELECT \
   eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
   LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
-con.sql(f"DROP VIEW IF EXISTS cluster_histogram_{cond}")
-con.sql(f"CREATE VIEW cluster_histogram_{cond} AS\
+con.sql(f"CREATE OR REPLACE VIEW cluster_histogram_{cond} AS\
   SELECT cluster, COUNT(DISTINCT ID) AS freq \
   FROM eventlog_{cond}_clust GROUP BY cluster")
-con.sql(f"DROP VIEW IF EXISTS eventlog_{cond}_clust_filtered")
-con.sql(f"CREATE VIEW eventlog_{cond}_clust_filtered AS \
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
    SELECT * FROM eventlog_{cond}_clust \
   WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
   WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
@@ -3664,12 +3665,12 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
                             hazard="Weibull",hazardtype="PH",
-                            ng=2,data=df, verbose=FALSE))
+                            ng=2,data=df, verbose=FALSE),cl=4)
 
 summary(mj3)
 
@@ -3768,8 +3769,7 @@ logging.info("Filter event log of %s patients", cond)
 df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
 
 df_, id2trace = df2dict(df_)
-con.sql(f"DROP TABLE IF EXISTS eventlog_{cond}")
-con.sql(f"CREATE TABLE eventlog_{cond} AS SELECT * FROM df_")
+con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond} AS SELECT * FROM df_")
 patients = sorted(id2trace.keys())
 traces = list(id2trace[id] for id in patients)     
 con.close()
@@ -3877,18 +3877,14 @@ else:
 logging.info("Make clustering of %s patients", cond)
 con = duckdb.connect(db_path)
 df_ = clust(n_clusters,dm,df_,id2trace,patients)
-con.sql(f"DROP TABLE IF EXISTS clust_{cond}")
-con.sql(f"CREATE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
-con.sql(f"DROP VIEW IF EXISTS eventlog_{cond}_clust")
-con.sql(f"CREATE VIEW eventlog_{cond}_clust AS SELECT \
+con.sql(f"CREATE OR REPLACE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust AS SELECT \
   eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
   LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
-con.sql(f"DROP VIEW IF EXISTS cluster_histogram_{cond}")
-con.sql(f"CREATE VIEW cluster_histogram_{cond} AS\
+con.sql(f"CREATE OR REPLACE VIEW cluster_histogram_{cond} AS\
   SELECT cluster, COUNT(DISTINCT ID) AS freq \
   FROM eventlog_{cond}_clust GROUP BY cluster")
-con.sql(f"DROP VIEW IF EXISTS eventlog_{cond}_clust_filtered")
-con.sql(f"CREATE VIEW eventlog_{cond}_clust_filtered AS \
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
    SELECT * FROM eventlog_{cond}_clust \
   WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
   WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
@@ -4031,12 +4027,12 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
                             hazard="Weibull",hazardtype="PH",
-                            ng=2,data=df, verbose=FALSE))
+                            ng=2,data=df, verbose=FALSE),cl=4)
 
 summary(mj3)
 
@@ -4134,8 +4130,7 @@ logging.info("Filter event log of %s patients", cond)
 df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
 
 df_, id2trace = df2dict(df_)
-con.sql(f"DROP TABLE IF EXISTS eventlog_{cond}")
-con.sql(f"CREATE TABLE eventlog_{cond} AS SELECT * FROM df_")
+con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond} AS SELECT * FROM df_")
 patients = sorted(id2trace.keys())
 traces = list(id2trace[id] for id in patients)     
 con.close()
@@ -4243,18 +4238,14 @@ else:
 logging.info("Make clustering of %s patients", cond)
 con = duckdb.connect(db_path)
 df_ = clust(n_clusters,dm,df_,id2trace,patients)
-con.sql(f"DROP TABLE IF EXISTS clust_{cond}")
-con.sql(f"CREATE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
-con.sql(f"DROP VIEW IF EXISTS eventlog_{cond}_clust")
-con.sql(f"CREATE VIEW eventlog_{cond}_clust AS SELECT \
+con.sql(f"CREATE OR REPLACE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust AS SELECT \
   eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
   LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
-con.sql(f"DROP VIEW IF EXISTS cluster_histogram_{cond}")
-con.sql(f"CREATE VIEW cluster_histogram_{cond} AS\
+con.sql(f"CREATE OR REPLACE VIEW cluster_histogram_{cond} AS\
   SELECT cluster, COUNT(DISTINCT ID) AS freq \
   FROM eventlog_{cond}_clust GROUP BY cluster")
-con.sql(f"DROP VIEW IF EXISTS eventlog_{cond}_clust_filtered")
-con.sql(f"CREATE VIEW eventlog_{cond}_clust_filtered AS \
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
    SELECT * FROM eventlog_{cond}_clust \
   WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
   WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
@@ -4396,12 +4387,12 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
                             hazard="Weibull",hazardtype="PH",
-                            ng=2,data=df, verbose=FALSE))
+                            ng=2,data=df, verbose=FALSE),cl=4)
 
 summary(mj3)
 
@@ -4499,8 +4490,7 @@ logging.info("Filter event log of %s patients", cond)
 df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
 
 df_, id2trace = df2dict(df_)
-con.sql(f"DROP TABLE IF EXISTS eventlog_{cond}")
-con.sql(f"CREATE TABLE eventlog_{cond} AS SELECT * FROM df_")
+con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond} AS SELECT * FROM df_")
 patients = sorted(id2trace.keys())
 traces = list(id2trace[id] for id in patients)     
 con.close()
@@ -4608,18 +4598,14 @@ else:
 logging.info("Make clustering of %s patients", cond)
 con = duckdb.connect(db_path)
 df_ = clust(n_clusters,dm,df_,id2trace,patients)
-con.sql(f"DROP TABLE IF EXISTS clust_{cond}")
-con.sql(f"CREATE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
-con.sql(f"DROP VIEW IF EXISTS eventlog_{cond}_clust")
-con.sql(f"CREATE VIEW eventlog_{cond}_clust AS SELECT \
+con.sql(f"CREATE OR REPLACE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust AS SELECT \
   eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
   LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
-con.sql(f"DROP VIEW IF EXISTS cluster_histogram_{cond}")
-con.sql(f"CREATE VIEW cluster_histogram_{cond} AS\
+con.sql(f"CREATE OR REPLACE VIEW cluster_histogram_{cond} AS\
   SELECT cluster, COUNT(DISTINCT ID) AS freq \
   FROM eventlog_{cond}_clust GROUP BY cluster")
-con.sql(f"DROP VIEW IF EXISTS eventlog_{cond}_clust_filtered")
-con.sql(f"CREATE VIEW eventlog_{cond}_clust_filtered AS \
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
    SELECT * FROM eventlog_{cond}_clust \
   WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
   WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
@@ -4760,12 +4746,12 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
                             hazard="Weibull",hazardtype="PH",
-                            ng=2,data=df, verbose=FALSE))
+                            ng=2,data=df, verbose=FALSE),cl=4)
 
 summary(mj3)
 
@@ -5054,8 +5040,7 @@ boxplot1 = sns.boxplot(x = df2year['year'],
 fig1 = boxplot1.get_figure()
 fig1.savefig("../../outputs/fitness_by_year.png")
 plt.close(fig1)
-con.sql("DROP TABLE IF EXISTS period2process_fitness;")
-con.sql("CREATE TABLE period2process_fitness AS \
+con.sql("CREATE OR REPLACE TABLE period2process_fitness AS \
 SELECT ID, \
 DATEDIFF('day', initial_date,date) AS t_0, \
 DATEDIFF('day', initial_date,final_date) AS t_1, fitness, initial_date, \
@@ -5133,7 +5118,7 @@ model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness,
 summary(model)
 ```
 
-
+ 
 Using same predictive variables a joint latent class model of three classes is made:
 ```{r}
 #| label: JLCM model (process indicators)
@@ -5150,12 +5135,12 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
                             hazard="Weibull",hazardtype="PH",
-                            ng=2,data=df, verbose=FALSE))
+                            ng=2,data=df, verbose=FALSE),cl=4)
 
 summary(mj3)
 
@@ -5189,6 +5174,8 @@ error = function(cond_) {
             message(conditionMessage(cond_))
         }
 )
+
+log_info('Analyses finish')
 
 ```
 ![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_PI.png){#fig-joint1_PI fig-align="center" width="80%"}
