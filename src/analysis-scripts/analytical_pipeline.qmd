@@ -2126,8 +2126,7 @@ Joint models are used to analyse simultaneously two related phenomena, the evolu
 #| warning: FALSE
 #| output: FALSE
 logging.info('Preprocess of the initial dataframes')
-#db_path = '../../inputs/data.duckdb'
-db_path = 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
+db_path = '../../inputs/data.duckdb'
 con = duckdb.connect(db_path)
 general_preprocess(con)
 notnan_p = separate_patients_by_condition(con)
@@ -2140,8 +2139,7 @@ con.close()
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
-#db_path <- '../../inputs/data.duckdb'
-db_path <- 'C:/Users/D463112/Desktop/ejemplo_cdmb/inputs/data.duckdb'
+db_path <- '../../inputs/data.duckdb'
 con <- dbConnect(duckdb(), dbdir = db_path)
 country2cont = read.csv('./country2continent.csv') %>% 
   transform(country = as.numeric(country))
@@ -2187,7 +2185,44 @@ kable(patient_inc_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 #| tbl-cap: "Demographic and socioeconomic characteristics of incidents patients "
 #| tbl-colwidths: [60,40]
 param_inc <- dbGetQuery(con,"SELECT * FROM param_incidents_predx_last_view")
-param_cat_inc <- dbGetQuery(con,"SELECT * FROM param_cat_incidents_predx_last_view")
+param_list <- sort(unique(param_inc$param_name))
+param_cat_inc <- dbGetQuery(con,
+  "SELECT *, \
+  CASE WHEN param_cat_name='physical_activity' AND param_cat_value=0 \
+  THEN 'Incapacity' \
+  WHEN param_cat_name='physical_activity' AND param_cat_value=1 \
+  THEN 'Inactive' \
+  WHEN param_cat_name='physical_activity' AND param_cat_value=2 \
+  THEN 'Partially Active' \
+  WHEN param_cat_name='physical_activity' AND param_cat_value=3 \
+  THEN 'Active' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=0 \
+  THEN 'Non Smoker' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=1 \
+  THEN 'Ex-smoker < 1 year' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=2 \
+  THEN 'Ex-smoker >= 1 year' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=3 \
+  THEN 'Smoker' \
+  WHEN param_cat_name='alcohol' AND param_cat_value=0 \
+  THEN 'Abstinent' \
+  WHEN param_cat_name='alcohol' AND param_cat_value=1 \
+  THEN 'Moderate Drinker' \
+  WHEN param_cat_name='alcohol' AND param_cat_value=2 \
+  THEN 'Heavy Drinker' \
+  WHEN param_cat_name='vaccination_flu' AND param_cat_value=0 \
+  THEN 'No' \
+  WHEN param_cat_name='vaccination_flu' AND param_cat_value=1 \
+  THEN 'Yes' \
+  WHEN param_cat_name='working_status' AND param_cat_value=0 \
+  THEN 'Active' \
+  WHEN param_cat_name='working_status' AND param_cat_value=1 \
+  THEN 'Unemployed' \
+  WHEN param_cat_name='working_status' AND param_cat_value=2 \
+  THEN 'Pensionist' \
+  ELSE '' END AS param_cat_value_str
+  FROM param_cat_incidents_predx_last_view WHERE param_cat_name!='vaccination_covid'")
+param_cat_list <- sort(unique(param_cat_inc$param_cat_name))
 dependent="sexo"
 
 
@@ -2195,33 +2230,21 @@ param_inc2unnest <- param_inc %>%
   pivot_wider( id_cols=patient_id,names_from=param_name,values_from=param_value)%>%
   left_join( patient_inc %>% select(patient_id, sexo), by = "patient_id")
 
-param_cat_inc$param_cat_value = as.numeric(as.character(param_cat_inc$param_cat_value))
 param_cat_inc2unnest <- param_cat_inc %>% 
-  pivot_wider( id_cols=patient_id,names_from=param_cat_name,values_from=param_cat_value)%>%
-  left_join( patient_inc %>% select(patient_id, sexo), by = "patient_id") %>%
-  mutate(physical_activity=factor(physical_activity, levels=c(0,1,2,3),
-                                  labels=c("Incapacity", "Inactive", "Partially Active","Active")),
-         smoking_status=factor(smoking_status, levels=c(0,1,2,3),
-                               labels=c("Non Smoker", "Ex-smoker < 1 year", "Ex-smoker >= 1 year","Smoker")),
-         alcohol=factor(alcohol, levels=c(0,1,2),
-                        labels=c("Abstinent", "Moderate Drinker","Heavy Drinker")),
-         vaccination_covid=factor(vaccination_covid, levels=c(0,1,2,3,4,5,6,7),
-                                  labels=c("No", "Yes, BioNTech-Pfizer","Yes, Moderna","Yes, Astrazeneca","Yes, Johnson-Johnson","Yes, Novavax","Yes, Other","Yes, Unknown type")),
-         vaccination_flu=factor(vaccination_flu, levels=c(0,1), labels=c("No", "Yes")),
-         working_status=factor(working_status,levels=c(0,1,2),labels=c('Active','Unemployed','Pensionist')))
+  pivot_wider( id_cols=patient_id,names_from=param_cat_name,values_from=param_cat_value_str)%>%
+  left_join( patient_inc %>% select(patient_id, sexo), by = "patient_id") 
 
 param_inc_tab <- rbind(
   param_inc2unnest %>%
     summary_factorlist(dependent ,
-                       c("bmi","height","weight","sbp","dbp","hba1c","col",
-                         "hdl","ldl","trgl","creat","indalbcr","alb"),
+                       param_list,
                        total_col = TRUE,cont="mean",na_include = TRUE,
                        na_to_prop =  FALSE,add_row_totals = TRUE,
                        include_row_missing_col = TRUE,
                        include_col_totals_percent	=FALSE,add_col_totals = TRUE),
   param_cat_inc2unnest %>%
     summary_factorlist(dependent ,
-                       c("physical_activity","smoking_status","alcohol","vaccination_flu",'working_status'),
+                       param_cat_list,
                        total_col = TRUE,cont="mean",na_include = TRUE,
                        na_to_prop =  FALSE,cont_cut=8,add_row_totals = TRUE,
                        include_row_missing_col = TRUE))
@@ -2375,8 +2398,46 @@ kable(patient_pre_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 #| label: tbl-param_pre
 #| tbl-cap: "Clinical and lifestyle characteristics of prevalent patients"
 #| tbl-colwidths: [60,40]
+
 param_pre <- dbGetQuery(con,"SELECT * FROM param_prevalents_pre_last_view")
-param_cat_pre <- dbGetQuery(con,"SELECT * FROM param_cat_prevalents_pre_last_view")
+param_list <- sort(unique(param_pre$param_name))
+param_cat_pre <- dbGetQuery(con,
+  "SELECT *, \
+  CASE WHEN param_cat_name='physical_activity' AND param_cat_value=0 \
+  THEN 'Incapacity' \
+  WHEN param_cat_name='physical_activity' AND param_cat_value=1 \
+  THEN 'Inactive' \
+  WHEN param_cat_name='physical_activity' AND param_cat_value=2 \
+  THEN 'Partially Active' \
+  WHEN param_cat_name='physical_activity' AND param_cat_value=3 \
+  THEN 'Active' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=0 \
+  THEN 'Non Smoker' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=1 \
+  THEN 'Ex-smoker < 1 year' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=2 \
+  THEN 'Ex-smoker >= 1 year' \
+  WHEN param_cat_name='smoking_status' AND param_cat_value=3 \
+  THEN 'Smoker' \
+  WHEN param_cat_name='alcohol' AND param_cat_value=0 \
+  THEN 'Abstinent' \
+  WHEN param_cat_name='alcohol' AND param_cat_value=1 \
+  THEN 'Moderate Drinker' \
+  WHEN param_cat_name='alcohol' AND param_cat_value=2 \
+  THEN 'Heavy Drinker' \
+  WHEN param_cat_name='vaccination_flu' AND param_cat_value=0 \
+  THEN 'No' \
+  WHEN param_cat_name='vaccination_flu' AND param_cat_value=1 \
+  THEN 'Yes' \
+  WHEN param_cat_name='working_status' AND param_cat_value=0 \
+  THEN 'Active' \
+  WHEN param_cat_name='working_status' AND param_cat_value=1 \
+  THEN 'Unemployed' \
+  WHEN param_cat_name='working_status' AND param_cat_value=2 \
+  THEN 'Pensionist' \
+  ELSE '' END AS param_cat_value_str
+  FROM param_cat_prevalents_pre_last_view WHERE param_cat_name!='vaccination_covid'")
+param_cat_list <- sort(unique(param_cat_pre$param_cat_name))
 dependent="sexo"
 
 
@@ -2384,33 +2445,21 @@ param_pre2unnest <- param_pre %>%
   pivot_wider( id_cols=patient_id,names_from=param_name,values_from=param_value)%>%
   left_join( patient_pre %>% select(patient_id, sexo), by = "patient_id")
 
-param_cat_pre$param_cat_value = as.numeric(as.character(param_cat_pre$param_cat_value))
 param_cat_pre2unnest <- param_cat_pre %>% 
-  pivot_wider( id_cols=patient_id,names_from=param_cat_name,values_from=param_cat_value)%>%
-  left_join( patient_pre %>% select(patient_id, sexo), by = "patient_id") %>%
-  mutate(physical_activity=factor(physical_activity, levels=c(0,1,2,3),
-                                  labels=c("Incapacity", "Inactive", "Partially Active","Active")),
-         smoking_status=factor(smoking_status, levels=c(0,1,2,3),
-                               labels=c("Non Smoker", "Ex-smoker < 1 year", "Ex-smoker >= 1 year","Smoker")),
-         alcohol=factor(alcohol, levels=c(0,1,2),
-                        labels=c("Abstinent", "Moderate Drinker","Heavy Drinker")),
-         vaccination_covid=factor(vaccination_covid, levels=c(0,1,2,3,4,5,6,7),
-                                  labels=c("No", "Yes, BioNTech-Pfizer","Yes, Moderna","Yes, Astrazeneca","Yes, Johnson-Johnson","Yes, Novavax","Yes, Other","Yes, Unknown type")),
-         vaccination_flu=factor(vaccination_flu, levels=c(0,1), labels=c("No", "Yes")),
-         working_status=factor(working_status,levels=c(0,1,2),labels=c('Active','Unemployed','Pensionist')))
+  pivot_wider( id_cols=patient_id,names_from=param_cat_name,values_from=param_cat_value_str)%>%
+  left_join( patient_pre %>% select(patient_id, sexo), by = "patient_id") 
 
 param_pre_tab <- rbind(
   param_pre2unnest %>%
     summary_factorlist(dependent ,
-                       c("bmi","height","weight","sbp","dbp","hba1c","col",
-                         "hdl","ldl","trgl","creat","indalbcr","alb"),
+                       param_list,
                        total_col = TRUE,cont="mean",na_include = TRUE,
                        na_to_prop =  FALSE,add_row_totals = TRUE,
                        include_row_missing_col = TRUE,
                        include_col_totals_percent	=FALSE,add_col_totals = TRUE),
   param_cat_pre2unnest %>%
     summary_factorlist(dependent ,
-                       c("physical_activity","smoking_status","alcohol","vaccination_flu",'working_status'),
+                       param_cat_list,
                        total_col = TRUE,cont="mean",na_include = TRUE,
                        na_to_prop =  FALSE,cont_cut=8,add_row_totals = TRUE,
                        include_row_missing_col = TRUE))
@@ -2897,7 +2946,7 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
@@ -3256,7 +3305,7 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
@@ -3616,7 +3665,7 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
@@ -3978,7 +4027,7 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
@@ -4338,7 +4387,7 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
@@ -4697,7 +4746,7 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
@@ -5086,7 +5135,7 @@ mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  B=c(1,1,0,0,0,0,1,0,1,1))
 ### 2 latent class
 tryCatch(
-{mj3 <- gridsearch(rep = 20, maxiter = 20, minit = mj1, 
+{mj3 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex,
