@@ -91,8 +91,6 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn.feature_extraction.text import TfidfVectorizer
 from yellowbrick.cluster import KElbowVisualizer
 from pm4py.objects.petri_net.obj import PetriNet, Marking
-from pm4py.visualization.decisiontree import visualizer as tree_visualizer
-from pm4py.algo.decision_mining import algorithm as decision_mining
 from pm4py.visualization.petri_net import visualizer
 from gensim.models import LdaModel
 from datetime import  datetime, timedelta
@@ -123,8 +121,6 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn.feature_extraction.text import TfidfVectorizer
 from yellowbrick.cluster import KElbowVisualizer
 from pm4py.objects.petri_net.obj import PetriNet, Marking
-from pm4py.visualization.decisiontree import visualizer as tree_visualizer
-from pm4py.algo.decision_mining import algorithm as decision_mining
 from pm4py.visualization.petri_net import visualizer
 from gensim.models import LdaModel
 from datetime import  datetime, timedelta
@@ -309,12 +305,9 @@ def separate_patients_by_condition(con):
     https://www.sciencedirect.com/science/article/pii/S1751991821000176?via%3Dihub#tbl0015
     https://www.sanidad.gob.es/estadEstudios/estadisticas/estadisticas/estMinisterio/SIAP/map_cie9mc_cie10_ciap2.htm
     
-     obesity (BMI≥30 kg/m2), age older than 75, established CVD (defined as
-     myocardial infarction, ischemic heart disease, cerebrovascular disease,
-     or peripheral arterial disease), CKD (defined as eGFR < 60 ml/min/
-     1.73 m2 and/or UACR ≥ 30 mg/g) and HF. 
+    https://cienciadedatosysalud.org/wp-content/uploads/Metodologia_Atlas_Prescripcion_enero_2023-1.pdf
     '''
-    cvd_code_list = ['K76','K75','K76','K91','K92']
+    cvd_code_list = ['K74','K75','K76','K89','K90','K91']
     hf = 'K77'
     ckd = 'U99.01'
     ob = "T82"
@@ -361,16 +354,15 @@ def separate_patients_by_condition(con):
     # Which is the predominal clinical condition at dx_date?
     # ENFERMEDADES ISQUÉMICAS CARDIACAS (I20-I25)
     # ENFERMEDADES CEREBROVASCULARES (I60-I69)
-    # ATEROESCLEROSIS (ENFERMEDADES VASCULARES PERIFÉRICAS) (I70)
-    # OTRAS ENFERMEDADES VASCULARES PERIFÉRICAS (I73)
-    # EMBOLIA Y TROMBOSIS ARTERIAL (ENFERMEDADES VASCULARES PERIFÉRICAS) (I74)
+    # ISQUEMIA CEREBRAL TRANSITORIA (G45)
+    # ICTUS (G46)
     to_cvd_change_prelist = ['I2%i' %i for i in range(6)]+[
-                             'I6%i' %i for i in [1,3,4,5,6,7,8,9]]+[
-                                'I7%i' %i for i in [0,3,4]]
+                             'I6%i' %i for i in range(10)]+[
+                              'G45','G46']
     to_cvd_change_list = []
     for code in to_cvd_change_prelist:
      for c in cie10_df['CIE']:
-      if code in c and c not in ['I51.4','I60','I62','I67.1','I68.2','I67.5']:
+      if code in c:
                 to_cvd_change_list.append(c)
     # INSUFICIENCIA CARDÍACA (I50)
     # ENFERMEDAD CARDÍACA Y RENAL CRÓNICA HIPERTENSIVA (I13)
@@ -448,7 +440,18 @@ def separate_patients_by_condition(con):
                             )
     ob_list.update(set(con.sql("SELECT DISTINCT patient_id \
                            FROM ob_events").df()['patient_id']))
-        
+    #Include patients with bmi>=30 in the first 21 days and no bmi data before dx 
+    ob_list.update(set(con.sql(
+        f"SELECT DISTINCT patient_id \
+        FROM cmbd_incidents_long_view sub \
+        WHERE code IN {to_list(to_ob_change_list)} \
+            AND DATEDIFF('day',(SELECT dx_date \
+            FROM patient_incidents_view \
+                WHERE patient_incidents_view.patient_id = sub.patient_id),\
+                         admission_date)<21 \
+            AND patient_id NOT IN (SELECT DISTINCT patient_id \
+                                   FROM ob_events);").df()['patient_id']))
+                
     ob_list = ob_list - set(con.sql(f"SELECT DISTINCT patient_id \
                            FROM cmbd_incidents_long_view sub \
                                WHERE code='bmi<30' \
@@ -1215,7 +1218,7 @@ def evlog_process_ind(con):
 
 ### Distances
 
-One of the most important aim of process mining is to show and explain the processes. However, the great variety of traces does not allow us to draw any clear conclusions and it is often necessary to simplify our data. Another option that we can do before simplifying, to avoid the excessive losing of information and give another perspective to the analysis, is to cluster the traces and to analyze them by cluster. To do that we have to measure somehow the differences between the traces; the distance between them. There are some distances that we can use to this task: edit distances, vector term similarity, LDA based distances, embedding based distances... Some of them are shown below as functions to calculate the distance matrix of traces:
+One of the most important aim of process mining is to show and explain processes. However, the great variety of traces does not allow us to draw any clear conclusion and it is often necessary to simplify our data. Another option that we can do before simplifying, to avoid the excessive losing of information and give another perspective to the analysis is to cluster the traces and to analyze them by cluster. To do that we have to measure somehow the differences between the traces; the distance between them. There are some distances that we can use to this task: edit distances, vector term similarity, LDA based distances, embedding based distances... Some of them are shown below as functions to calculate the distance matrix of traces:
 
 ```{python}
 #| label: Distance matrix functions
@@ -1366,6 +1369,7 @@ def dendogram(dm,output_png='../../outputs/dendogram.png'):
   plt.clf()
 
 def kelbow(dm,
+           cond,
            elbow_metric='distortion',
            locate_elbow=False,
            output_path='../../outputs/'):
@@ -1374,6 +1378,7 @@ def kelbow(dm,
     
     Args:
       dm (array): distance matrix
+      cond (str): predominal clinical condition's code 
       elbow_metric (str): name of the method
       locate_elbow (boolean): True if want to return optimal number of clusters
     Returns:
@@ -1390,11 +1395,10 @@ def kelbow(dm,
                                 metric=elbow_metric,
                                 locate_elbow=locate_elbow)
   # Fit data to visualizer
-  output_file = output_path+elbow_metric+'.png'
+  output_file = output_path+elbow_metric+'_'+cond+'.png'
   visualizer_.fit(dm)
   # Finalize and render figure
-  #visualizer_.show(output_path=output_file,clear_figure=False)
-  visualizer_.show(output_path=output_file)
+  visualizer_.show(outpath=output_file,clear_figure=True)
   k_opt=None
   if locate_elbow:
     k_opt = visualizer_.elbow_value_ 
@@ -1663,8 +1667,9 @@ make_process_map <- function(log,t_freq,output_file){
     filter_activity_frequency(percentage = 1) %>% # show only most frequent
     filter_trace_frequency(percentage = t_freq) %>%
     process_map(type_nodes = performance(mean,units='days'),
-                type_edges = frequency('relative_case'),
-                sec_edges = performance(mean,units='days'),
+                sec_nodes = frequency('relative_case'),
+                type_edges = frequency('absolute'),
+                sec_edges = frequency('relative_case'),
                 render = T) %>% 
     export_svg %>% 
     charToRaw %>%
@@ -2017,95 +2022,6 @@ def id2process_fitness(con,
     return df
 ```
 
-### Decision mining
-
-Decision mining allows to analyze the event transitions in different part of processes. With another words, we can measure patients' characteristics or their relevance in a specific place of the passed petri net. The next function makes a decision tree explaining how patients characteristics are taking into account. Moreover it shows a boxplot of the relevance of each feature in the decision tree obtained with mean decrease impurity which calculates each feature importance as the sum over the number of splits (across all tress) that include the feature, proportionally to the number of samples it splits.
-
-```{python}
-#| label: Decision mining
-def decision_tree_pn_place(con,
-                           cond,
-                           features_list = ['age','sex','copayment'],
-                           pn_file="./PN.pnml",
-                           place2analyze='place9',
-                           ini_place='place100',
-                           fin_place='place111'):
-  '''Decision tree and features importances in selected place of PN
-    
-    Args:
-      con : db connector variable
-      cond (str): predominant clinical condition's 
-      features_list (list): features wanted to analyze
-      event_log_file (str): event log's path
-      pn_file (str): petri net's path
-      place2analyze (str): place wanted to analyze in petri net
-      ini_place (str): initial place in the petri net
-      fin_place (str): final place in the petri net
-      
-  '''                           
-  log = pm4py.format_dataframe(con.sql(f"SELECT * FROM eventlog_{cond} WHERE \
-  ID in (SELECT ID FROM eventlog_{cond}_clust)").df(), case_id='ID',
-                               activity_key='Event',timestamp_key='date')  
-  log = log[log['cycle']=='start']    
-  log = log[['concept:name','time:timestamp','case:concept:name']]
-  ini = min(list(log['time:timestamp']))-timedelta(days=1)
-  fin = max(list(log['time:timestamp']))+timedelta(days=1)
-  patients = list(set(log['case:concept:name']))
-  add_ini_fin = {'case:concept:name' : patients*2,
-                   'time:timestamp':[ini]*len(patients)+[fin]*len(patients),
-                   'concept:name':['INI']*len(patients)+['FIN']*len(patients)}
-  log = pd.concat([log,pd.DataFrame(add_ini_fin)])
-        
-  log = log.sort_values(['case:concept:name','time:timestamp'])
-  log.index = range(len(log))
-  patients_df = con.sql("SELECT patient_id,age,sex,copayment FROM patient_incidents_view").df()
-  patients_df = patients_df.fillna(2)
-  patients_df['copayment'] = patients_df['copayment'].values.astype(int).astype(str)
-  log_patients = log.merge(patients_df,left_on='case:concept:name',
-                             right_on='patient_id',how='left')
-  log_patients = log_patients[['concept:name', 'time:timestamp',
-                                 'case:concept:name', 'age',
-                                 'sex','copayment']]
-  net, initial_marking, final_marking = pm4py.read_pnml(pn_file)
-    
-  initial_marking = Marking()
-  initial_marking[list(net.places)[[str(p) 
-                    for p in net.places].index(ini_place)]] = 1
-  final_marking = Marking()
-  final_marking[list(net.places)[[str(p) 
-                  for p in net.places].index(fin_place)]] = 1
-  try:
-    X, y, class_names = decision_mining.apply(log_patients,
-                                              net,
-                                              initial_marking,
-                                              final_marking,
-                                              decision_point=place2analyze)
-    clf, feature_names, classes = decision_mining.get_decision_tree(log_patients,
-                                                    net,
-                                                    initial_marking,
-                                                    final_marking, 
-                                                    decision_point=place2analyze)
-    gviz = tree_visualizer.apply(clf, feature_names, classes)
-    gviz.save(filename='decision_tree_%s' % cond,
-                directory='../../outputs')              
-    visualizer.view(gviz)
-      
-    importances = clf.feature_importances_
-    tree_importances = pd.Series(importances, index=feature_names)
-    
-    fig, ax = plt.subplots()
-    tree_importances.plot.bar(ax=ax)
-    ax.set_title("Feature importances using MDI")
-    ax.set_ylabel("Mean decrease in impurity")
-    fig.tight_layout()
-    fig.savefig('../../outputs/barplot_features_importance_%s.png' % cond)
-    plt.close(fig)
-  except ValueError as err:
-    logging.basicConfig(level=logging.INFO)
-    logging.info('Error in decidsion making: %s', str(err))
-    if str(err)!='No objects to concatenate':
-      UNKNOWN_ERROR
-```
 
 ### Time dependent Cox model
 
@@ -2358,6 +2274,63 @@ kable(use_inc_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 ```
 
 ```{r}
+#| label: predominant_cond_inc
+
+patient_condition <- dbGetQuery(con,
+      "SELECT patient_id,type AS initial_status,code, \
+      CASE WHEN code='end' THEN type \
+      WHEN code='bmi<30' THEN 'else' \
+      WHEN code IN ('bmi>=30','E66.01','E66.09','E66.1','E66.2','E66.8','E66.9') \
+      THEN 'ob' \
+      WHEN code='f_date' THEN 'f' \
+      WHEN code IN ('N18','N18.1','N18.2','N18.3','N18.30','N18.31','N18.32',
+      'N18.4','N18.5','N18.6','N18.9','I12','I12.0','I12.9','filtglom') THEN 'ckd' \
+      WHEN code IN ('I09.81', 'I11.0', 'I13.0', 'I13.2', 'I50', 'I50.0',
+      'I50.1', 'I50.9') THEN 'hf' \
+      WHEN code='death' THEN code \
+      ELSE 'cvd' END AS final_status, \
+      DATEDIFF('day',dx_date,date) AS duration \
+      FROM (SELECT pc.*,pi.dx_date \
+      FROM patient_condition pc LEFT JOIN patient_incidents_view pi ON \
+      pc.patient_id=pi.patient_id)") 
+
+transition_sum <- patient_condition %>%
+  group_by(initial_status, final_status) %>%
+  summarise(
+    total_N = n(),  # Number of repetitions for each transition
+    first_quartile = quantile(duration, 0.25),  # First quantile of duration
+    flow_time = quantile(duration, 0.5),  # Median
+    third_quartile = quantile(duration, 0.75)   # Third quantile of duration
+  ) %>% 
+  group_by(initial_status) %>%
+  mutate(transition_percentage = total_N / sum(total_N) * 100) %>%
+  arrange(initial_status, desc(total_N)) %>%
+  select(all_of(c("initial_status","final_status","total_N","transition_percentage",
+                  "first_quartile","flow_time","third_quartile"))) 
+transition_sum$initial_status = factor(transition_sum$initial_status,
+                                       levels = c('cvd','hf','ckd','f','ob','else'))
+transition_sum$final_status = factor(transition_sum$final_status,
+                                levels = c('cvd','hf','ckd','f','ob','else','death'))
+
+process_matrix <- ggplot(
+  transition_sum, aes(x = final_status, y = initial_status)) +
+  geom_tile(aes(fill = flow_time), color = "white") +
+  geom_text(aes(label = total_N), vjust = 1) +
+  scale_fill_distiller() +
+  labs(title = "Predominant clinical conditions' changes",
+       x = "Final Status",
+       y = "Initial Status")+
+  theme_minimal() +  # Apply a minimal theme for a cleaner look
+  theme(axis.text = element_text(size = 12), 
+        axis.title = element_text(size = 14, face = "bold"))  # Adjust text sizes
+
+ggsave(gsub("src/analysis-scripts/","",here("outputs/predominant_condition_matrix.png")),plot=process_matrix)
+
+```
+
+![Predominant clinical condition's first change in incident patients. The number of the boxes shows the number of people experienced the change and the colour of the box the number of days needed to change. ](../../outputs/predominant_condition_matrix.png){#fig-predominant_cond_m fig-align="center" width="80%"}
+
+```{r}
 #| label: tbl-patient_pre
 #| tbl-cap: "Demographic and socioeconomic characteristics of prevalents patients"
 #| tbl-colwidths: [60,40]
@@ -2579,7 +2552,7 @@ kable(use_pre_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 #| warning: FALSE
 #| output: FALSE
 dbDisconnect(con, shutdown = TRUE)
-rm(param_cat_inc,param_cat_inc2unnest,param_cat_pre,param_cat_pre2unnest,param_inc,param_inc_tab,param_inc2unnest,param_pre,param_pre_tab,param_pre2unnest,patient_inc,patient_inc_tab,patient_pre,patient_pre_tab,ss_use_inc,ss_use_inc1,ss_use_inc2,ss_use_inc3,ss_use_pre,ss_use_pre1,ss_use_pre2,ss_use_pre3,use_inc_freq1,use_inc_freq1_time,use_inc_freq2,use_inc_freq2_time,use_inc_freq3,use_inc_freq3_time,use_inc_tab,use_pre_freq1,use_pre_freq1_time,use_pre_freq2,use_pre_freq2_time,use_pre_freq3,use_pre_freq3_time,use_pre_tab)
+rm(param_cat_inc,param_cat_inc2unnest,param_cat_pre,param_cat_pre2unnest,param_inc,param_inc_tab,param_inc2unnest,param_pre,param_pre_tab,param_pre2unnest,patient_inc,patient_inc_tab,patient_pre,patient_pre_tab,ss_use_inc,ss_use_inc1,ss_use_inc2,ss_use_inc3,ss_use_pre,ss_use_pre1,ss_use_pre2,ss_use_pre3,use_inc_freq1,use_inc_freq1_time,use_inc_freq2,use_inc_freq2_time,use_inc_freq3,use_inc_freq3_time,use_inc_tab,use_pre_freq1,use_pre_freq1_time,use_pre_freq2,use_pre_freq2_time,use_pre_freq3,use_pre_freq3_time,use_pre_tab,transition_sum)
 ```
 
 ### Patients without predominant clinical condition
@@ -2769,13 +2742,16 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| eval: TRUE
 #| echo: FALSE
 if len(traces)>25:
-  n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
+  n_clusters = kelbow(dm,cond,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
 else:
   n_clusters=1
 ```
 
+
 ![Distance matrix's dendogram](../../outputs/dendogram_else.png){#fig-dendogram_else fig-align="center" width="80%"}
+
+![Distance matrix's elbow method's graphic ](../../outputs/distortion_else.png){#fig-kelbow_else fig-align="center" width="80%"}
 
 ```{python}
 #| label: clustering (else)
@@ -2859,33 +2835,6 @@ treatments_clusters_boxplot(con,cond,
 
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_else.png){#fig-fitness_by_cluster_else fig-align="center" width="80%"}
 
-#### Decision mining
-
-In @fig-decision_tree_else is shown how patients' age, sex and copayment would influence in prescribing three drugs based treatment. More features could have been added but for simplicity we included those three.
-
-```{python}
-#| label: create decision tree (else)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make decision making analysis of %s patients", cond)
-try:
-  decision_tree_pn_place(con,cond,
-    pn_file='./PN_%s.pnml' % cond,
-    place2analyze='place1')
-except Exception as Argument:
-  logging.warning(
-    "Error occurred when executing decision mining: %s",str(Argument))
-  pass
-con.close()
-```
-
-![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_else.png){#fig-decision_tree_else fig-align="center" width="80%"}
-
-Variables relevance in the previous decision tree is indicated in @fig-features_relevance_else. As we can see, categorical variables are divided into as many parts as the number of categories there are and variables' total relevance is the sum of its categories' values.
-
-![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_else.png){#fig-features_relevance_else fig-align="center" width="80%"}
 
 #### Prediction Models
 
@@ -2930,7 +2879,7 @@ summary(model)
 ```
 
 
-Using same predictive variables a joint latent class model of three classes is made:
+Using same predictive variables a joint latent class model of two classes is made:
 ```{r}
 #| label: JLCM model (else)
 #| eval: TRUE
@@ -3139,13 +3088,15 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| eval: TRUE
 #| echo: FALSE
 if len(traces)>25:
-  n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
+  n_clusters = kelbow(dm,cond,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
 else:
   n_clusters=1
 ```
 
 ![Distance matrix's dendogram](../../outputs/dendogram_cvd.png){#fig-dendogram_cvd fig-align="center" width="80%"}
+
+![Distance matrix's elbow method's graphic ](../../outputs/distortion_cvd.png){#fig-kelbow_cvd fig-align="center" width="80%"}
 
 ```{python}
 #| label: clustering (cvd)
@@ -3223,29 +3174,6 @@ treatments_clusters_boxplot(con,cond,
 
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_cvd.png){#fig-fitness_by_cluster_cvd fig-align="center" width="80%"}
 
-#### Decision mining
-
-```{python}
-#| label: create decision tree (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make decision making analysis of %s patients", cond)
-try:
-  decision_tree_pn_place(con,cond,
-    pn_file='./PN_%s.pnml' % cond,
-    place2analyze='place1')
-except Exception as Argument:
-  logging.warning(
-    "Error occurred when executing decision mining: %s",str(Argument))
-  pass
-con.close()
-```
-
-![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_cvd.png){#fig-decision_tree_cvd fig-align="center" width="80%"}
-
-![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_cvd.png){#fig-features_relevance_cvd fig-align="center" width="80%"}
 
 #### Prediction Models
 
@@ -3289,7 +3217,7 @@ summary(model)
 ```
 
 
-Using same predictive variables a joint latent class model of three classes is made:
+Using same predictive variables a joint latent class model of two classes is made:
 ```{r}
 #| label: JLCM model (cvd)
 #| eval: TRUE
@@ -3499,13 +3427,15 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| eval: TRUE
 #| echo: FALSE
 if len(traces)>25:
-  n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
+  n_clusters = kelbow(dm,cond,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
 else:
   n_clusters=1
 ```
 
 ![Distance matrix's dendogram](../../outputs/dendogram_hf.png){#fig-dendogram_hf fig-align="center" width="80%"}
+
+![Distance matrix's elbow method's graphic ](../../outputs/distortion_hf.png){#fig-kelbow_hf fig-align="center" width="80%"}
 
 ```{python}
 #| label: clustering (hf)
@@ -3583,29 +3513,6 @@ treatments_clusters_boxplot(con,cond,
 
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_hf.png){#fig-fitness_by_cluster_hf fig-align="center" width="80%"}
 
-#### Decision mining
-
-```{python}
-#| label: create decision tree (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make decision making analysis of %s patients", cond)
-try:
-  decision_tree_pn_place(con,cond,
-    pn_file='./PN_%s.pnml' % cond,
-    place2analyze='place1')
-except Exception as Argument:
-  logging.warning(
-    "Error occurred when executing decision mining: %s",str(Argument))
-  pass
-con.close()
-```
-
-![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_hf.png){#fig-decision_tree_hf fig-align="center" width="80%"}
-
-![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_hf.png){#fig-features_relevance_hf fig-align="center" width="80%"}
 
 #### Prediction Models
 
@@ -3649,7 +3556,7 @@ summary(model)
 ```
 
 
-Using same predictive variables a joint latent class model of three classes is made:
+Using same predictive variables a joint latent class model of two classes is made:
 ```{r}
 #| label: JLCM model (hf)
 #| eval: TRUE
@@ -3860,13 +3767,15 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| eval: TRUE
 #| echo: FALSE
 if len(traces)>25:
-  n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
+  n_clusters = kelbow(dm,cond,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
 else:
   n_clusters=1
 ```
 
 ![Distance matrix's dendogram](../../outputs/dendogram_ckd.png){#fig-dendogram_ckd fig-align="center" width="80%"}
+
+![Distance matrix's elbow method's graphic ](../../outputs/distortion_ckd.png){#fig-kelbow_ckd fig-align="center" width="80%"}
 
 ```{python}
 #| label: clustering (ckd)
@@ -3944,30 +3853,6 @@ treatments_clusters_boxplot(con,cond,
 
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ckd.png){#fig-fitness_by_cluster_ckd fig-align="center" width="80%"}
 
-#### Decision mining
-
-```{python}
-#| label: create decision tree (ckd)
-#| eval: FALSE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make decision making analysis of %s patients", cond)
-try:
-  decision_tree_pn_place(con,cond,
-    pn_file='./PN_%s.pnml' % cond,
-    place2analyze='place1')
-except Exception as Argument:
-  logging.warning(
-    "Error occurred when executing decision mining: %s",str(Argument))
-  pass
-con.close()
-
-```
-
-![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_ckd.png){#fig-decision_tree_ckd fig-align="center" width="80%"}
-
-![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ckd.png){#fig-features_relevance_ckd fig-align="center" width="80%"}
 
 #### Prediction Models
 
@@ -4011,7 +3896,7 @@ summary(model)
 ```
 
 
-Using same predictive variables a joint latent class model of three classes is made:
+Using same predictive variables a joint latent class model of two classes is made:
 ```{r}
 #| label: JLCM model (ckd)
 #| eval: TRUE
@@ -4221,13 +4106,15 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| eval: TRUE
 #| echo: FALSE
 if len(traces)>25:
-  n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
+  n_clusters = kelbow(dm,cond,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
 else:
   n_clusters=1
 ```
 
 ![Distance matrix's dendogram](../../outputs/dendogram_f.png){#fig-dendogram fig-align="center" width="80%"}
+
+![Distance matrix's elbow method's graphic ](../../outputs/distortion_f.png){#fig-kelbow_f fig-align="center" width="80%"}
 
 ```{python}
 #| label: clustering (f)
@@ -4305,29 +4192,6 @@ treatments_clusters_boxplot(con,cond,
 
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_f.png){#fig-fitness_by_cluster_f fig-align="center" width="80%"}
 
-#### Decision mining
-
-```{python}
-#| label: create decision tree (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make decision making analysis of %s patients", cond)
-try:
-  decision_tree_pn_place(con,cond,
-    pn_file='./PN_%s.pnml' % cond,
-    place2analyze='place1')
-except Exception as Argument:
-  logging.warning(
-    "Error occurred when executing decision mining: %s",str(Argument))
-  pass
-con.close()
-```
-
-![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_f.png){#fig-decision_tree_f fig-align="center" width="80%"}
-
-![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_f.png){#fig-features_relevance_f fig-align="center" width="80%"}
 
 #### Prediction Models
 
@@ -4371,7 +4235,7 @@ summary(model)
 ```
 
 
-Using same predictive variables a joint latent class model of three classes is made:
+Using same predictive variables a joint latent class model of two classes is made:
 ```{r}
 #| label: JLCM model (f)
 #| eval: TRUE
@@ -4581,13 +4445,15 @@ dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
 #| eval: TRUE
 #| echo: FALSE
 if len(traces)>25:
-  n_clusters = kelbow(dm,elbow_metric='distortion',locate_elbow=True)
+  n_clusters = kelbow(dm,cond,elbow_metric='distortion',locate_elbow=True)
 #kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
 else:
   n_clusters=1
 ```
 
-![Distance matrix's dendogram](../../outputs/dendogram_f.png){fig-align="center" width="80%"}
+![Distance matrix's dendogram](../../outputs/dendogram_ob.png){#fig-dendogram_ob fig-align="center" width="80%"}
+
+![Distance matrix's elbow method's graphic ](../../outputs/distortion_ob.png){#fig-kelbow_ob fig-align="center" width="80%"}
 
 ```{python}
 #| label: clustering (ob)
@@ -4665,29 +4531,6 @@ treatments_clusters_boxplot(con,cond,
 
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ob.png){#fig-fitness_by_cluster_ob fig-align="center" width="80%"}
 
-#### Decision mining
-
-```{python}
-#| label: create decision tree (ob)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make decision making analysis of %s patients", cond)
-try:
-  decision_tree_pn_place(con,cond,
-    pn_file='./PN_%s.pnml' % cond,
-    place2analyze='place1')
-except Exception as Argument:
-  logging.warning(
-    "Error occurred when executing decision mining: %s",str(Argument))
-  pass
-con.close()
-```
-
-![Decision tree of place9 (triple treatment prescription step)](../../outputs/decision_tree_ob.png){#fig-decision_tree_ob fig-align="center" width="80%"}
-
-![Features importance in place9 (triple treatment prescription step)](../../outputs/barplot_features_importance_ob.png){#fig-features_relevance_ob fig-align="center" width="80%"}
 
 #### Prediction Models
 
@@ -4731,7 +4574,7 @@ summary(model)
 ```
 
 
-Using same predictive variables a joint latent class model of three classes is made:
+Using same predictive variables a joint latent class model of two classes is made:
 ```{r}
 #| label: JLCM model (ob)
 #| eval: TRUE
@@ -4799,7 +4642,7 @@ error = function(cond_) {
 
 We selected incident patients with at least one year of follow-up to create a process indicator's event log. This log includes cholesterol, albumin-creatinine index, glycated hemoglobin, body mass index, blood pressure and glomerular filtration measures, and foot and eye examinations.
 ```{python}
-#| label: Creating process indicators' event log (ob)
+#| label: Creating process indicators' event log
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
@@ -5119,7 +4962,7 @@ summary(model)
 ```
 
  
-Using same predictive variables a joint latent class model of three classes is made:
+Using same predictive variables a joint latent class model of two classes is made:
 ```{r}
 #| label: JLCM model (process indicators)
 #| eval: TRUE
