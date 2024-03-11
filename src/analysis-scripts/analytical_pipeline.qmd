@@ -91,8 +91,6 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn.feature_extraction.text import TfidfVectorizer
 from yellowbrick.cluster import KElbowVisualizer
 from pm4py.objects.petri_net.obj import PetriNet, Marking
-from pm4py.visualization.decisiontree import visualizer as tree_visualizer
-from pm4py.algo.decision_mining import algorithm as decision_mining
 from pm4py.visualization.petri_net import visualizer
 from gensim.models import LdaModel
 from datetime import  datetime, timedelta
