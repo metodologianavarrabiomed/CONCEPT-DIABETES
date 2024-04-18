@@ -221,13 +221,14 @@ def general_preprocess(con):
                 WHERE admission_date > (SELECT dx_date \
                                         FROM patient_incidents_view \
     WHERE patient_incidents_view.patient_id = cmbd_incidents_view.patient_id) \
-                    AND contact_type=1")
+                    AND contact_type=1 AND contact_program=1")
                     
     con.sql("CREATE OR REPLACE VIEW cmbd_incidents_postdx_first_view AS \
             SELECT patient_id, admission_date, diagnosis1_code FROM (SELECT *,\
                       ROW_NUMBER() OVER(PARTITION BY patient_id \
                                         ORDER BY admission_date) AS rn \
-                          FROM cmbd_incidents_postdx_view) t WHERE rn = 1;")
+                          FROM cmbd_incidents_postdx_view WHERE \
+                              diagnosis1_code IN ('E10.10', 'E10.11', 'E10.641', 'E11.00', 'E11.01', 'E11.10', 'E11.11', 'E11.641', 'J41.0', 'J41.1', 'J41.8', 'J42', 'J43.0', 'J43.1', 'J43.2', 'J43.8', 'J43.9', 'J44.0', 'J44.1', 'J44.9', 'J47.0', 'J47.1', 'J47.9', 'I09.81', 'I11.0', 'I13.0', 'I13.2', 'I50.1', 'I50.20', 'I50.21', 'I50.22', 'I50.23', 'I50.30', 'I50.31', 'I50.32', 'I50.33', 'I50.40', 'I50.41', 'I50.42', 'I50.43', 'I50.810', 'I50.811', 'I50.812', 'I50.813', 'I50.814', 'I50.82', 'I50.83', 'I50.84', 'I50.89', 'I50.9', 'E87.0', 'E87.1', 'E86.0', 'E86.1', 'E86.9', 'I20.0', 'I20.1', 'I20.8', 'I20.9', 'I24.0', 'I24.8', 'J45.20', 'J45.21', 'J45.22', 'J45.31', 'J45.32', 'J45.41', 'J45.42', 'J45.51', 'J45.52', 'J45.901', 'J45.902', 'J45.990', 'J45.991', 'J45.998', 'J96.0')) t WHERE rn = 1;")
                 
     con.sql("CREATE OR REPLACE VIEW param_incidents_predx_view AS SELECT * FROM (\
             SELECT * FROM (SELECT patient_id, param_name, param_value, param_date \
@@ -530,11 +531,20 @@ def separate_patients_by_condition(con):
           WHEN code IN {to_list(to_hf_change_list)} THEN 'hf' \
           WHEN code IN {to_list(to_cvd_change_list)} THEN 'cvd'\
           WHEN code='death' THEN code \
-          ELSE 'error' END AS final_status, \
-          DATEDIFF('day',dx_date,date) AS duration \
+          END AS final_status, \
+          DATEDIFF('day',dx_date,date) AS duration,date \
           FROM (SELECT pc.*,pi.dx_date \
           FROM patient_condition pc LEFT JOIN patient_incidents_view pi ON \
-          pc.patient_id=pi.patient_id)")    
+          pc.patient_id=pi.patient_id)") 
+    con.sql("CREATE OR REPLACE VIEW patient_condition_hosp AS \
+        SELECT p.patient_id,p.initial_status,p.final_status, \
+        CASE WHEN p.date <= COALESCE(c.admission_date,'2042-12-31') \
+        THEN p.date ELSE c.admission_date END AS date, \
+        CASE WHEN p.date < COALESCE(c.admission_date,'2042-12-31') \
+        THEN 'cond' ELSE 'hosp' END AS cause \
+        FROM patient_condition_translation p \
+            LEFT JOIN cmbd_incidents_postdx_first_view c \
+                ON p.patient_id = c.patient_id")
     return presc_data_p                
 
 def evlog_creation_by_prescriptions(con,
@@ -1898,9 +1908,10 @@ def id2treat_fitness_by_interval(con,
     event_log[date_n_col] = event_log.groupby('ID')[date_n_col].apply(
         lambda x: x-x.min())
     
-    hosp = con.sql(f"SELECT *, \
-      DATEDIFF('day',DATE '{str(baseline)[:10]}',admission_date) AS dd_date \
-      FROM cmbd_incidents_postdx_first_view").df()
+#    hosp = con.sql(f"SELECT *, \
+#      DATEDIFF('day',DATE '{str(baseline)[:10]}',admission_date) AS dd_date \
+#      FROM cmbd_incidents_postdx_first_view").df()
+    hosp = con.sql(f"select *,DATEDIFF('day',DATE '{str(baseline)[:10]}',date) AS dd_date from patient_condition_hosp WHERE ((final_status!=initial_status AND final_status NOT IN ('end','else','ob','f')) OR cause='hosp')").df()
     hosp = dict(zip(hosp.patient_id,hosp.dd_date))
     
     cond_end = con.sql(f"SELECT *, \
@@ -1919,7 +1930,8 @@ def id2treat_fitness_by_interval(con,
     for id in tqdm(id_list):
         event_log_id = event_log[event_log['ID']==id]
         hosp_d = hosp.get(id,100000)-min(event_log_id['date_'])
-        date_max = min(cond_end[id],hosp_d)
+        col_end_d = cond_end[id]-min(event_log_id['date_'])
+        date_max = min(col_end_d,hosp_d)
         date_min = min(event_log_id['time:timestamp'])
         n_periods = date_max//fixed_period_time
         n_periods_r = date_max/fixed_period_time
@@ -2153,13 +2165,16 @@ comorb_ch <- comorb(archivo = dbGetQuery(con,
         WHEN comorb_codif='ICD10' THEN '10ES'\
         ELSE 'ERROR' END AS codtype,comorb_date_ini AS date \
         FROM comorb_incidents_view  \
-        WHERE comorb_date_end IS NULL OR \
+        WHERE (comorb_date_end IS NULL OR \
         comorb_date_end >= (SELECT dx_date FROM patient_incidents_view WHERE \
+        patient_incidents_view.patient_id = comorb_incidents_view.patient_id)) \
+        AND comorb_date_ini <= (SELECT dx_date FROM patient_incidents_view WHERE \
         patient_incidents_view.patient_id = comorb_incidents_view.patient_id)"))
 duckdb_register(con, "comorb_ch", comorb_ch)
 dbExecute(con,
         "CREATE OR REPLACE TABLE patient_incidents_view_ch AS \
-        SELECT p.*, c.score_ch AS charlson \
+        SELECT p.*, CASE WHEN c.score_ch IS NULL THEN 1\
+        ELSE c.score_ch END AS charlson \
         FROM patient_incidents_view p LEFT JOIN comorb_ch c \
         ON p.patient_id = c.id")
 ```
@@ -2645,7 +2660,7 @@ rm(param_cat_inc,param_cat_inc2unnest,param_cat_pre,param_cat_pre2unnest,param_i
 
 ### Patients without predominant clinical condition
 
-#### Treatments' event log creation and description(
+#### Treatments' event log creation and description
 
 ```{python}
 #| label: condition variable in python (else)
@@ -2785,7 +2800,7 @@ dev.off()
 
 ![Percentage of patients traces an activity is present](../../outputs/activity_presence_else.png){#fig-activity_presence_else fig-align="center" width="80%"}
 
-##### Healthcare trayectories description
+#### Healthcare trayectories description
 
 
 ```{r}
@@ -2798,7 +2813,7 @@ log_info('Make {cond} healtcare analysis')
 con <- dbConnect(duckdb(), dbdir = db_path)
 evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
                                          cond,
-                                         "' AND Event!='APA'"))
+                                         "' AND Event NOT IN ('APA','URG')"))
 make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
                               here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
                                                      cond))))
@@ -2813,12 +2828,16 @@ plot(evLog_healthcare %>% activity_presence()  )+scale_y_continuous(limits = c(0
 dev.off()
 
 png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("healthcare_dottedchart_%s.png",
+                  here("outputs",sprintf("healthcare_process_matrix_%s.png",
                                          cond))),
     width = 600, height = 750, units = "px")
-plot(evLog_healthcare %>% 
-    dotted_chart(x = "absolute"))
-dev.off()
+evLog_healthcare %>% 
+  anti_join(evLog_healthcare %>% 
+              activity_presence() %>% 
+              slice(11:100),
+            c('Event'='Event')) %>% 
+  process_matrix(frequency("relative-case")) %>% plot()
+dev.off()    
 rm(evLog_healthcare)
 dbDisconnect(con, shutdown = TRUE)
 
@@ -2830,7 +2849,7 @@ dbDisconnect(con, shutdown = TRUE)
 
 ![Percentage of patients traces a visit is present](../../outputs/healthcare_activity_presence_else.png){#fig-healthcare_activity_presence_else fig-align="center" width="80%"}
 
-![Visits' dotted chart](../../outputs/healthcare_dottedchart_else.png){#fig-healthcare_dottedchart_else fig-align="center" width="80%"}
+![Visits' dotted chart](../../outputs/healthcare_process_matrix_else.png){#fig-healthcare_process_matrix_else fig-align="center" width="80%"}
 
 #### Clustering traces
 
@@ -2959,7 +2978,9 @@ treatments_clusters_boxplot(con,cond,
 
 #### Prediction Models
 
-In the next example, we choose fitness, age, sex and copayment to try to predict a hospitalization with a time dependet Cox model, and the summary of it is:
+##### Time Dependent Cox Model
+
+In the next example, we choose fitness, age, sex and copayment to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
 
 ```{python}
 #| label: create fitness by period table (else)
@@ -3006,15 +3027,13 @@ df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 
 
-model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
+time_dep_else <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
                data=df)
-survfit(Surv(t_min, t_max, status2) ~ age_, data=df %>%
-  select(ID2,t_min,t_max,status2,age_) %>% unique()) %>%
-  autoplot()
 
-summary(model)
+summary(time_dep_else)
 ```
 
+##### Joint Latent Class Model
 
 Using same predictive variables a joint latent class model of two classes is made:
 
@@ -3029,57 +3048,60 @@ Using same predictive variables a joint latent class model of two classes is mad
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
-                 hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
-                 B=c(1,1,0,0,0,0,0,1,0,1,1))
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
 ### 2 latent class
 tryCatch(
-{mj2 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
+{mj2else <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
                             hazard="Weibull",hazardtype="PH",
                             ng=2,data=df, verbose=FALSE),cl=4)
 
-summary(mj2)
+summary(mj2else)
 
-postprob(mj2)
+postprob(mj2else)
 
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint1_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2, which = "fit", var.time = "t_0", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
-     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,1.0),xlim=c(0,1000))
-dev.off()
- 
-d1 <- data.frame(t_0=seq(1,1000,length.out=100))
+df <- merge(df,mj2else$pprob %>%
+              mutate(class = case_when(
+                class == 1 ~ "class 1",
+                class == 2 ~ "class 2")),
+              by='ID2',all.x = FALSE)
+d1 <- data.frame(t_0=seq(1,1100,length.out=100))
 data.new <-data.frame(d1,age=65,sex='Female',charlson=1)
-mj2.pred <- predictY(mj2, data.new , var.time = "t_0")
+mj2else.pred <- predictY(mj2else, data.new , var.time = "t_0")
 
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint2_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2.pred, bty = "l", ylim = c(0, 1), legend.loc = 'bottomleft',
-     ylab = "fitness", xlab = "days", lwd = 2)
-dev.off()
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint3_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2, which = "survival", lwd = 2, legend.loc = 'bottomleft', bty = "l",
-     xlab = "days", ylab = "event-free probability",xlim=c(0,1000))
-dev.off()},
+ggplot(data = df %>% filter(t_0<1100), aes(x = t_0, y = fitness, group = ID2))+ 
+  geom_line(colour='grey') + 
+  #stat_smooth(aes(group = 1),method = "lm",se=TRUE) +
+  stat_summary(aes(group = 1), geom = "point", fun = mean, shape = 16, size = 2) + 
+  geom_line(data=data.frame(mj2else.pred$times,mj2else.pred$pred,class='class 1'), aes(t_0, Ypred_class1,group = 1), color = "red", linetype = "dashed",size=1) +
+  geom_line(data=data.frame(mj2else.pred$times,mj2else.pred$pred,class='class 2'), aes(t_0, Ypred_class2,group = 1), color = "red", linetype = "dashed",size=1) +
+  facet_grid(. ~ class) +   
+  labs(x = "Days", y = "Fitness", col = "class") + 
+  guides(col = guide_legend(nrow = 3),)
+ggsave(filename=gsub("src/analysis-scripts/","",
+                      here("outputs",sprintf("joint1_%s.png",
+                                             cond))),
+        plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)
+
+
+survfit(Surv(t_min, t_max, status2) ~ class, data=df %>%
+          select(ID2,t_min,t_max,status2,class) %>% unique()) %>%
+  autoplot(xlab = "Day", ylab = "Survival probability")
+ggsave(filename=gsub("src/analysis-scripts/","",
+                      here("outputs",sprintf("joint2_%s.png",
+                                             cond))),
+        plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)},
 error = function(cond_) {
             message(conditionMessage(cond_))
         }
 )
+
 ```
-![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_else.png){#fig-joint1_else fig-align="center" width="80%"}
 
-![Class-specific mean predicted fitness trajectory](../../outputs/joint2_else.png){#fig-joint2_else fig-align="center" width="80%"}
 
-![Class-specific survival functions](../../outputs/joint3_else.png){#fig-joint3_else fig-align="center" width="80%"}
+##### Two time windows Cox Model
 
 Moreover a Cox survival model with two time windows it is implemented below:
 
@@ -3090,1670 +3112,16 @@ Moreover a Cox survival model with two time windows it is implemented below:
 #| warning: FALSE
 #| output: TRUE
 df <- df %>% 
-  filter(t_max > 360) %>% 
-  filter(t_max==t_1) %>% 
+  filter(t_max > 270) %>% 
+  filter(t_0==270) %>% 
   select(ID,fitness,status2,age,age_,sex,copayment,charlson,ID2,t_min,t_max)
-df$status3 <- ifelse(df$t_max<=720 & df$status2==1, 1, 0)
-df$t_max <- pmin(df$t_max-360,360)
+df$status3 <- ifelse(df$t_max<=630 & df$status2==1, 1, 0)
+df$t_max <- pmin(df$t_max-270,360)
 
-cox.model <- coxph(Surv(t_max, status3) ~ age + sex + fitness + charlson,
+cox2w_else <- coxph(Surv(t_max, status3) ~ age + sex + fitness + charlson,
                data=df)
 
-summary(cox.model)
-
-```
-
-### CV Disease
-
-#### Treatments' event log creation and description(
-
-```{python}
-#| label: condition variable in python (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-cond = 'cvd'
-```
-
-```{r}
-#| label: condition variable in r (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-cond <- 'cvd'
-```
-
-```{python}
-#| label: Preprocessing of raw event log (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-con = duckdb.connect(db_path)
-if notnan_p>0.98:
-  logging.info("Generate event log of %s patients from prescriptions", cond)
-  evlog_creation_by_prescriptions(
-    con=con,
-    cond=cond,
-    code2drug_info_path='./diabetes_drugs.csv')
-else:
-  logging.info("Generate event log of %s patients from dispensations", cond)
-  evlog_creation_by_dispensations(
-    con=con,
-    cond=cond,
-    code2drug_info_path='./diabetes_drugs.csv',
-    nac_path='./Nomenclator_de_Facturacion.csv')
-```
-
-```{python}
-#| label: event log (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Filter event log of %s patients", cond)
-df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
-
-df_, id2trace = df2dict(df_)
-con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond} AS SELECT * FROM df_")
-patients = sorted(id2trace.keys())
-traces = list(id2trace[id] for id in patients)     
-con.close()
-```
-
-```{r}
-#| label: Loading event log in R (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-log_info('Load {cond} eventlog')
-con <- dbConnect(duckdb(), dbdir = db_path)
-evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
-dbDisconnect(con, shutdown = TRUE)
-```
-
-Choosing patients with a cardiovascular disease and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
-
-```{r}
-#| label: proces map and activity presence (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-log_info('Make {cond} process map')
-make_process_map(evLog,1,gsub("src/analysis-scripts/","",
-                              here("outputs",sprintf("evlog_pm_1_%s.png",
-                                                     cond))))
-make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
-                                here("outputs",sprintf("evlog_pm_02_%s.png",
-                                                     cond))))
-log_info('Make activity presence of {cond} patients')
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("activity_presence_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(evLog %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
-dev.off()
-```
-
-
-![Event log's process map with all traces](../../outputs/evlog_pm_1_cvd.png){#fig-pm1_cvd fig-align="center" width="80%"}
-
-
-![Event log's process map with most frequent traces covering 20%](../../outputs/evlog_pm_02_cvd.png){#fig-pm02_cvd fig-align="center" width="80%"}
-
-
-
-![Percentage of patients traces an activity is present](../../outputs/activity_presence_cvd.png){#fig-activity_presence_cvd fig-align="center" width="80%"}
-
-##### Healthcare trayectories description
-
-
-```{r}
-#| label: proces map healthcare (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-log_info('Make {cond} healtcare analysis')
-con <- dbConnect(duckdb(), dbdir = db_path)
-evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
-                                         cond,
-                                         "' AND Event!='APA'"))
-make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
-                              here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
-                                                     cond))))
-make_process_map_healthcare(evLog_healthcare,0.2,gsub("src/analysis-scripts/","",
-                              here("outputs",sprintf("evlog_healthcare_pm_02_%s.png",
-                                                     cond))))
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("healthcare_activity_presence_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(evLog_healthcare %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
-dev.off()
-
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("healthcare_dottedchart_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(evLog_healthcare %>% 
-    dotted_chart(x = "absolute"))
-dev.off()
-rm(evLog_healthcare)
-dbDisconnect(con, shutdown = TRUE)
-
-```
-
-![Healthcare event log's process map with all traces](../../outputs/evlog_healthcare_pm_1_cvd.png){#fig-pm1_healthcare_cvd fig-align="center" width="80%"}
-
-![Healthcare event log's process map with most frequent traces covering 20%](../../outputs/evlog_healthcare_pm_02_cvd.png){#fig-pm02_healthcare_cvd fig-align="center" width="80%"}
-
-![Percentage of patients traces a visit is present](../../outputs/healthcare_activity_presence_cvd.png){#fig-healthcare_activity_presence_cvd fig-align="center" width="80%"}
-
-![Visits' dotted chart](../../outputs/healthcare_dottedchart_cvd.png){#fig-healthcare_dottedchart_cvd fig-align="center" width="80%"}
-
-
-#### Clustering traces
-
-```{python}
-#| label: dm calculation (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make distance matrix of %s patients", cond)
-measure_f = Levenshtein.normalized_similarity
-dm = calculate_dm_ED(traces,measure_f)
-```
-
-```{python}
-#| label: dendograms (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| output: FALSE
-logging.info("Make dendogram of %s patients", cond)
-dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
-```
-
-```{python}
-#| label: kelbow (cvd)
-#| eval: TRUE
-#| echo: FALSE
-if len(traces)>25:
-  n_clusters = kelbow(dm,cond,elbow_metric='distortion',locate_elbow=True)
-#kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
-else:
-  n_clusters=1
-```
-
-![Distance matrix's dendogram](../../outputs/dendogram_cvd.png){#fig-dendogram_cvd fig-align="center" width="80%"}
-
-![Distance matrix's elbow method's graphic ](../../outputs/distortion_cvd.png){#fig-kelbow_cvd fig-align="center" width="80%"}
-
-```{python}
-#| label: clustering (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make clustering of %s patients", cond)
-con = duckdb.connect(db_path)
-df_ = clust(n_clusters,dm,df_,id2trace,patients)
-con.sql(f"CREATE OR REPLACE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
-con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust AS SELECT \
-  eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
-  LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
-con.sql(f"CREATE OR REPLACE VIEW cluster_histogram_{cond} AS\
-  SELECT cluster, COUNT(DISTINCT ID) AS freq \
-  FROM eventlog_{cond}_clust GROUP BY cluster")
-con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
-   SELECT * FROM eventlog_{cond}_clust \
-  WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
-  WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
-  FROM cluster_histogram_{cond}))")
-
-```
-
-```{python}
-#| label: trace explorer (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make trace explorer figures of %s patients", cond)
-col_dic = trace_explorer(con,cond,color_dict=col_dic)
-con.close()
-```
-
-```{r}
-#| label: process explorer (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-log_info('Make process maps figures of different clusters of {cond} patients')
-con <- dbConnect(duckdb(), dbdir = db_path)
-process_map_by_cluster(
-  load_log(con,
-           paste0("SELECT * FROM eventlog_",cond,"_clust_filtered")),
-  0.25,cond)
-dbDisconnect(con, shutdown = TRUE)
-```
-
-::: {#fig-cluster0_cvd .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/t_cluster_cvd_0.png){#fig-traceexplorer0_cvd}
-
-![Process map covering 25% most frequent traces](../../outputs/pm_cluster_cvd_0.png){#fig-processmap0_cvd}
-
-Cluster 0
-:::
-
-#### Conformace checking
-
-```{python}
-#| label: fitness boxplot (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make conformance checking analysis of %s patients", cond)
-con = duckdb.connect(db_path)
-treatments_clusters_boxplot(con,cond,
-            pn_file='./PN_%s.pnml' % cond,
-            pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
-```
-
-![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_cvd.png){#fig-fitness_by_cluster_cvd fig-align="center" width="80%"}
-
-
-#### Prediction Models
-
-In the next example, we choose fitness, age, sex and copayment to try to predict a hospitalization with a time dependet Cox model, and the summary of it is:
-
-```{python}
-#| label: create fitness by period table (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Create  %s patients prediction models", cond)
-con = duckdb.connect(db_path)
-id2treat_fitness_by_interval(con, cond,
-            pn_file='./PN_%s.pnml' % cond,
-            ini_place='place100',fin_place='place111',
-            fixed_period_time=90)
-con.close()
-```
-
-```{r}
-#| label: Time dependent COX (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-con <- dbConnect(duckdb(), dbdir = db_path)
-
-df <- dbGetQuery(con, paste0("SELECT p2f.ID,p2f.t_0,p2f.t_1,p2f.fitness,\
-                             p2f.status,p2f.status2,\
-                             piv.age_dx as age,\
-                             CASE WHEN age<50 THEN '[0,50)'\
-                             WHEN age>=50 AND age<60 THEN '[50,60)' \
-                             WHEN age>=60 AND age<70 THEN '[60,70)' \
-                             WHEN age>=70 AND age<80 THEN '[70,80)' \
-                             WHEN age>=80 AND age<90 THEN '[80,90)' \
-                             ELSE '[90,+)' END AS age_,\
-                             piv.sex,piv.copayment,piv.charlson \
-                             FROM period2fitness_",cond," p2f \
-                             LEFT JOIN patient_incidents_view_ch piv \
-                             ON p2f.ID=piv.patient_id"))
-dbDisconnect(con, shutdown = TRUE)
-
-df$sex <- as.factor(ifelse(df$sex == 0, 'Male', 'Female'))
-df$age_ <- as.factor(df$age_)
-df$ID2 <- as.numeric(as.factor(df$ID))
-df$t_max <- ave(df$t_1, df$ID2, FUN = max)
-df$t_min <- ave(df$t_0, df$ID2, FUN = min)
-
-
-model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
-               data=df)
-survfit(Surv(t_min, t_max, status2) ~ age_, data=df %>%
-  select(ID2,t_min,t_max,status2,age_) %>% unique()) %>%
-  autoplot()
-
-summary(model)
-```
-
-
-Using same predictive variables a joint latent class model of two classes is made:
-
-```{r}
-#| label: JLCM model (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-
-### 1 latent class
-
-mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
-                 survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
-                 hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
-                 B=c(1,1,0,0,0,0,0,1,0,1,1))
-### 2 latent class
-tryCatch(
-{mj2 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
-                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
-                            random=~t_0,subject="ID2",
-                            survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
-                            hazard="Weibull",hazardtype="PH",
-                            ng=2,data=df, verbose=FALSE),cl=4)
-
-summary(mj2)
-
-postprob(mj2)
-
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint1_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2, which = "fit", var.time = "t_0", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
-     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,1.0),xlim=c(0,1000))
-dev.off()
- 
-d1 <- data.frame(t_0=seq(1,1000,length.out=100))
-data.new <-data.frame(d1,age=65,sex='Female',charlson=1)
-mj2.pred <- predictY(mj2, data.new , var.time = "t_0")
-
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint2_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2.pred, bty = "l", ylim = c(0, 1), legend.loc = 'bottomleft',
-     ylab = "fitness", xlab = "days", lwd = 2)
-dev.off()
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint3_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2, which = "survival", lwd = 2, legend.loc = 'bottomleft', bty = "l",
-     xlab = "days", ylab = "event-free probability",xlim=c(0,1000))
-dev.off()},
-error = function(cond_) {
-            message(conditionMessage(cond_))
-        }
-)
-
-```
-![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_cvd.png){#fig-joint1_cvd fig-align="center" width="80%"}
-
-![Class-specific mean predicted fitness trajectory](../../outputs/joint2_cvd.png){#fig-joint2_cvd fig-align="center" width="80%"}
-
-![Class-specific survival functions](../../outputs/joint3_cvd.png){#fig-joint3_cvd fig-align="center" width="80%"}
-Moreover a Cox survival model with two time windows it is implemented below:
-
-```{r}
-#| label: 2 window cox (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-df <- df %>% 
-  filter(t_max > 360) %>% 
-  filter(t_max==t_1) %>% 
-  select(ID,fitness,status2,age,age_,sex,copayment,charlson,ID2,t_min,t_max)
-df$status3 <- ifelse(df$t_max<=720 & df$status2==1, 1, 0)
-df$t_max <- pmin(df$t_max-360,360)
-
-cox.model <- coxph(Surv(t_max, status3) ~ age + sex + fitness + charlson,
-               data=df)
-
-summary(cox.model)
-
-```
-
-### Heart Failure
-
-#### Treatments' event log creation and description(
-
-```{python}
-#| label: condition variable in python (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-cond = 'hf'
-```
-
-```{r}
-#| label: condition variable in r (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-cond <- 'hf'
-```
-
-```{python}
-#| label: Preprocessing of raw event log (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-con = duckdb.connect(db_path)
-if notnan_p>0.98:
-  logging.info("Generate event log of %s patients from prescriptions", cond)
-  evlog_creation_by_prescriptions(
-    con=con,
-    cond=cond,
-    code2drug_info_path='./diabetes_drugs.csv')
-else:
-  logging.info("Generate event log of %s patients from dispensations", cond)
-  evlog_creation_by_dispensations(
-    con=con,
-    cond=cond,
-    code2drug_info_path='./diabetes_drugs.csv',
-    nac_path='./Nomenclator_de_Facturacion.csv')
-```
-
-```{python}
-#| label: event log (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Filter event log of %s patients", cond)
-df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
-
-df_, id2trace = df2dict(df_)
-con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond} AS SELECT * FROM df_")
-patients = sorted(id2trace.keys())
-traces = list(id2trace[id] for id in patients)     
-con.close()
-```
-
-```{r}
-#| label: Loading event log in R (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-log_info('Load {cond} eventlog')
-con <- dbConnect(duckdb(), dbdir = db_path)
-evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
-dbDisconnect(con, shutdown = TRUE)
-```
-
-Choosing patients with heart failure and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
-
-```{r}
-#| label: proces map and activity presence (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-log_info('Make {cond} process map')
-make_process_map(evLog,1,gsub("src/analysis-scripts/","",
-                              here("outputs",sprintf("evlog_pm_1_%s.png",
-                                                     cond))))
-make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
-                                here("outputs",sprintf("evlog_pm_02_%s.png",
-                                                     cond))))
-log_info('Make activity presence of {cond} patients')
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("activity_presence_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(evLog %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
-dev.off()
-```
-
-
-![Event log's process map with all traces](../../outputs/evlog_pm_1_hf.png){#fig-pm1_hf fig-align="center" width="80%"}
-
-
-![Event log's process map with most frequent traces covering 20%](../../outputs/evlog_pm_02_hf.png){#fig-pm02_hf fig-align="center" width="80%"}
-
-
-![Percentage of patients traces an activity is present](../../outputs/activity_presence_hf.png){#fig-activity_presence_hf fig-align="center" width="80%"}
-
-##### Healthcare trayectories description
-
-
-```{r}
-#| label: proces map healthcare (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-log_info('Make {cond} healtcare analysis')
-con <- dbConnect(duckdb(), dbdir = db_path)
-evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
-                                         cond,
-                                         "' AND Event!='APA'"))
-make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
-                              here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
-                                                     cond))))
-make_process_map_healthcare(evLog_healthcare,0.2,gsub("src/analysis-scripts/","",
-                              here("outputs",sprintf("evlog_healthcare_pm_02_%s.png",
-                                                     cond))))
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("healthcare_activity_presence_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(evLog_healthcare %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
-dev.off()
-
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("healthcare_dottedchart_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(evLog_healthcare %>% 
-    dotted_chart(x = "absolute"))
-dev.off()
-rm(evLog_healthcare)
-dbDisconnect(con, shutdown = TRUE)
-
-```
-
-![Healthcare event log's process map with all traces](../../outputs/evlog_healthcare_pm_1_hf.png){#fig-pm1_healthcare_hf fig-align="center" width="80%"}
-
-![Healthcare event log's process map with most frequent traces covering 20%](../../outputs/evlog_healthcare_pm_02_hf.png){#fig-pm02_healthcare_hf fig-align="center" width="80%"}
-
-![Percentage of patients traces a visit is present](../../outputs/healthcare_activity_presence_hf.png){#fig-healthcare_activity_presence_hf fig-align="center" width="80%"}
-
-![Visits' dotted chart](../../outputs/healthcare_dottedchart_hf.png){#fig-healthcare_dottedchart_hf fig-align="center" width="80%"}
-
-
-#### Clustering traces
-
-```{python}
-#| label: dm calculation (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make distance matrix of %s patients", cond)
-measure_f = Levenshtein.normalized_similarity
-dm = calculate_dm_ED(traces,measure_f)
-```
-
-```{python}
-#| label: dendograms (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| output: FALSE
-logging.info("Make dendogram of %s patients", cond)
-dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
-```
-
-```{python}
-#| label: kelbow (hf)
-#| eval: TRUE
-#| echo: FALSE
-if len(traces)>25:
-  n_clusters = kelbow(dm,cond,elbow_metric='distortion',locate_elbow=True)
-#kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
-else:
-  n_clusters=1
-```
-
-![Distance matrix's dendogram](../../outputs/dendogram_hf.png){#fig-dendogram_hf fig-align="center" width="80%"}
-
-![Distance matrix's elbow method's graphic ](../../outputs/distortion_hf.png){#fig-kelbow_hf fig-align="center" width="80%"}
-
-```{python}
-#| label: clustering (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make clustering of %s patients", cond)
-con = duckdb.connect(db_path)
-df_ = clust(n_clusters,dm,df_,id2trace,patients)
-con.sql(f"CREATE OR REPLACE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
-con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust AS SELECT \
-  eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
-  LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
-con.sql(f"CREATE OR REPLACE VIEW cluster_histogram_{cond} AS\
-  SELECT cluster, COUNT(DISTINCT ID) AS freq \
-  FROM eventlog_{cond}_clust GROUP BY cluster")
-con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
-   SELECT * FROM eventlog_{cond}_clust \
-  WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
-  WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
-  FROM cluster_histogram_{cond}))")
-
-```
-
-```{python}
-#| label: trace explorer (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make trace explorer figures of %s patients", cond)
-col_dic = trace_explorer(con,cond,color_dict=col_dic)
-con.close()
-```
-
-```{r}
-#| label: process explorer (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-log_info('Make process maps figures of different clusters of {cond} patients')
-con <- dbConnect(duckdb(), dbdir = db_path)
-process_map_by_cluster(
-  load_log(con,
-           paste0("SELECT * FROM eventlog_",cond,"_clust_filtered")),
-  0.25,cond)
-dbDisconnect(con, shutdown = TRUE)
-```
-
-::: {#fig-cluster0_hf .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/t_cluster_hf_0.png){#fig-traceexplorer0_hf}
-
-![Process map covering 25% most frequent traces](../../outputs/pm_cluster_hf_0.png){#fig-processmap0_hf}
-
-Cluster 0
-:::
-
-#### Conformace checking
-
-```{python}
-#| label: fitness boxplot (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make conformance checking analysis of %s patients", cond)
-con = duckdb.connect(db_path)
-treatments_clusters_boxplot(con,cond,
-            pn_file='./PN_%s.pnml' % cond,
-            pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
-```
-
-![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_hf.png){#fig-fitness_by_cluster_hf fig-align="center" width="80%"}
-
-
-#### Prediction Models
-
-In the next example, we choose fitness, age, sex and copayment to try to predict a hospitalization with a time dependet Cox model, and the summary of it is:
-
-```{python}
-#| label: create fitness by period table (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Create  %s patients prediction models", cond)
-con = duckdb.connect(db_path)
-id2treat_fitness_by_interval(con, cond,
-            pn_file='./PN_%s.pnml' % cond,
-            ini_place='place100',fin_place='place111',
-            fixed_period_time=90)
-con.close()
-```
-
-```{r}
-#| label: Time dependent COX (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-con <- dbConnect(duckdb(), dbdir = db_path)
-
-df <- dbGetQuery(con, paste0("SELECT p2f.ID,p2f.t_0,p2f.t_1,p2f.fitness,\
-                             p2f.status,p2f.status2,\
-                             piv.age_dx as age,\
-                             CASE WHEN age<50 THEN '[0,50)'\
-                             WHEN age>=50 AND age<60 THEN '[50,60)' \
-                             WHEN age>=60 AND age<70 THEN '[60,70)' \
-                             WHEN age>=70 AND age<80 THEN '[70,80)' \
-                             WHEN age>=80 AND age<90 THEN '[80,90)' \
-                             ELSE '[90,+)' END AS age_,\
-                             piv.sex,piv.copayment,piv.charlson \
-                             FROM period2fitness_",cond," p2f \
-                             LEFT JOIN patient_incidents_view_ch piv \
-                             ON p2f.ID=piv.patient_id"))
-dbDisconnect(con, shutdown = TRUE)
-
-df$sex <- as.factor(ifelse(df$sex == 0, 'Male', 'Female'))
-df$age_ <- as.factor(df$age_)
-df$ID2 <- as.numeric(as.factor(df$ID))
-df$t_max <- ave(df$t_1, df$ID2, FUN = max)
-df$t_min <- ave(df$t_0, df$ID2, FUN = min)
-
-
-model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
-               data=df)
-survfit(Surv(t_min, t_max, status2) ~ age_, data=df %>%
-  select(ID2,t_min,t_max,status2,age_) %>% unique()) %>%
-  autoplot()
-
-summary(model)
-```
-
-
-Using same predictive variables a joint latent class model of two classes is made:
-
-```{r}
-#| label: JLCM model (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-
-### 1 latent class
-
-mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
-                 survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
-                 hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
-                 B=c(1,1,0,0,0,0,0,1,0,1,1))
-### 2 latent class
-tryCatch(
-{mj2 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
-                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
-                            random=~t_0,subject="ID2",
-                            survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
-                            hazard="Weibull",hazardtype="PH",
-                            ng=2,data=df, verbose=FALSE),cl=4)
-
-summary(mj2)
-
-postprob(mj2)
-
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint1_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2, which = "fit", var.time = "t_0", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
-     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,1.0),xlim=c(0,1000))
-dev.off()
- 
-d1 <- data.frame(t_0=seq(1,1000,length.out=100))
-data.new <-data.frame(d1,age=65,sex='Female',charlson=1)
-mj2.pred <- predictY(mj2, data.new , var.time = "t_0")
-
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint2_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2.pred, bty = "l", ylim = c(0, 1), legend.loc = 'bottomleft',
-     ylab = "fitness", xlab = "days", lwd = 2)
-dev.off()
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint3_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2, which = "survival", lwd = 2, legend.loc = 'bottomleft', bty = "l",
-     xlab = "days", ylab = "event-free probability",xlim=c(0,1000))
-dev.off()},
-error = function(cond_) {
-            message(conditionMessage(cond_))
-        }
-)
-
-```
-![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_hf.png){#fig-joint1_hf fig-align="center" width="80%"}
-
-![Class-specific mean predicted fitness trajectory](../../outputs/joint2_hf.png){#fig-joint2_hf fig-align="center" width="80%"}
-
-![Class-specific survival functions](../../outputs/joint3_hf.png){#fig-joint3_hf fig-align="center" width="80%"}
-Moreover a Cox survival model with two time windows it is implemented below:
-
-```{r}
-#| label: 2 window cox (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-df <- df %>% 
-  filter(t_max > 360) %>% 
-  filter(t_max==t_1) %>% 
-  select(ID,fitness,status2,age,age_,sex,copayment,charlson,ID2,t_min,t_max)
-df$status3 <- ifelse(df$t_max<=720 & df$status2==1, 1, 0)
-df$t_max <- pmin(df$t_max-360,360)
-
-cox.model <- coxph(Surv(t_max, status3) ~ age + sex + fitness + charlson,
-               data=df)
-
-summary(cox.model)
-
-```
-
-### Chronic kidney disease
-
-#### Treatments' event log creation and description(
-
-```{python}
-#| label: condition variable in python (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-cond = 'ckd'
-```
-
-```{r}
-#| label: condition variable in r (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-cond <- 'ckd'
-```
-
-```{python}
-#| label: Preprocessing of raw event log (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-con = duckdb.connect(db_path)
-if notnan_p>0.98:
-  logging.info("Generate event log of %s patients from prescriptions", cond)
-  evlog_creation_by_prescriptions(
-    con=con,
-    cond=cond,
-    code2drug_info_path='./diabetes_drugs.csv')
-else:
-  logging.info("Generate event log of %s patients from dispensations", cond)
-  evlog_creation_by_dispensations(
-    con=con,
-    cond=cond,
-    code2drug_info_path='./diabetes_drugs.csv',
-    nac_path='./Nomenclator_de_Facturacion.csv')
-```
-
-```{python}
-#| label: event log (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Filter event log of %s patients", cond)
-df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
-
-df_, id2trace = df2dict(df_)
-con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond} AS SELECT * FROM df_")
-patients = sorted(id2trace.keys())
-traces = list(id2trace[id] for id in patients)     
-con.close()
-```
-
-```{r}
-#| label: Loading event log in R (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-log_info('Load {cond} eventlog')
-con <- dbConnect(duckdb(), dbdir = db_path)
-evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
-dbDisconnect(con, shutdown = TRUE)
-```
-
-Choosing patients with chronic kidney disease and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
-
-```{r}
-#| label: proces map and activity presence (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-log_info('Make {cond} process map')
-make_process_map(evLog,1,gsub("src/analysis-scripts/","",
-                              here("outputs",sprintf("evlog_pm_1_%s.png",
-                                                     cond))))
-make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
-                                here("outputs",sprintf("evlog_pm_02_%s.png",
-                                                     cond))))
-log_info('Make activity presence of {cond} patients')
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("activity_presence_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(evLog %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
-dev.off()
-
-```
-
-![Event log's process map with all traces](../../outputs/evlog_pm_1_ckd.png){#fig-pm1_ckd fig-align="center" width="80%"}
-
-
-![Event log's process map with most frequent traces covering 20%](../../outputs/evlog_pm_02_ckd.png){#fig-pm02_ckd fig-align="center" width="80%"}
-
-
-![Percentage of patients traces an activity is present](../../outputs/activity_presence_ckd.png){#fig-activity_presence_ckd fig-align="center" width="80%"}
-
-##### Healthcare trayectories description
-
-
-```{r}
-#| label: proces map healthcare (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-log_info('Make {cond} healtcare analysis')
-con <- dbConnect(duckdb(), dbdir = db_path)
-evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
-                                         cond,
-                                         "' AND Event!='APA'"))
-make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
-                              here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
-                                                     cond))))
-make_process_map_healthcare(evLog_healthcare,0.2,gsub("src/analysis-scripts/","",
-                              here("outputs",sprintf("evlog_healthcare_pm_02_%s.png",
-                                                     cond))))
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("healthcare_activity_presence_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(evLog_healthcare %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
-dev.off()
-
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("healthcare_dottedchart_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(evLog_healthcare %>% 
-    dotted_chart(x = "absolute"))
-dev.off()
-rm(evLog_healthcare)
-dbDisconnect(con, shutdown = TRUE)
-
-```
-
-![Healthcare event log's process map with all traces](../../outputs/evlog_healthcare_pm_1_ckd.png){#fig-pm1_healthcare_ckd fig-align="center" width="80%"}
-
-![Healthcare event log's process map with most frequent traces covering 20%](../../outputs/evlog_healthcare_pm_02_ckd.png){#fig-pm02_healthcare_ckd fig-align="center" width="80%"}
-
-![Percentage of patients traces a visit is present](../../outputs/healthcare_activity_presence_ckd.png){#fig-healthcare_activity_presence_ckd fig-align="center" width="80%"}
-
-![Visits' dotted chart](../../outputs/healthcare_dottedchart_ckd.png){#fig-healthcare_dottedchart_ckd fig-align="center" width="80%"}
-
-
-#### Clustering traces
-
-```{python}
-#| label: dm calculation (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make distance matrix of %s patients", cond)
-measure_f = Levenshtein.normalized_similarity
-dm = calculate_dm_ED(traces,measure_f)
-```
-
-```{python}
-#| label: dendograms (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| output: FALSE
-logging.info("Make dendogram of %s patients", cond)
-dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
-```
-
-```{python}
-#| label: kelbow (ckd)
-#| eval: TRUE
-#| echo: FALSE
-if len(traces)>25:
-  n_clusters = kelbow(dm,cond,elbow_metric='distortion',locate_elbow=True)
-#kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
-else:
-  n_clusters=1
-```
-
-![Distance matrix's dendogram](../../outputs/dendogram_ckd.png){#fig-dendogram_ckd fig-align="center" width="80%"}
-
-![Distance matrix's elbow method's graphic ](../../outputs/distortion_ckd.png){#fig-kelbow_ckd fig-align="center" width="80%"}
-
-```{python}
-#| label: clustering (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make clustering of %s patients", cond)
-con = duckdb.connect(db_path)
-df_ = clust(n_clusters,dm,df_,id2trace,patients)
-con.sql(f"CREATE OR REPLACE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
-con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust AS SELECT \
-  eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
-  LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
-con.sql(f"CREATE OR REPLACE VIEW cluster_histogram_{cond} AS\
-  SELECT cluster, COUNT(DISTINCT ID) AS freq \
-  FROM eventlog_{cond}_clust GROUP BY cluster")
-con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
-   SELECT * FROM eventlog_{cond}_clust \
-  WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
-  WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
-  FROM cluster_histogram_{cond}))")
-
-```
-
-```{python}
-#| label: trace explorer (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make trace explorer figures of %s patients", cond)
-col_dic = trace_explorer(con,cond,color_dict=col_dic)
-con.close()
-```
-
-```{r}
-#| label: process explorer (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-log_info('Make process maps figures of different clusters of {cond} patients')
-con <- dbConnect(duckdb(), dbdir = db_path)
-process_map_by_cluster(
-  load_log(con,
-           paste0("SELECT * FROM eventlog_",cond,"_clust_filtered")),
-  0.25,cond)
-dbDisconnect(con, shutdown = TRUE)
-```
-
-::: {#fig-cluster0_ckd .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/t_cluster_ckd_0.png){#fig-traceexplorer0_ckd}
-
-![Process map covering 25% most frequent traces](../../outputs/pm_cluster_ckd_0.png){#fig-processmap0_ckd}
-
-Cluster 0
-:::
-
-#### Conformace checking
-
-```{python}
-#| label: fitness boxplot (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make conformance checking analysis of %s patients", cond)
-con = duckdb.connect(db_path)
-treatments_clusters_boxplot(con,cond,
-            pn_file='./PN_%s.pnml' % cond,
-            pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
-```
-
-![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ckd.png){#fig-fitness_by_cluster_ckd fig-align="center" width="80%"}
-
-
-#### Prediction Models
-
-In the next example, we choose fitness, age, sex and copayment to try to predict a hospitalization with a time dependet Cox model, and the summary of it is:
-
-```{python}
-#| label: create fitness by period table (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Create  %s patients prediction models", cond)
-con = duckdb.connect(db_path)
-id2treat_fitness_by_interval(con, cond,
-            pn_file='./PN_%s.pnml' % cond,
-            ini_place='place100',fin_place='place111',
-            fixed_period_time=90)
-con.close()
-```
-
-```{r}
-#| label: Time dependent COX (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-con <- dbConnect(duckdb(), dbdir = db_path)
-
-df <- dbGetQuery(con, paste0("SELECT p2f.ID,p2f.t_0,p2f.t_1,p2f.fitness,\
-                             p2f.status,p2f.status2,\
-                             piv.age_dx as age,\
-                             CASE WHEN age<50 THEN '[0,50)'\
-                             WHEN age>=50 AND age<60 THEN '[50,60)' \
-                             WHEN age>=60 AND age<70 THEN '[60,70)' \
-                             WHEN age>=70 AND age<80 THEN '[70,80)' \
-                             WHEN age>=80 AND age<90 THEN '[80,90)' \
-                             ELSE '[90,+)' END AS age_,\
-                             piv.sex,piv.copayment,piv.charlson \
-                             FROM period2fitness_",cond," p2f \
-                             LEFT JOIN patient_incidents_view_ch piv \
-                             ON p2f.ID=piv.patient_id"))
-dbDisconnect(con, shutdown = TRUE)
-
-df$sex <- as.factor(ifelse(df$sex == 0, 'Male', 'Female'))
-df$age_ <- as.factor(df$age_)
-df$ID2 <- as.numeric(as.factor(df$ID))
-df$t_max <- ave(df$t_1, df$ID2, FUN = max)
-df$t_min <- ave(df$t_0, df$ID2, FUN = min)
-
-
-model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
-               data=df)
-survfit(Surv(t_min, t_max, status2) ~ age_, data=df %>%
-  select(ID2,t_min,t_max,status2,age_) %>% unique()) %>%
-  autoplot()
-
-summary(model)
-```
-
-
-Using same predictive variables a joint latent class model of two classes is made:
-
-```{r}
-#| label: JLCM model (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-
-### 1 latent class
-
-mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
-                 survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
-                 hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
-                 B=c(1,1,0,0,0,0,0,1,0,1,1))
-### 2 latent class
-tryCatch(
-{mj2 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
-                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
-                            random=~t_0,subject="ID2",
-                            survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
-                            hazard="Weibull",hazardtype="PH",
-                            ng=2,data=df, verbose=FALSE),cl=4)
-
-summary(mj2)
-
-postprob(mj2)
-
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint1_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2, which = "fit", var.time = "t_0", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
-     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,1.0),xlim=c(0,1000))
-dev.off()
- 
-d1 <- data.frame(t_0=seq(1,1000,length.out=100))
-data.new <-data.frame(d1,age=65,sex='Female',charlson=1)
-mj2.pred <- predictY(mj2, data.new , var.time = "t_0")
-
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint2_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2.pred, bty = "l", ylim = c(0, 1), legend.loc = 'bottomleft',
-     ylab = "fitness", xlab = "days", lwd = 2)
-dev.off()
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint3_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2, which = "survival", lwd = 2, legend.loc = 'bottomleft', bty = "l",
-     xlab = "days", ylab = "event-free probability",xlim=c(0,1000))
-dev.off()},
-error = function(cond_) {
-            message(conditionMessage(cond_))
-        }
-)
-
-```
-![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_ckd.png){#fig-joint1_ckd fig-align="center" width="80%"}
-
-![Class-specific mean predicted fitness trajectory](../../outputs/joint2_ckd.png){#fig-joint2_ckd fig-align="center" width="80%"}
-
-![Class-specific survival functions](../../outputs/joint3_ckd.png){#fig-joint3_ckd fig-align="center" width="80%"}
-
-Moreover a Cox survival model with two time windows it is implemented below:
-
-```{r}
-#| label: 2 window cox (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-df <- df %>% 
-  filter(t_max > 360) %>% 
-  filter(t_max==t_1) %>% 
-  select(ID,fitness,status2,age,age_,sex,copayment,charlson,ID2,t_min,t_max)
-df$status3 <- ifelse(df$t_max<=720 & df$status2==1, 1, 0)
-df$t_max <- pmin(df$t_max-360,360)
-
-cox.model <- coxph(Surv(t_max, status3) ~ age + sex + fitness + charlson,
-               data=df)
-
-summary(cox.model)
-
-```
-
-### Frailty
-
-#### Treatments' event log creation and description(
-
-```{python}
-#| label: condition variable in python (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-cond = 'f'
-```
-
-```{r}
-#| label: condition variable in r (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-cond <- 'f'
-```
-
-```{python}
-#| label: Preprocessing of raw event log (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-con = duckdb.connect(db_path)
-if notnan_p>0.98:
-  logging.info("Generate event log of %s patients from prescriptions", cond)
-  evlog_creation_by_prescriptions(
-    con=con,
-    cond=cond,
-    code2drug_info_path='./diabetes_drugs.csv')
-else:
-  logging.info("Generate event log of %s patients from dispensations", cond)
-  evlog_creation_by_dispensations(
-    con=con,
-    cond=cond,
-    code2drug_info_path='./diabetes_drugs.csv',
-    nac_path='./Nomenclator_de_Facturacion.csv')
-```
-
-```{python}
-#| label: event log (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Filter event log of %s patients", cond)
-df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
-
-df_, id2trace = df2dict(df_)
-con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond} AS SELECT * FROM df_")
-patients = sorted(id2trace.keys())
-traces = list(id2trace[id] for id in patients)     
-con.close()
-```
-
-```{r}
-#| label: Loading event log in R (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-log_info('Load {cond} eventlog')
-con <- dbConnect(duckdb(), dbdir = db_path)
-evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
-dbDisconnect(con, shutdown = TRUE)
-```
-
-Choosing patients with frailty and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
-
-```{r}
-#| label: proces map and activity presence (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-log_info('Make {cond} process map')
-make_process_map(evLog,1,gsub("src/analysis-scripts/","",
-                              here("outputs",sprintf("evlog_pm_1_%s.png",
-                                                     cond))))
-make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
-                                here("outputs",sprintf("evlog_pm_02_%s.png",
-                                                     cond))))
-log_info('Make activity presence of {cond} patients')
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("activity_presence_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(evLog %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
-dev.off()
-
-```
-
-![Event log's process map with all traces](../../outputs/evlog_pm_1_f.png){#fig-pm1_f fig-align="center" width="80%"}
-
-
-![Event log's process map with most frequent traces covering 20%](../../outputs/evlog_pm_02_f.png){#fig-pm02_f fig-align="center" width="80%"}
-
-
-![Percentage of patients traces an activity is present](../../outputs/activity_presence_f.png){#fig-activity_presence_f fig-align="center" width="80%"}
-
-##### Healthcare trayectories description
-
-
-```{r}
-#| label: proces map healthcare (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-log_info('Make {cond} healtcare analysis')
-con <- dbConnect(duckdb(), dbdir = db_path)
-evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
-                                         cond,
-                                         "' AND Event!='APA'"))
-make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
-                              here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
-                                                     cond))))
-make_process_map_healthcare(evLog_healthcare,0.2,gsub("src/analysis-scripts/","",
-                              here("outputs",sprintf("evlog_healthcare_pm_02_%s.png",
-                                                     cond))))
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("healthcare_activity_presence_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(evLog_healthcare %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
-dev.off()
-
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("healthcare_dottedchart_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(evLog_healthcare %>% 
-    dotted_chart(x = "absolute"))
-dev.off()
-rm(evLog_healthcare)
-dbDisconnect(con, shutdown = TRUE)
-
-```
-
-![Healthcare event log's process map with all traces](../../outputs/evlog_healthcare_pm_1_f.png){#fig-pm1_healthcare_f fig-align="center" width="80%"}
-
-![Healthcare event log's process map with most frequent traces covering 20%](../../outputs/evlog_healthcare_pm_02_f.png){#fig-pm02_healthcare_f fig-align="center" width="80%"}
-
-![Percentage of patients traces a visit is present](../../outputs/healthcare_activity_presence_f.png){#fig-healthcare_activity_presence_f fig-align="center" width="80%"}
-
-![Visits' dotted chart](../../outputs/healthcare_dottedchart_f.png){#fig-healthcare_dottedchart_f fig-align="center" width="80%"}
-
-
-#### Clustering traces
-
-```{python}
-#| label: dm calculation (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make distance matrix of %s patients", cond)
-measure_f = Levenshtein.normalized_similarity
-dm = calculate_dm_ED(traces,measure_f)
-```
-
-```{python}
-#| label: dendograms (f)
-#| eval: TRUE
-#| echo: FALSE
-#| output: FALSE
-logging.info("Make dendogram of %s patients", cond)
-dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
-```
-
-```{python}
-#| label: kelbow (f)
-#| eval: TRUE
-#| echo: FALSE
-if len(traces)>25:
-  n_clusters = kelbow(dm,cond,elbow_metric='distortion',locate_elbow=True)
-#kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
-else:
-  n_clusters=1
-```
-
-![Distance matrix's dendogram](../../outputs/dendogram_f.png){#fig-dendogram fig-align="center" width="80%"}
-
-![Distance matrix's elbow method's graphic ](../../outputs/distortion_f.png){#fig-kelbow_f fig-align="center" width="80%"}
-
-```{python}
-#| label: clustering (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make clustering of %s patients", cond)
-con = duckdb.connect(db_path)
-df_ = clust(n_clusters,dm,df_,id2trace,patients)
-con.sql(f"CREATE OR REPLACE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
-con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust AS SELECT \
-  eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
-  LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
-con.sql(f"CREATE OR REPLACE VIEW cluster_histogram_{cond} AS\
-  SELECT cluster, COUNT(DISTINCT ID) AS freq \
-  FROM eventlog_{cond}_clust GROUP BY cluster")
-con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
-   SELECT * FROM eventlog_{cond}_clust \
-  WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
-  WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
-  FROM cluster_histogram_{cond}))")
-
-```
-
-```{python}
-#| label: trace explorer (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make trace explorer figures of %s patients", cond)
-col_dic = trace_explorer(con,cond,color_dict=col_dic)
-con.close()
-```
-
-```{r}
-#| label: process explorer (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-log_info('Make process maps figures of different clusters of {cond} patients')
-con <- dbConnect(duckdb(), dbdir = db_path)
-process_map_by_cluster(
-  load_log(con,
-           paste0("SELECT * FROM eventlog_",cond,"_clust_filtered")),
-  0.25,cond)
-dbDisconnect(con, shutdown = TRUE)
-```
-
-::: {#fig-cluster0_f .column-page layout-ncol="2"}
-![5 most frequent traces](../../outputs/t_cluster_f_0.png){#fig-traceexplorer0}
-
-![Process map covering 25% most frequent traces](../../outputs/pm_cluster_f_0.png){#fig-processmap0}
-
-Cluster 0
-:::
-
-#### Conformace checking
-
-```{python}
-#| label: fitness boxplot (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make conformance checking analysis of %s patients", cond)
-con = duckdb.connect(db_path)
-treatments_clusters_boxplot(con,cond,
-            pn_file='./PN_%s.pnml' % cond,
-            pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
-```
-
-![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_f.png){#fig-fitness_by_cluster_f fig-align="center" width="80%"}
-
-
-#### Prediction Models
-
-In the next example, we choose fitness, age, sex and copayment to try to predict a hospitalization with a time dependet Cox model, and the summary of it is:
-
-```{python}
-#| label: create fitness by period table (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Create  %s patients prediction models", cond)
-con = duckdb.connect(db_path)
-id2treat_fitness_by_interval(con, cond,
-            pn_file='./PN_%s.pnml' % cond,
-            ini_place='place100',fin_place='place111',
-            fixed_period_time=90)
-con.close()
-```
-
-```{r}
-#| label: Time dependent COX (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-con <- dbConnect(duckdb(), dbdir = db_path)
-
-df <- dbGetQuery(con, paste0("SELECT p2f.ID,p2f.t_0,p2f.t_1,p2f.fitness,\
-                             p2f.status,p2f.status2,\
-                             piv.age_dx as age,\
-                             CASE WHEN age<50 THEN '[0,50)'\
-                             WHEN age>=50 AND age<60 THEN '[50,60)' \
-                             WHEN age>=60 AND age<70 THEN '[60,70)' \
-                             WHEN age>=70 AND age<80 THEN '[70,80)' \
-                             WHEN age>=80 AND age<90 THEN '[80,90)' \
-                             ELSE '[90,+)' END AS age_,\
-                             piv.sex,piv.copayment,piv.charlson \
-                             FROM period2fitness_",cond," p2f \
-                             LEFT JOIN patient_incidents_view_ch piv \
-                             ON p2f.ID=piv.patient_id"))
-dbDisconnect(con, shutdown = TRUE)
-
-df$sex <- as.factor(ifelse(df$sex == 0, 'Male', 'Female'))
-df$age_ <- as.factor(df$age_)
-df$ID2 <- as.numeric(as.factor(df$ID))
-df$t_max <- ave(df$t_1, df$ID2, FUN = max)
-df$t_min <- ave(df$t_0, df$ID2, FUN = min)
-
-
-model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
-               data=df)
-survfit(Surv(t_min, t_max, status2) ~ age_, data=df %>%
-  select(ID2,t_min,t_max,status2,age_) %>% unique()) %>%
-  autoplot()
-
-summary(model)
-```
-
-
-Using same predictive variables a joint latent class model of two classes is made:
-
-```{r}
-#| label: JLCM model (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-
-### 1 latent class
-
-mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
-                 survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
-                 hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
-                 B=c(1,1,0,0,0,0,0,1,0,1,1))
-### 2 latent class
-tryCatch(
-{mj2 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
-                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
-                            random=~t_0,subject="ID2",
-                            survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
-                            hazard="Weibull",hazardtype="PH",
-                            ng=2,data=df, verbose=FALSE),cl=4)
-
-summary(mj2)
-
-postprob(mj2)
-
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint1_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2, which = "fit", var.time = "t_0", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
-     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,1.0),xlim=c(0,1000))
-dev.off()
- 
-d1 <- data.frame(t_0=seq(1,1000,length.out=100))
-data.new <-data.frame(d1,age=65,sex='Female',charlson=1)
-mj2.pred <- predictY(mj2, data.new , var.time = "t_0")
-
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint2_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2.pred, bty = "l", ylim = c(0, 1), legend.loc = 'bottomleft',
-     ylab = "fitness", xlab = "days", lwd = 2)
-dev.off()
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint3_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2, which = "survival", lwd = 2, legend.loc = 'bottomleft', bty = "l",
-     xlab = "days", ylab = "event-free probability",xlim=c(0,1000))
-dev.off()},
-error = function(cond_) {
-            message(conditionMessage(cond_))
-        }
-)
-
-```
-![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_f.png){#fig-joint1_f fig-align="center" width="80%"}
-
-![Class-specific mean predicted fitness trajectory](../../outputs/joint2_f.png){#fig-joint2_f fig-align="center" width="80%"}
-
-![Class-specific survival functions](../../outputs/joint3_f.png){#fig-joint3_f fig-align="center" width="80%"}
-Moreover a Cox survival model with two time windows it is implemented below:
-
-```{r}
-#| label: 2 window cox (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: TRUE
-df <- df %>% 
-  filter(t_max > 360) %>% 
-  filter(t_max==t_1) %>% 
-  select(ID,fitness,status2,age,age_,sex,copayment,charlson,ID2,t_min,t_max)
-df$status3 <- ifelse(df$t_max<=720 & df$status2==1, 1, 0)
-df$t_max <- pmin(df$t_max-360,360)
-
-cox.model <- coxph(Surv(t_max, status3) ~ age + sex + fitness + charlson,
-               data=df)
-
-summary(cox.model)
+summary(cox2w_else)
 
 ```
 
@@ -4862,7 +3230,7 @@ dev.off()
 
 ![Percentage of patients traces an activity is present](../../outputs/activity_presence_ob.png){#fig-activity_presence_ob fig-align="center" width="80%"}
 
-##### Healthcare trayectories description
+#### Healthcare trayectories description
 
 
 ```{r}
@@ -4875,7 +3243,7 @@ log_info('Make {cond} healtcare analysis')
 con <- dbConnect(duckdb(), dbdir = db_path)
 evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
                                          cond,
-                                         "' AND Event!='APA'"))
+                                         "' AND Event NOT IN ('APA','URG')"))
 make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
                               here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
                                                      cond))))
@@ -4890,11 +3258,15 @@ plot(evLog_healthcare %>% activity_presence()  )+scale_y_continuous(limits = c(0
 dev.off()
 
 png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("healthcare_dottedchart_%s.png",
+                  here("outputs",sprintf("healthcare_process_matrix_%s.png",
                                          cond))),
     width = 600, height = 750, units = "px")
-plot(evLog_healthcare %>% 
-    dotted_chart(x = "absolute"))
+evLog_healthcare %>% 
+  anti_join(evLog_healthcare %>% 
+              activity_presence() %>% 
+              slice(11:100),
+            c('Event'='Event')) %>% 
+  process_matrix(frequency("relative-case")) %>% plot()
 dev.off()
 rm(evLog_healthcare)
 dbDisconnect(con, shutdown = TRUE)
@@ -4907,7 +3279,7 @@ dbDisconnect(con, shutdown = TRUE)
 
 ![Percentage of patients traces a visit is present](../../outputs/healthcare_activity_presence_ob.png){#fig-healthcare_activity_presence_ob fig-align="center" width="80%"}
 
-![Visits' dotted chart](../../outputs/healthcare_dottedchart_ob.png){#fig-healthcare_dottedchart_ob fig-align="center" width="80%"}
+![Visits' dotted chart](../../outputs/healthcare_process_matrix_ob.png){#fig-healthcare_process_matrix_ob fig-align="center" width="80%"}
 
 
 #### Clustering traces
@@ -5026,7 +3398,9 @@ treatments_clusters_boxplot(con,cond,
 
 #### Prediction Models
 
-In the next example, we choose fitness, age, sex and copayment to try to predict a hospitalization with a time dependet Cox model, and the summary of it is:
+##### Time Dependent Cox Model
+
+In the next example, we choose fitness, age, sex and copayment to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
 
 ```{python}
 #| label: create fitness by period table (ob)
@@ -5073,15 +3447,13 @@ df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 
 
-model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
+time_dep_ob <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
                data=df)
-survfit(Surv(t_min, t_max, status2) ~ age_, data=df %>%
-  select(ID2,t_min,t_max,status2,age_) %>% unique()) %>%
-  autoplot()
 
-summary(model)
+summary(time_dep_ob)
 ```
 
+##### Joint Latent Class Model
 
 Using same predictive variables a joint latent class model of two classes is made:
 
@@ -5093,60 +3465,63 @@ Using same predictive variables a joint latent class model of two classes is mad
 #| output: TRUE
 
 ### 1 latent class
+
 mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
-                 hazardtype="PH",ng=1,data=df, verbose=FALSE,                  
-                 B=c(1,1,0,0,0,0,0,1,0,1,1))
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
 ### 2 latent class
 tryCatch(
-{mj2 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
+{mj2ob <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
                             hazard="Weibull",hazardtype="PH",
                             ng=2,data=df, verbose=FALSE),cl=4)
 
-summary(mj2)
+summary(mj2ob)
 
-postprob(mj2)
+postprob(mj2ob)
 
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint1_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2, which = "fit", var.time = "t_0", marg = F, break.times = 10, bty = "l", legend.loc = 'bottomright',
-     ylab = "fitness", xlab = "Time in days",shades=TRUE,ylim = c(0.1,1.0),xlim=c(0,1000))
-dev.off()
- 
-d1 <- data.frame(t_0=seq(1,1000,length.out=100))
+df <- merge(df,mj2ob$pprob %>%
+              mutate(class = case_when(
+                class == 1 ~ "class 1",
+                class == 2 ~ "class 2")),
+              by='ID2',all.x = FALSE)
+d1 <- data.frame(t_0=seq(1,1100,length.out=100))
 data.new <-data.frame(d1,age=65,sex='Female',charlson=1)
-mj2.pred <- predictY(mj2, data.new , var.time = "t_0")
+mj2ob.pred <- predictY(mj2ob, data.new , var.time = "t_0")
 
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint2_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2.pred, bty = "l", ylim = c(0, 1), legend.loc = 'bottomleft',
-     ylab = "fitness", xlab = "days", lwd = 2)
-dev.off()
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs",sprintf("joint3_%s.png",
-                                         cond))),
-    width = 600, height = 750, units = "px")
-plot(mj2, which = "survival", lwd = 2, legend.loc = 'bottomleft', bty = "l",
-     xlab = "days", ylab = "event-free probability",xlim=c(0,1000))
-dev.off()},
+ggplot(data = df %>% filter(t_0<1100), aes(x = t_0, y = fitness, group = ID2))+ 
+  geom_line(colour='grey') + 
+  #stat_smooth(aes(group = 1),method = "lm",se=TRUE) +
+  stat_summary(aes(group = 1), geom = "point", fun = mean, shape = 16, size = 2) + 
+  geom_line(data=data.frame(mj2ob.pred$times,mj2ob.pred$pred,class='class 1'), aes(t_0, Ypred_class1,group = 1), color = "red", linetype = "dashed",size=1) +
+  geom_line(data=data.frame(mj2ob.pred$times,mj2ob.pred$pred,class='class 2'), aes(t_0, Ypred_class2,group = 1), color = "red", linetype = "dashed",size=1) +
+  facet_grid(. ~ class) +   
+  labs(x = "Days", y = "Fitness", col = "class") + 
+  guides(col = guide_legend(nrow = 3),)
+ggsave(filename=gsub("src/analysis-scripts/","",
+                      here("outputs",sprintf("joint1_%s.png",
+                                             cond))),
+        plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)
+
+
+survfit(Surv(t_min, t_max, status2) ~ class, data=df %>%
+          select(ID2,t_min,t_max,status2,class) %>% unique()) %>%
+  autoplot(xlab = "Day", ylab = "Survival probability")
+ggsave(filename=gsub("src/analysis-scripts/","",
+                      here("outputs",sprintf("joint2_%s.png",
+                                             cond))),
+        plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)},
 error = function(cond_) {
             message(conditionMessage(cond_))
         }
 )
 
 ```
-![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_ob.png){#fig-joint1_ob fig-align="center" width="80%"}
 
-![Class-specific mean predicted fitness trajectory](../../outputs/joint2_ob.png){#fig-joint2_ob fig-align="center" width="80%"}
 
-![Class-specific survival functions](../../outputs/joint3_ob.png){#fig-joint3_ob fig-align="center" width="80%"}
+##### Two time windows Cox Model
 
 Moreover a Cox survival model with two time windows it is implemented below:
 
@@ -5157,18 +3532,1700 @@ Moreover a Cox survival model with two time windows it is implemented below:
 #| warning: FALSE
 #| output: TRUE
 df <- df %>% 
-  filter(t_max > 360) %>% 
-  filter(t_max==t_1) %>% 
+  filter(t_max > 270) %>% 
+  filter(t_0==270) %>% 
   select(ID,fitness,status2,age,age_,sex,copayment,charlson,ID2,t_min,t_max)
-df$status3 <- ifelse(df$t_max<=720 & df$status2==1, 1, 0)
-df$t_max <- pmin(df$t_max-360,360)
+df$status3 <- ifelse(df$t_max<=630 & df$status2==1, 1, 0)
+df$t_max <- pmin(df$t_max-270,360)
 
-cox.model <- coxph(Surv(t_max, status3) ~ age + sex + fitness + charlson,
+cox2w_ob <- coxph(Surv(t_max, status3) ~ age + sex + fitness + charlson,
                data=df)
 
-summary(cox.model)
+summary(cox2w_ob)
+```
+
+### Frailty
+
+#### Treatments' event log creation and description(
+
+```{python}
+#| label: condition variable in python (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond = 'f'
+```
+
+```{r}
+#| label: condition variable in r (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond <- 'f'
+```
+
+```{python}
+#| label: Preprocessing of raw event log (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+con = duckdb.connect(db_path)
+if notnan_p>0.98:
+  logging.info("Generate event log of %s patients from prescriptions", cond)
+  evlog_creation_by_prescriptions(
+    con=con,
+    cond=cond,
+    code2drug_info_path='./diabetes_drugs.csv')
+else:
+  logging.info("Generate event log of %s patients from dispensations", cond)
+  evlog_creation_by_dispensations(
+    con=con,
+    cond=cond,
+    code2drug_info_path='./diabetes_drugs.csv',
+    nac_path='./Nomenclator_de_Facturacion.csv')
+```
+
+```{python}
+#| label: event log (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Filter event log of %s patients", cond)
+df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
+
+df_, id2trace = df2dict(df_)
+con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond} AS SELECT * FROM df_")
+patients = sorted(id2trace.keys())
+traces = list(id2trace[id] for id in patients)     
+con.close()
+```
+
+```{r}
+#| label: Loading event log in R (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+log_info('Load {cond} eventlog')
+con <- dbConnect(duckdb(), dbdir = db_path)
+evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
+dbDisconnect(con, shutdown = TRUE)
+```
+
+Choosing patients with frailty and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
+
+```{r}
+#| label: proces map and activity presence (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+log_info('Make {cond} process map')
+make_process_map(evLog,1,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_pm_1_%s.png",
+                                                     cond))))
+make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
+                                here("outputs",sprintf("evlog_pm_02_%s.png",
+                                                     cond))))
+log_info('Make activity presence of {cond} patients')
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("activity_presence_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+plot(evLog %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
+dev.off()
 
 ```
+
+![Event log's process map with all traces](../../outputs/evlog_pm_1_f.png){#fig-pm1_f fig-align="center" width="80%"}
+
+
+![Event log's process map with most frequent traces covering 20%](../../outputs/evlog_pm_02_f.png){#fig-pm02_f fig-align="center" width="80%"}
+
+
+![Percentage of patients traces an activity is present](../../outputs/activity_presence_f.png){#fig-activity_presence_f fig-align="center" width="80%"}
+
+#### Healthcare trayectories description
+
+
+```{r}
+#| label: proces map healthcare (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+log_info('Make {cond} healtcare analysis')
+con <- dbConnect(duckdb(), dbdir = db_path)
+evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
+                                         cond,
+                                         "' AND Event NOT IN ('APA','URG')"))
+make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
+                                                     cond))))
+make_process_map_healthcare(evLog_healthcare,0.2,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_healthcare_pm_02_%s.png",
+                                                     cond))))
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("healthcare_activity_presence_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+plot(evLog_healthcare %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
+dev.off()
+
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("healthcare_process_matrix_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+evLog_healthcare %>% 
+  anti_join(evLog_healthcare %>% 
+              activity_presence() %>% 
+              slice(11:100),
+            c('Event'='Event')) %>% 
+  process_matrix(frequency("relative-case")) %>% plot()
+dev.off()
+rm(evLog_healthcare)
+dbDisconnect(con, shutdown = TRUE)
+
+```
+
+![Healthcare event log's process map with all traces](../../outputs/evlog_healthcare_pm_1_f.png){#fig-pm1_healthcare_f fig-align="center" width="80%"}
+
+![Healthcare event log's process map with most frequent traces covering 20%](../../outputs/evlog_healthcare_pm_02_f.png){#fig-pm02_healthcare_f fig-align="center" width="80%"}
+
+![Percentage of patients traces a visit is present](../../outputs/healthcare_activity_presence_f.png){#fig-healthcare_activity_presence_f fig-align="center" width="80%"}
+
+![Visits' dotted chart](../../outputs/healthcare_process_matrix_f.png){#fig-healthcare_process_matrix_f fig-align="center" width="80%"}
+
+
+#### Clustering traces
+
+```{python}
+#| label: dm calculation (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make distance matrix of %s patients", cond)
+measure_f = Levenshtein.normalized_similarity
+dm = calculate_dm_ED(traces,measure_f)
+```
+
+```{python}
+#| label: dendograms (f)
+#| eval: TRUE
+#| echo: FALSE
+#| output: FALSE
+logging.info("Make dendogram of %s patients", cond)
+dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
+```
+
+```{python}
+#| label: kelbow (f)
+#| eval: TRUE
+#| echo: FALSE
+if len(traces)>25:
+  n_clusters = kelbow(dm,cond,elbow_metric='distortion',locate_elbow=True)
+#kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
+else:
+  n_clusters=1
+```
+
+![Distance matrix's dendogram](../../outputs/dendogram_f.png){#fig-dendogram fig-align="center" width="80%"}
+
+![Distance matrix's elbow method's graphic ](../../outputs/distortion_f.png){#fig-kelbow_f fig-align="center" width="80%"}
+
+```{python}
+#| label: clustering (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make clustering of %s patients", cond)
+con = duckdb.connect(db_path)
+df_ = clust(n_clusters,dm,df_,id2trace,patients)
+con.sql(f"CREATE OR REPLACE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust AS SELECT \
+  eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
+  LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
+con.sql(f"CREATE OR REPLACE VIEW cluster_histogram_{cond} AS\
+  SELECT cluster, COUNT(DISTINCT ID) AS freq \
+  FROM eventlog_{cond}_clust GROUP BY cluster")
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
+   SELECT * FROM eventlog_{cond}_clust \
+  WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
+  WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
+  FROM cluster_histogram_{cond}))")
+
+```
+
+```{python}
+#| label: trace explorer (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make trace explorer figures of %s patients", cond)
+col_dic = trace_explorer(con,cond,color_dict=col_dic)
+con.close()
+```
+
+```{r}
+#| label: process explorer (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+log_info('Make process maps figures of different clusters of {cond} patients')
+con <- dbConnect(duckdb(), dbdir = db_path)
+process_map_by_cluster(
+  load_log(con,
+           paste0("SELECT * FROM eventlog_",cond,"_clust_filtered")),
+  0.25,cond)
+dbDisconnect(con, shutdown = TRUE)
+```
+
+::: {#fig-cluster0_f .column-page layout-ncol="2"}
+![5 most frequent traces](../../outputs/t_cluster_f_0.png){#fig-traceexplorer0}
+
+![Process map covering 25% most frequent traces](../../outputs/pm_cluster_f_0.png){#fig-processmap0}
+
+Cluster 0
+:::
+
+#### Conformace checking
+
+```{python}
+#| label: fitness boxplot (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make conformance checking analysis of %s patients", cond)
+con = duckdb.connect(db_path)
+treatments_clusters_boxplot(con,cond,
+            pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_f.png){#fig-fitness_by_cluster_f fig-align="center" width="80%"}
+
+
+#### Prediction Models
+
+##### Time Dependent Cox Model
+
+In the next example, we choose fitness, age, sex and copayment to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+
+```{python}
+#| label: create fitness by period table (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Create  %s patients prediction models", cond)
+con = duckdb.connect(db_path)
+id2treat_fitness_by_interval(con, cond,
+            pn_file='./PN_%s.pnml' % cond,
+            ini_place='place100',fin_place='place111',
+            fixed_period_time=90)
+con.close()
+```
+
+```{r}
+#| label: Time dependent COX (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+con <- dbConnect(duckdb(), dbdir = db_path)
+
+df <- dbGetQuery(con, paste0("SELECT p2f.ID,p2f.t_0,p2f.t_1,p2f.fitness,\
+                             p2f.status,p2f.status2,\
+                             piv.age_dx as age,\
+                             CASE WHEN age<50 THEN '[0,50)'\
+                             WHEN age>=50 AND age<60 THEN '[50,60)' \
+                             WHEN age>=60 AND age<70 THEN '[60,70)' \
+                             WHEN age>=70 AND age<80 THEN '[70,80)' \
+                             WHEN age>=80 AND age<90 THEN '[80,90)' \
+                             ELSE '[90,+)' END AS age_,\
+                             piv.sex,piv.copayment,piv.charlson \
+                             FROM period2fitness_",cond," p2f \
+                             LEFT JOIN patient_incidents_view_ch piv \
+                             ON p2f.ID=piv.patient_id"))
+dbDisconnect(con, shutdown = TRUE)
+
+df$sex <- as.factor(ifelse(df$sex == 0, 'Male', 'Female'))
+df$age_ <- as.factor(df$age_)
+df$ID2 <- as.numeric(as.factor(df$ID))
+df$t_max <- ave(df$t_1, df$ID2, FUN = max)
+df$t_min <- ave(df$t_0, df$ID2, FUN = min)
+
+
+time_dep_f <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
+               data=df)
+
+summary(time_dep_f)
+```
+
+##### Joint Latent Class Model
+
+Using same predictive variables a joint latent class model of two classes is made:
+
+```{r}
+#| label: JLCM model (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+
+### 1 latent class
+
+mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
+                 survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
+### 2 latent class
+tryCatch(
+{mj2f <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
+                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
+                            random=~t_0,subject="ID2",
+                            survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
+                            hazard="Weibull",hazardtype="PH",
+                            ng=2,data=df, verbose=FALSE),cl=4)
+
+summary(mj2f)
+
+postprob(mj2f)
+
+df <- merge(df,mj2f$pprob %>%
+              mutate(class = case_when(
+                class == 1 ~ "class 1",
+                class == 2 ~ "class 2")),
+              by='ID2',all.x = FALSE)
+d1 <- data.frame(t_0=seq(1,1100,length.out=100))
+data.new <-data.frame(d1,age=65,sex='Female',charlson=1)
+mj2f.pred <- predictY(mj2f, data.new , var.time = "t_0")
+
+ggplot(data = df %>% filter(t_0<1100), aes(x = t_0, y = fitness, group = ID2))+ 
+  geom_line(colour='grey') + 
+  #stat_smooth(aes(group = 1),method = "lm",se=TRUE) +
+  stat_summary(aes(group = 1), geom = "point", fun = mean, shape = 16, size = 2) + 
+  geom_line(data=data.frame(mj2f.pred$times,mj2f.pred$pred,class='class 1'), aes(t_0, Ypred_class1,group = 1), color = "red", linetype = "dashed",size=1) +
+  geom_line(data=data.frame(mj2f.pred$times,mj2f.pred$pred,class='class 2'), aes(t_0, Ypred_class2,group = 1), color = "red", linetype = "dashed",size=1) +
+  facet_grid(. ~ class) +   
+  labs(x = "Days", y = "Fitness", col = "class") + 
+  guides(col = guide_legend(nrow = 3),)
+ggsave(filename=gsub("src/analysis-scripts/","",
+                      here("outputs",sprintf("joint1_%s.png",
+                                             cond))),
+        plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)
+
+
+survfit(Surv(t_min, t_max, status2) ~ class, data=df %>%
+          select(ID2,t_min,t_max,status2,class) %>% unique()) %>%
+  autoplot(xlab = "Day", ylab = "Survival probability")
+ggsave(filename=gsub("src/analysis-scripts/","",
+                      here("outputs",sprintf("joint2_%s.png",
+                                             cond))),
+        plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)},
+error = function(cond_) {
+            message(conditionMessage(cond_))
+        }
+)
+
+```
+
+
+##### Two time windows Cox Model
+
+Moreover a Cox survival model with two time windows it is implemented below:
+
+```{r}
+#| label: 2 window cox (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+df <- df %>% 
+  filter(t_max > 270) %>% 
+  filter(t_0==270) %>% 
+  select(ID,fitness,status2,age,age_,sex,copayment,charlson,ID2,t_min,t_max)
+df$status3 <- ifelse(df$t_max<=630 & df$status2==1, 1, 0)
+df$t_max <- pmin(df$t_max-270,360)
+
+cox2w_f <- coxph(Surv(t_max, status3) ~ age + sex + fitness + charlson,
+               data=df)
+
+summary(cox2w_f)
+```
+
+### Chronic kidney disease
+
+#### Treatments' event log creation and description(
+
+```{python}
+#| label: condition variable in python (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond = 'ckd'
+```
+
+```{r}
+#| label: condition variable in r (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond <- 'ckd'
+```
+
+```{python}
+#| label: Preprocessing of raw event log (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+con = duckdb.connect(db_path)
+if notnan_p>0.98:
+  logging.info("Generate event log of %s patients from prescriptions", cond)
+  evlog_creation_by_prescriptions(
+    con=con,
+    cond=cond,
+    code2drug_info_path='./diabetes_drugs.csv')
+else:
+  logging.info("Generate event log of %s patients from dispensations", cond)
+  evlog_creation_by_dispensations(
+    con=con,
+    cond=cond,
+    code2drug_info_path='./diabetes_drugs.csv',
+    nac_path='./Nomenclator_de_Facturacion.csv')
+```
+
+```{python}
+#| label: event log (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Filter event log of %s patients", cond)
+df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
+
+df_, id2trace = df2dict(df_)
+con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond} AS SELECT * FROM df_")
+patients = sorted(id2trace.keys())
+traces = list(id2trace[id] for id in patients)     
+con.close()
+```
+
+```{r}
+#| label: Loading event log in R (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+log_info('Load {cond} eventlog')
+con <- dbConnect(duckdb(), dbdir = db_path)
+evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
+dbDisconnect(con, shutdown = TRUE)
+```
+
+Choosing patients with chronic kidney disease and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
+
+```{r}
+#| label: proces map and activity presence (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+log_info('Make {cond} process map')
+make_process_map(evLog,1,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_pm_1_%s.png",
+                                                     cond))))
+make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
+                                here("outputs",sprintf("evlog_pm_02_%s.png",
+                                                     cond))))
+log_info('Make activity presence of {cond} patients')
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("activity_presence_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+plot(evLog %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
+dev.off()
+
+```
+
+![Event log's process map with all traces](../../outputs/evlog_pm_1_ckd.png){#fig-pm1_ckd fig-align="center" width="80%"}
+
+
+![Event log's process map with most frequent traces covering 20%](../../outputs/evlog_pm_02_ckd.png){#fig-pm02_ckd fig-align="center" width="80%"}
+
+
+![Percentage of patients traces an activity is present](../../outputs/activity_presence_ckd.png){#fig-activity_presence_ckd fig-align="center" width="80%"}
+
+#### Healthcare trayectories description
+
+
+```{r}
+#| label: proces map healthcare (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+log_info('Make {cond} healtcare analysis')
+con <- dbConnect(duckdb(), dbdir = db_path)
+evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
+                                         cond,
+                                         "' AND Event NOT IN ('APA','URG')"))
+make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
+                                                     cond))))
+make_process_map_healthcare(evLog_healthcare,0.2,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_healthcare_pm_02_%s.png",
+                                                     cond))))
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("healthcare_activity_presence_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+plot(evLog_healthcare %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
+dev.off()
+
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("healthcare_process_matrix_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+evLog_healthcare %>% 
+  anti_join(evLog_healthcare %>% 
+              activity_presence() %>% 
+              slice(11:100),
+            c('Event'='Event')) %>% 
+  process_matrix(frequency("relative-case")) %>% plot()
+dev.off()
+rm(evLog_healthcare)
+dbDisconnect(con, shutdown = TRUE)
+
+```
+
+![Healthcare event log's process map with all traces](../../outputs/evlog_healthcare_pm_1_ckd.png){#fig-pm1_healthcare_ckd fig-align="center" width="80%"}
+
+![Healthcare event log's process map with most frequent traces covering 20%](../../outputs/evlog_healthcare_pm_02_ckd.png){#fig-pm02_healthcare_ckd fig-align="center" width="80%"}
+
+![Percentage of patients traces a visit is present](../../outputs/healthcare_activity_presence_ckd.png){#fig-healthcare_activity_presence_ckd fig-align="center" width="80%"}
+
+![Visits' dotted chart](../../outputs/healthcare_process_matrix_ckd.png){#fig-healthcare_process_matrix_ckd fig-align="center" width="80%"}
+
+
+#### Clustering traces
+
+```{python}
+#| label: dm calculation (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make distance matrix of %s patients", cond)
+measure_f = Levenshtein.normalized_similarity
+dm = calculate_dm_ED(traces,measure_f)
+```
+
+```{python}
+#| label: dendograms (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| output: FALSE
+logging.info("Make dendogram of %s patients", cond)
+dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
+```
+
+```{python}
+#| label: kelbow (ckd)
+#| eval: TRUE
+#| echo: FALSE
+if len(traces)>25:
+  n_clusters = kelbow(dm,cond,elbow_metric='distortion',locate_elbow=True)
+#kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
+else:
+  n_clusters=1
+```
+
+![Distance matrix's dendogram](../../outputs/dendogram_ckd.png){#fig-dendogram_ckd fig-align="center" width="80%"}
+
+![Distance matrix's elbow method's graphic ](../../outputs/distortion_ckd.png){#fig-kelbow_ckd fig-align="center" width="80%"}
+
+```{python}
+#| label: clustering (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make clustering of %s patients", cond)
+con = duckdb.connect(db_path)
+df_ = clust(n_clusters,dm,df_,id2trace,patients)
+con.sql(f"CREATE OR REPLACE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust AS SELECT \
+  eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
+  LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
+con.sql(f"CREATE OR REPLACE VIEW cluster_histogram_{cond} AS\
+  SELECT cluster, COUNT(DISTINCT ID) AS freq \
+  FROM eventlog_{cond}_clust GROUP BY cluster")
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
+   SELECT * FROM eventlog_{cond}_clust \
+  WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
+  WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
+  FROM cluster_histogram_{cond}))")
+
+```
+
+```{python}
+#| label: trace explorer (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make trace explorer figures of %s patients", cond)
+col_dic = trace_explorer(con,cond,color_dict=col_dic)
+con.close()
+```
+
+```{r}
+#| label: process explorer (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+log_info('Make process maps figures of different clusters of {cond} patients')
+con <- dbConnect(duckdb(), dbdir = db_path)
+process_map_by_cluster(
+  load_log(con,
+           paste0("SELECT * FROM eventlog_",cond,"_clust_filtered")),
+  0.25,cond)
+dbDisconnect(con, shutdown = TRUE)
+```
+
+::: {#fig-cluster0_ckd .column-page layout-ncol="2"}
+![5 most frequent traces](../../outputs/t_cluster_ckd_0.png){#fig-traceexplorer0_ckd}
+
+![Process map covering 25% most frequent traces](../../outputs/pm_cluster_ckd_0.png){#fig-processmap0_ckd}
+
+Cluster 0
+:::
+
+#### Conformace checking
+
+```{python}
+#| label: fitness boxplot (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make conformance checking analysis of %s patients", cond)
+con = duckdb.connect(db_path)
+treatments_clusters_boxplot(con,cond,
+            pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ckd.png){#fig-fitness_by_cluster_ckd fig-align="center" width="80%"}
+
+
+#### Prediction Models
+
+##### Time Dependent Cox Model
+
+In the next example, we choose fitness, age, sex and copayment to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+
+```{python}
+#| label: create fitness by period table (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Create  %s patients prediction models", cond)
+con = duckdb.connect(db_path)
+id2treat_fitness_by_interval(con, cond,
+            pn_file='./PN_%s.pnml' % cond,
+            ini_place='place100',fin_place='place111',
+            fixed_period_time=90)
+con.close()
+```
+
+```{r}
+#| label: Time dependent COX (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+con <- dbConnect(duckdb(), dbdir = db_path)
+
+df <- dbGetQuery(con, paste0("SELECT p2f.ID,p2f.t_0,p2f.t_1,p2f.fitness,\
+                             p2f.status,p2f.status2,\
+                             piv.age_dx as age,\
+                             CASE WHEN age<50 THEN '[0,50)'\
+                             WHEN age>=50 AND age<60 THEN '[50,60)' \
+                             WHEN age>=60 AND age<70 THEN '[60,70)' \
+                             WHEN age>=70 AND age<80 THEN '[70,80)' \
+                             WHEN age>=80 AND age<90 THEN '[80,90)' \
+                             ELSE '[90,+)' END AS age_,\
+                             piv.sex,piv.copayment,piv.charlson \
+                             FROM period2fitness_",cond," p2f \
+                             LEFT JOIN patient_incidents_view_ch piv \
+                             ON p2f.ID=piv.patient_id"))
+dbDisconnect(con, shutdown = TRUE)
+
+df$sex <- as.factor(ifelse(df$sex == 0, 'Male', 'Female'))
+df$age_ <- as.factor(df$age_)
+df$ID2 <- as.numeric(as.factor(df$ID))
+df$t_max <- ave(df$t_1, df$ID2, FUN = max)
+df$t_min <- ave(df$t_0, df$ID2, FUN = min)
+
+
+time_dep_ckd <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
+               data=df)
+
+summary(time_dep_ckd)
+```
+
+##### Joint Latent Class Model
+
+Using same predictive variables a joint latent class model of two classes is made:
+
+```{r}
+#| label: JLCM model (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+
+### 1 latent class
+
+mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
+                 survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
+### 2 latent class
+tryCatch(
+{mj2ckd <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
+                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
+                            random=~t_0,subject="ID2",
+                            survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
+                            hazard="Weibull",hazardtype="PH",
+                            ng=2,data=df, verbose=FALSE),cl=4)
+
+summary(mj2ckd)
+
+postprob(mj2ckd)
+
+df <- merge(df,mj2ckd$pprob %>%
+              mutate(class = case_when(
+                class == 1 ~ "class 1",
+                class == 2 ~ "class 2")),
+              by='ID2',all.x = FALSE)
+d1 <- data.frame(t_0=seq(1,1100,length.out=100))
+data.new <-data.frame(d1,age=65,sex='Female',charlson=1)
+mj2ckd.pred <- predictY(mj2ckd, data.new , var.time = "t_0")
+
+ggplot(data = df %>% filter(t_0<1100), aes(x = t_0, y = fitness, group = ID2))+ 
+  geom_line(colour='grey') + 
+  #stat_smooth(aes(group = 1),method = "lm",se=TRUE) +
+  stat_summary(aes(group = 1), geom = "point", fun = mean, shape = 16, size = 2) + 
+  geom_line(data=data.frame(mj2ckd.pred$times,mj2ckd.pred$pred,class='class 1'), aes(t_0, Ypred_class1,group = 1), color = "red", linetype = "dashed",size=1) +
+  geom_line(data=data.frame(mj2ckd.pred$times,mj2ckd.pred$pred,class='class 2'), aes(t_0, Ypred_class2,group = 1), color = "red", linetype = "dashed",size=1) +
+  facet_grid(. ~ class) +   
+  labs(x = "Days", y = "Fitness", col = "class") + 
+  guides(col = guide_legend(nrow = 3),)
+ggsave(filename=gsub("src/analysis-scripts/","",
+                      here("outputs",sprintf("joint1_%s.png",
+                                             cond))),
+        plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)
+
+
+survfit(Surv(t_min, t_max, status2) ~ class, data=df %>%
+          select(ID2,t_min,t_max,status2,class) %>% unique()) %>%
+  autoplot(xlab = "Day", ylab = "Survival probability")
+ggsave(filename=gsub("src/analysis-scripts/","",
+                      here("outputs",sprintf("joint2_%s.png",
+                                             cond))),
+        plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)},
+error = function(cond_) {
+            message(conditionMessage(cond_))
+        }
+)
+
+```
+
+
+##### Two time windows Cox Model
+
+Moreover a Cox survival model with two time windows it is implemented below:
+
+```{r}
+#| label: 2 window cox (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+df <- df %>% 
+  filter(t_max > 270) %>% 
+  filter(t_0==270) %>% 
+  select(ID,fitness,status2,age,age_,sex,copayment,charlson,ID2,t_min,t_max)
+df$status3 <- ifelse(df$t_max<=630 & df$status2==1, 1, 0)
+df$t_max <- pmin(df$t_max-270,360)
+
+cox2w_ckd <- coxph(Surv(t_max, status3) ~ age + sex + fitness + charlson,
+               data=df)
+
+summary(cox2w_ckd)
+```
+
+### Heart Failure
+
+#### Treatments' event log creation and description(
+
+```{python}
+#| label: condition variable in python (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond = 'hf'
+```
+
+```{r}
+#| label: condition variable in r (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond <- 'hf'
+```
+
+```{python}
+#| label: Preprocessing of raw event log (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+con = duckdb.connect(db_path)
+if notnan_p>0.98:
+  logging.info("Generate event log of %s patients from prescriptions", cond)
+  evlog_creation_by_prescriptions(
+    con=con,
+    cond=cond,
+    code2drug_info_path='./diabetes_drugs.csv')
+else:
+  logging.info("Generate event log of %s patients from dispensations", cond)
+  evlog_creation_by_dispensations(
+    con=con,
+    cond=cond,
+    code2drug_info_path='./diabetes_drugs.csv',
+    nac_path='./Nomenclator_de_Facturacion.csv')
+```
+
+```{python}
+#| label: event log (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Filter event log of %s patients", cond)
+df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
+
+df_, id2trace = df2dict(df_)
+con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond} AS SELECT * FROM df_")
+patients = sorted(id2trace.keys())
+traces = list(id2trace[id] for id in patients)     
+con.close()
+```
+
+```{r}
+#| label: Loading event log in R (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+log_info('Load {cond} eventlog')
+con <- dbConnect(duckdb(), dbdir = db_path)
+evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
+dbDisconnect(con, shutdown = TRUE)
+```
+
+Choosing patients with heart failure and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
+
+```{r}
+#| label: proces map and activity presence (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+log_info('Make {cond} process map')
+make_process_map(evLog,1,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_pm_1_%s.png",
+                                                     cond))))
+make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
+                                here("outputs",sprintf("evlog_pm_02_%s.png",
+                                                     cond))))
+log_info('Make activity presence of {cond} patients')
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("activity_presence_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+plot(evLog %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
+dev.off()
+```
+
+
+![Event log's process map with all traces](../../outputs/evlog_pm_1_hf.png){#fig-pm1_hf fig-align="center" width="80%"}
+
+
+![Event log's process map with most frequent traces covering 20%](../../outputs/evlog_pm_02_hf.png){#fig-pm02_hf fig-align="center" width="80%"}
+
+
+![Percentage of patients traces an activity is present](../../outputs/activity_presence_hf.png){#fig-activity_presence_hf fig-align="center" width="80%"}
+
+#### Healthcare trayectories description
+
+
+```{r}
+#| label: proces map healthcare (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+log_info('Make {cond} healtcare analysis')
+con <- dbConnect(duckdb(), dbdir = db_path)
+evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
+                                         cond,
+                                         "' AND Event NOT IN ('APA','URG')"))
+make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
+                                                     cond))))
+make_process_map_healthcare(evLog_healthcare,0.2,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_healthcare_pm_02_%s.png",
+                                                     cond))))
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("healthcare_activity_presence_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+plot(evLog_healthcare %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
+dev.off()
+
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("healthcare_process_matrix_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+evLog_healthcare %>% 
+  anti_join(evLog_healthcare %>% 
+              activity_presence() %>% 
+              slice(11:100),
+            c('Event'='Event')) %>% 
+  process_matrix(frequency("relative-case")) %>% plot()
+dev.off()
+rm(evLog_healthcare)
+dbDisconnect(con, shutdown = TRUE)
+
+```
+
+![Healthcare event log's process map with all traces](../../outputs/evlog_healthcare_pm_1_hf.png){#fig-pm1_healthcare_hf fig-align="center" width="80%"}
+
+![Healthcare event log's process map with most frequent traces covering 20%](../../outputs/evlog_healthcare_pm_02_hf.png){#fig-pm02_healthcare_hf fig-align="center" width="80%"}
+
+![Percentage of patients traces a visit is present](../../outputs/healthcare_activity_presence_hf.png){#fig-healthcare_activity_presence_hf fig-align="center" width="80%"}
+
+![Visits' dotted chart](../../outputs/healthcare_process_matrix_hf.png){#fig-healthcare_process_matrix_hf fig-align="center" width="80%"}
+
+
+#### Clustering traces
+
+```{python}
+#| label: dm calculation (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make distance matrix of %s patients", cond)
+measure_f = Levenshtein.normalized_similarity
+dm = calculate_dm_ED(traces,measure_f)
+```
+
+```{python}
+#| label: dendograms (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| output: FALSE
+logging.info("Make dendogram of %s patients", cond)
+dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
+```
+
+```{python}
+#| label: kelbow (hf)
+#| eval: TRUE
+#| echo: FALSE
+if len(traces)>25:
+  n_clusters = kelbow(dm,cond,elbow_metric='distortion',locate_elbow=True)
+#kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
+else:
+  n_clusters=1
+```
+
+![Distance matrix's dendogram](../../outputs/dendogram_hf.png){#fig-dendogram_hf fig-align="center" width="80%"}
+
+![Distance matrix's elbow method's graphic ](../../outputs/distortion_hf.png){#fig-kelbow_hf fig-align="center" width="80%"}
+
+```{python}
+#| label: clustering (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make clustering of %s patients", cond)
+con = duckdb.connect(db_path)
+df_ = clust(n_clusters,dm,df_,id2trace,patients)
+con.sql(f"CREATE OR REPLACE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust AS SELECT \
+  eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
+  LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
+con.sql(f"CREATE OR REPLACE VIEW cluster_histogram_{cond} AS\
+  SELECT cluster, COUNT(DISTINCT ID) AS freq \
+  FROM eventlog_{cond}_clust GROUP BY cluster")
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
+   SELECT * FROM eventlog_{cond}_clust \
+  WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
+  WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
+  FROM cluster_histogram_{cond}))")
+
+```
+
+```{python}
+#| label: trace explorer (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make trace explorer figures of %s patients", cond)
+col_dic = trace_explorer(con,cond,color_dict=col_dic)
+con.close()
+```
+
+```{r}
+#| label: process explorer (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+log_info('Make process maps figures of different clusters of {cond} patients')
+con <- dbConnect(duckdb(), dbdir = db_path)
+process_map_by_cluster(
+  load_log(con,
+           paste0("SELECT * FROM eventlog_",cond,"_clust_filtered")),
+  0.25,cond)
+dbDisconnect(con, shutdown = TRUE)
+```
+
+::: {#fig-cluster0_hf .column-page layout-ncol="2"}
+![5 most frequent traces](../../outputs/t_cluster_hf_0.png){#fig-traceexplorer0_hf}
+
+![Process map covering 25% most frequent traces](../../outputs/pm_cluster_hf_0.png){#fig-processmap0_hf}
+
+Cluster 0
+:::
+
+#### Conformace checking
+
+```{python}
+#| label: fitness boxplot (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make conformance checking analysis of %s patients", cond)
+con = duckdb.connect(db_path)
+treatments_clusters_boxplot(con,cond,
+            pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_hf.png){#fig-fitness_by_cluster_hf fig-align="center" width="80%"}
+
+
+#### Prediction Models
+
+##### Time Dependent Cox Model
+
+In the next example, we choose fitness, age, sex and copayment to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+
+```{python}
+#| label: create fitness by period table (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Create  %s patients prediction models", cond)
+con = duckdb.connect(db_path)
+id2treat_fitness_by_interval(con, cond,
+            pn_file='./PN_%s.pnml' % cond,
+            ini_place='place100',fin_place='place111',
+            fixed_period_time=90)
+con.close()
+```
+
+```{r}
+#| label: Time dependent COX (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+con <- dbConnect(duckdb(), dbdir = db_path)
+
+df <- dbGetQuery(con, paste0("SELECT p2f.ID,p2f.t_0,p2f.t_1,p2f.fitness,\
+                             p2f.status,p2f.status2,\
+                             piv.age_dx as age,\
+                             CASE WHEN age<50 THEN '[0,50)'\
+                             WHEN age>=50 AND age<60 THEN '[50,60)' \
+                             WHEN age>=60 AND age<70 THEN '[60,70)' \
+                             WHEN age>=70 AND age<80 THEN '[70,80)' \
+                             WHEN age>=80 AND age<90 THEN '[80,90)' \
+                             ELSE '[90,+)' END AS age_,\
+                             piv.sex,piv.copayment,piv.charlson \
+                             FROM period2fitness_",cond," p2f \
+                             LEFT JOIN patient_incidents_view_ch piv \
+                             ON p2f.ID=piv.patient_id"))
+dbDisconnect(con, shutdown = TRUE)
+
+df$sex <- as.factor(ifelse(df$sex == 0, 'Male', 'Female'))
+df$age_ <- as.factor(df$age_)
+df$ID2 <- as.numeric(as.factor(df$ID))
+df$t_max <- ave(df$t_1, df$ID2, FUN = max)
+df$t_min <- ave(df$t_0, df$ID2, FUN = min)
+
+
+time_dep_hf <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
+               data=df)
+
+summary(time_dep_hf)
+```
+
+##### Joint Latent Class Model
+
+Using same predictive variables a joint latent class model of two classes is made:
+
+```{r}
+#| label: JLCM model (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+
+### 1 latent class
+
+mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
+                 survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
+### 2 latent class
+tryCatch(
+{mj2hf <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
+                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
+                            random=~t_0,subject="ID2",
+                            survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
+                            hazard="Weibull",hazardtype="PH",
+                            ng=2,data=df, verbose=FALSE),cl=4)
+
+summary(mj2hf)
+
+postprob(mj2hf)
+
+df <- merge(df,mj2hf$pprob %>%
+              mutate(class = case_when(
+                class == 1 ~ "class 1",
+                class == 2 ~ "class 2")),
+              by='ID2',all.x = FALSE)
+d1 <- data.frame(t_0=seq(1,1100,length.out=100))
+data.new <-data.frame(d1,age=65,sex='Female',charlson=1)
+mj2hf.pred <- predictY(mj2hf, data.new , var.time = "t_0")
+
+ggplot(data = df %>% filter(t_0<1100), aes(x = t_0, y = fitness, group = ID2))+ 
+  geom_line(colour='grey') + 
+  #stat_smooth(aes(group = 1),method = "lm",se=TRUE) +
+  stat_summary(aes(group = 1), geom = "point", fun = mean, shape = 16, size = 2) + 
+  geom_line(data=data.frame(mj2hf.pred$times,mj2hf.pred$pred,class='class 1'), aes(t_0, Ypred_class1,group = 1), color = "red", linetype = "dashed",size=1) +
+  geom_line(data=data.frame(mj2hf.pred$times,mj2hf.pred$pred,class='class 2'), aes(t_0, Ypred_class2,group = 1), color = "red", linetype = "dashed",size=1) +
+  facet_grid(. ~ class) +   
+  labs(x = "Days", y = "Fitness", col = "class") + 
+  guides(col = guide_legend(nrow = 3),)
+ggsave(filename=gsub("src/analysis-scripts/","",
+                      here("outputs",sprintf("joint1_%s.png",
+                                             cond))),
+        plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)
+
+
+survfit(Surv(t_min, t_max, status2) ~ class, data=df %>%
+          select(ID2,t_min,t_max,status2,class) %>% unique()) %>%
+  autoplot(xlab = "Day", ylab = "Survival probability")
+ggsave(filename=gsub("src/analysis-scripts/","",
+                      here("outputs",sprintf("joint2_%s.png",
+                                             cond))),
+        plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)},
+error = function(cond_) {
+            message(conditionMessage(cond_))
+        }
+)
+
+```
+
+
+##### Two time windows Cox Model
+
+Moreover a Cox survival model with two time windows it is implemented below:
+
+```{r}
+#| label: 2 window cox (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+df <- df %>% 
+  filter(t_max > 270) %>% 
+  filter(t_0==270) %>% 
+  select(ID,fitness,status2,age,age_,sex,copayment,charlson,ID2,t_min,t_max)
+df$status3 <- ifelse(df$t_max<=630 & df$status2==1, 1, 0)
+df$t_max <- pmin(df$t_max-270,360)
+
+cox2w_hf <- coxph(Surv(t_max, status3) ~ age + sex + fitness + charlson,
+               data=df)
+
+summary(cox2w_hf)
+```
+
+
+
+### CV Disease
+
+#### Treatments' event log creation and description(
+
+```{python}
+#| label: condition variable in python (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond = 'cvd'
+```
+
+```{r}
+#| label: condition variable in r (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+cond <- 'cvd'
+```
+
+```{python}
+#| label: Preprocessing of raw event log (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+con = duckdb.connect(db_path)
+if notnan_p>0.98:
+  logging.info("Generate event log of %s patients from prescriptions", cond)
+  evlog_creation_by_prescriptions(
+    con=con,
+    cond=cond,
+    code2drug_info_path='./diabetes_drugs.csv')
+else:
+  logging.info("Generate event log of %s patients from dispensations", cond)
+  evlog_creation_by_dispensations(
+    con=con,
+    cond=cond,
+    code2drug_info_path='./diabetes_drugs.csv',
+    nac_path='./Nomenclator_de_Facturacion.csv')
+```
+
+```{python}
+#| label: event log (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Filter event log of %s patients", cond)
+df_ = con.sql(f"SELECT * FROM evlog_raw_{cond}").df()
+
+df_, id2trace = df2dict(df_)
+con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond} AS SELECT * FROM df_")
+patients = sorted(id2trace.keys())
+traces = list(id2trace[id] for id in patients)     
+con.close()
+```
+
+```{r}
+#| label: Loading event log in R (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+log_info('Load {cond} eventlog')
+con <- dbConnect(duckdb(), dbdir = db_path)
+evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
+dbDisconnect(con, shutdown = TRUE)
+```
+
+Choosing patients with a cardiovascular disease and after some preprocessing we obtain a new event log to make the same analysis it has done to patients without any predominant clinical condition.
+
+```{r}
+#| label: proces map and activity presence (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+log_info('Make {cond} process map')
+make_process_map(evLog,1,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_pm_1_%s.png",
+                                                     cond))))
+make_process_map(evLog,0.2,gsub("src/analysis-scripts/","",
+                                here("outputs",sprintf("evlog_pm_02_%s.png",
+                                                     cond))))
+log_info('Make activity presence of {cond} patients')
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("activity_presence_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+plot(evLog %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
+dev.off()
+```
+
+
+![Event log's process map with all traces](../../outputs/evlog_pm_1_cvd.png){#fig-pm1_cvd fig-align="center" width="80%"}
+
+
+![Event log's process map with most frequent traces covering 20%](../../outputs/evlog_pm_02_cvd.png){#fig-pm02_cvd fig-align="center" width="80%"}
+
+
+
+![Percentage of patients traces an activity is present](../../outputs/activity_presence_cvd.png){#fig-activity_presence_cvd fig-align="center" width="80%"}
+
+#### Healthcare trayectories description
+
+
+```{r}
+#| label: proces map healthcare (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+log_info('Make {cond} healtcare analysis')
+con <- dbConnect(duckdb(), dbdir = db_path)
+evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
+                                         cond,
+                                         "' AND Event NOT IN ('APA','URG')"))
+make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
+                                                     cond))))
+make_process_map_healthcare(evLog_healthcare,0.2,gsub("src/analysis-scripts/","",
+                              here("outputs",sprintf("evlog_healthcare_pm_02_%s.png",
+                                                     cond))))
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("healthcare_activity_presence_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+plot(evLog_healthcare %>% activity_presence()  )+scale_y_continuous(limits = c(0, 1))
+dev.off()
+
+png(filename=gsub("src/analysis-scripts/","",
+                  here("outputs",sprintf("healthcare_process_matrix_%s.png",
+                                         cond))),
+    width = 600, height = 750, units = "px")
+evLog_healthcare %>% 
+  anti_join(evLog_healthcare %>% 
+              activity_presence() %>% 
+              slice(11:100),
+            c('Event'='Event')) %>% 
+  process_matrix(frequency("relative-case")) %>% plot()
+dev.off()
+rm(evLog_healthcare)
+dbDisconnect(con, shutdown = TRUE)
+
+```
+
+![Healthcare event log's process map with all traces](../../outputs/evlog_healthcare_pm_1_cvd.png){#fig-pm1_healthcare_cvd fig-align="center" width="80%"}
+
+![Healthcare event log's process map with most frequent traces covering 20%](../../outputs/evlog_healthcare_pm_02_cvd.png){#fig-pm02_healthcare_cvd fig-align="center" width="80%"}
+
+![Percentage of patients traces a visit is present](../../outputs/healthcare_activity_presence_cvd.png){#fig-healthcare_activity_presence_cvd fig-align="center" width="80%"}
+
+![Visits' dotted chart](../../outputs/healthcare_process_matrix_cvd.png){#fig-healthcare_process_matrix_cvd fig-align="center" width="80%"}
+
+
+#### Clustering traces
+
+```{python}
+#| label: dm calculation (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make distance matrix of %s patients", cond)
+measure_f = Levenshtein.normalized_similarity
+dm = calculate_dm_ED(traces,measure_f)
+```
+
+```{python}
+#| label: dendograms (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| output: FALSE
+logging.info("Make dendogram of %s patients", cond)
+dendogram(dm,'../../outputs/dendogram_%s.png' % cond)
+```
+
+```{python}
+#| label: kelbow (cvd)
+#| eval: TRUE
+#| echo: FALSE
+if len(traces)>25:
+  n_clusters = kelbow(dm,cond,elbow_metric='distortion',locate_elbow=True)
+#kelbow(dm,elbow_metric='calinski_harabasz',locate_elbow=False)
+else:
+  n_clusters=1
+```
+
+![Distance matrix's dendogram](../../outputs/dendogram_cvd.png){#fig-dendogram_cvd fig-align="center" width="80%"}
+
+![Distance matrix's elbow method's graphic ](../../outputs/distortion_cvd.png){#fig-kelbow_cvd fig-align="center" width="80%"}
+
+```{python}
+#| label: clustering (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make clustering of %s patients", cond)
+con = duckdb.connect(db_path)
+df_ = clust(n_clusters,dm,df_,id2trace,patients)
+con.sql(f"CREATE OR REPLACE TABLE clust_{cond} AS SELECT DISTINCT ID,cluster FROM df_")
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust AS SELECT \
+  eventlog_{cond}.ID,date,nid,Event,cycle,actins,cluster FROM eventlog_{cond} \
+  LEFT JOIN clust_{cond} ON eventlog_{cond}.ID = clust_{cond}.ID ")
+con.sql(f"CREATE OR REPLACE VIEW cluster_histogram_{cond} AS\
+  SELECT cluster, COUNT(DISTINCT ID) AS freq \
+  FROM eventlog_{cond}_clust GROUP BY cluster")
+con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
+   SELECT * FROM eventlog_{cond}_clust \
+  WHERE cluster IN (SELECT cluster FROM cluster_histogram_{cond} \
+  WHERE freq>=25 OR freq>=(SELECT SUM(freq) * 0.05 \
+  FROM cluster_histogram_{cond}))")
+
+```
+
+```{python}
+#| label: trace explorer (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make trace explorer figures of %s patients", cond)
+col_dic = trace_explorer(con,cond,color_dict=col_dic)
+con.close()
+```
+
+```{r}
+#| label: process explorer (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+log_info('Make process maps figures of different clusters of {cond} patients')
+con <- dbConnect(duckdb(), dbdir = db_path)
+process_map_by_cluster(
+  load_log(con,
+           paste0("SELECT * FROM eventlog_",cond,"_clust_filtered")),
+  0.25,cond)
+dbDisconnect(con, shutdown = TRUE)
+```
+
+::: {#fig-cluster0_cvd .column-page layout-ncol="2"}
+![5 most frequent traces](../../outputs/t_cluster_cvd_0.png){#fig-traceexplorer0_cvd}
+
+![Process map covering 25% most frequent traces](../../outputs/pm_cluster_cvd_0.png){#fig-processmap0_cvd}
+
+Cluster 0
+:::
+
+#### Conformace checking
+
+```{python}
+#| label: fitness boxplot (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Make conformance checking analysis of %s patients", cond)
+con = duckdb.connect(db_path)
+treatments_clusters_boxplot(con,cond,
+            pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_cvd.png){#fig-fitness_by_cluster_cvd fig-align="center" width="80%"}
+
+
+#### Prediction Models
+
+##### Time Dependent Cox Model
+
+In the next example, we choose fitness, age, sex and copayment to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+
+```{python}
+#| label: create fitness by period table (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Create  %s patients prediction models", cond)
+con = duckdb.connect(db_path)
+id2treat_fitness_by_interval(con, cond,
+            pn_file='./PN_%s.pnml' % cond,
+            ini_place='place100',fin_place='place111',
+            fixed_period_time=90)
+con.close()
+```
+
+```{r}
+#| label: Time dependent COX (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+con <- dbConnect(duckdb(), dbdir = db_path)
+
+df <- dbGetQuery(con, paste0("SELECT p2f.ID,p2f.t_0,p2f.t_1,p2f.fitness,\
+                             p2f.status,p2f.status2,\
+                             piv.age_dx as age,\
+                             CASE WHEN age<50 THEN '[0,50)'\
+                             WHEN age>=50 AND age<60 THEN '[50,60)' \
+                             WHEN age>=60 AND age<70 THEN '[60,70)' \
+                             WHEN age>=70 AND age<80 THEN '[70,80)' \
+                             WHEN age>=80 AND age<90 THEN '[80,90)' \
+                             ELSE '[90,+)' END AS age_,\
+                             piv.sex,piv.copayment,piv.charlson \
+                             FROM period2fitness_",cond," p2f \
+                             LEFT JOIN patient_incidents_view_ch piv \
+                             ON p2f.ID=piv.patient_id"))
+dbDisconnect(con, shutdown = TRUE)
+
+df$sex <- as.factor(ifelse(df$sex == 0, 'Male', 'Female'))
+df$age_ <- as.factor(df$age_)
+df$ID2 <- as.numeric(as.factor(df$ID))
+df$t_max <- ave(df$t_1, df$ID2, FUN = max)
+df$t_min <- ave(df$t_0, df$ID2, FUN = min)
+
+
+time_dep_cvd <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
+               data=df)
+
+summary(time_dep_cvd)
+```
+
+##### Joint Latent Class Model
+
+Using same predictive variables a joint latent class model of two classes is made:
+
+```{r}
+#| label: JLCM model (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+
+### 1 latent class
+
+mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
+                 survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
+### 2 latent class
+tryCatch(
+{mj2cvd <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
+                  Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
+                            random=~t_0,subject="ID2",
+                            survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
+                            hazard="Weibull",hazardtype="PH",
+                            ng=2,data=df, verbose=FALSE),cl=4)
+
+summary(mj2cvd)
+
+postprob(mj2cvd)
+
+df <- merge(df,mj2cvd$pprob %>%
+              mutate(class = case_when(
+                class == 1 ~ "class 1",
+                class == 2 ~ "class 2")),
+              by='ID2',all.x = FALSE)
+d1 <- data.frame(t_0=seq(1,1100,length.out=100))
+data.new <-data.frame(d1,age=65,sex='Female',charlson=1)
+mj2cvd.pred <- predictY(mj2cvd, data.new , var.time = "t_0")
+
+ggplot(data = df %>% filter(t_0<1100), aes(x = t_0, y = fitness, group = ID2))+ 
+  geom_line(colour='grey') + 
+  #stat_smooth(aes(group = 1),method = "lm",se=TRUE) +
+  stat_summary(aes(group = 1), geom = "point", fun = mean, shape = 16, size = 2) + 
+  geom_line(data=data.frame(mj2cvd.pred$times,mj2cvd.pred$pred,class='class 1'), aes(t_0, Ypred_class1,group = 1), color = "red", linetype = "dashed",size=1) +
+  geom_line(data=data.frame(mj2cvd.pred$times,mj2cvd.pred$pred,class='class 2'), aes(t_0, Ypred_class2,group = 1), color = "red", linetype = "dashed",size=1) +
+  facet_grid(. ~ class) +   
+  labs(x = "Days", y = "Fitness", col = "class") + 
+  guides(col = guide_legend(nrow = 3),)
+ggsave(filename=gsub("src/analysis-scripts/","",
+                      here("outputs",sprintf("joint1_%s.png",
+                                             cond))),
+        plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)
+
+
+survfit(Surv(t_min, t_max, status2) ~ class, data=df %>%
+          select(ID2,t_min,t_max,status2,class) %>% unique()) %>%
+  autoplot(xlab = "Day", ylab = "Survival probability")
+ggsave(filename=gsub("src/analysis-scripts/","",
+                      here("outputs",sprintf("joint2_%s.png",
+                                             cond))),
+        plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)},
+error = function(cond_) {
+            message(conditionMessage(cond_))
+        }
+)
+
+```
+
+
+##### Two time windows Cox Model
+
+Moreover a Cox survival model with two time windows it is implemented below:
+
+```{r}
+#| label: 2 window cox (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+df <- df %>% 
+  filter(t_max > 270) %>% 
+  filter(t_0==270) %>% 
+  select(ID,fitness,status2,age,age_,sex,copayment,charlson,ID2,t_min,t_max)
+df$status3 <- ifelse(df$t_max<=630 & df$status2==1, 1, 0)
+df$t_max <- pmin(df$t_max-270,360)
+
+cox2w_cvd <- coxph(Surv(t_max, status3) ~ age + sex + fitness + charlson,
+               data=df)
+
+summary(cox2w_cvd)
+```
+
+
+
+
 
 ### Process indicators' analysis
 
@@ -5199,7 +5256,7 @@ png(filename=gsub("src/analysis-scripts/","",
                   here("outputs/activity_presence_process_indicators_year1.png")),
     width = 600, height = 750, units = "px")
 eventlog <- dbGetQuery(con,
-                      "SELECT patient_id,event,date,cycle,actins\
+                      "SELECT patient_id,event,date,cycle,actins \
                        FROM process_ind1 WHERE event NOT IN ('INI','FIN') \
                        UNION ALL SELECT patient_id,event, \
                        CAST(date AS TIMESTAMP) + INTERVAL 1 SECOND AS date, \
@@ -5415,8 +5472,28 @@ boxplot1 = sns.boxplot(x = df2year['year'],
 fig1 = boxplot1.get_figure()
 fig1.savefig("../../outputs/fitness_by_year.png")
 plt.close(fig1)
+#con.sql("CREATE OR REPLACE TABLE period2process_fitness AS \
+#SELECT ID, \
+#DATEDIFF('day', initial_date,date) AS t_0, \
+#DATEDIFF('day', initial_date,final_date) AS t_1, fitness, initial_date, \
+#status, MAX(status) OVER (PARTITION BY ID) AS status2 \
+#FROM (SELECT a.*,COALESCE(b.deregistration_date,'2022-12-31'),\
+#             COALESCE( LEAD(date, 1) OVER (PARTITION BY ID ORDER BY date), \
+#             LEAST(deregistration_date, \
+#                   COALESCE(admission_date,\
+#                            CAST('2022-12-31' AS DATE)) )) AS final_date, \
+#             CASE WHEN admission_date=final_date THEN 1 ELSE 0 END AS status, \
+#             MIN(date) OVER (PARTITION BY ID) AS initial_date\
+#             FROM (SELECT * FROM (SELECT df2year.*, \
+#                  cmbd_incidents_postdx_first_view.admission_date AS admission_date \
+#                  FROM df2year LEFT JOIN cmbd_incidents_postdx_first_view ON \
+#                    df2year.ID = cmbd_incidents_postdx_first_view.patient_id) \
+#                      WHERE date<admission_date OR admission_date IS NULL) a \
+#                  LEFT JOIN patient_incidents_view b ON a.ID=b.patient_id) WHERE t_0!=t_1")
+
+ ## with predominant condition change and hosp   
 con.sql("CREATE OR REPLACE TABLE period2process_fitness AS \
-SELECT ID, \
+            SELECT ID, \
 DATEDIFF('day', initial_date,date) AS t_0, \
 DATEDIFF('day', initial_date,final_date) AS t_1, fitness, initial_date, \
 status, MAX(status) OVER (PARTITION BY ID) AS status2 \
@@ -5425,15 +5502,21 @@ FROM (SELECT a.*,COALESCE(b.deregistration_date,'2022-12-31'),\
              LEAST(deregistration_date, \
                    COALESCE(admission_date,\
                             CAST('2022-12-31' AS DATE)) )) AS final_date, \
-             CASE WHEN admission_date=final_date THEN 1 ELSE 0 END AS status, \
+             CASE WHEN admission_date=final_date AND (\
+             (final_status!=initial_status AND \
+              final_status NOT IN ('end','else','ob','f')) OR \
+              cause='hosp') \
+             THEN 1 ELSE 0 END AS status, \
              MIN(date) OVER (PARTITION BY ID) AS initial_date\
              FROM (SELECT * FROM (SELECT df2year.*, \
-                  cmbd_incidents_postdx_first_view.admission_date AS admission_date \
-                  FROM df2year LEFT JOIN cmbd_incidents_postdx_first_view ON \
-                    df2year.ID = cmbd_incidents_postdx_first_view.patient_id) \
+                  patient_condition_hosp.date AS admission_date, \
+                    patient_condition_hosp.initial_status, \
+                    patient_condition_hosp.final_status, \
+                    patient_condition_hosp.cause, \
+                  FROM df2year LEFT JOIN patient_condition_hosp ON \
+                    df2year.ID = patient_condition_hosp.patient_id) \
                       WHERE date<admission_date OR admission_date IS NULL) a \
                   LEFT JOIN patient_incidents_view b ON a.ID=b.patient_id) WHERE t_0!=t_1")
-
 con.sql("CREATE OR REPLACE TABLE window2process_fitness AS \
              SELECT ID, fitness,\
              CASE WHEN DATEDIFF('day',date,admission_date)<=yyyy*365 THEN 1 \
@@ -5441,9 +5524,9 @@ con.sql("CREATE OR REPLACE TABLE window2process_fitness AS \
              CASE WHEN status=0 THEN yyyy*365 \
                  ELSE DATEDIFF('day',date,admission_date) END AS time \
              FROM (SELECT * FROM (SELECT df_yyyy.*, \
-                  cmbd_incidents_postdx_first_view.admission_date AS admission_date \
-                  FROM df_yyyy LEFT JOIN cmbd_incidents_postdx_first_view ON \
-                    df_yyyy.ID = cmbd_incidents_postdx_first_view.patient_id) \
+                  patient_condition_hosp.date AS admission_date \
+                  FROM df_yyyy LEFT JOIN patient_condition_hosp ON \
+                    df_yyyy.ID = patient_condition_hosp.patient_id) \
                       WHERE (date<admission_date OR admission_date IS NULL) AND \
                           DATEDIFF('day',date,CAST('2022-12-31' AS TIMESTAMP))>=yyyy*365)\
                  ".replace("yyyy",'1'))
@@ -5452,6 +5535,7 @@ con.sql("CREATE OR REPLACE TABLE window2process_fitness AS \
 ![Boxplot of  process indicators' traces' fitness by cumulative years)](../../outputs/fitness_by_year.png){#fitness_by_year fig-align="center" width="80%"}
 
 Sex and age and process indicators' fitness are linked with the next plots:
+
 ```{python}
 #| label: Creating process indicators' conformance analysis by sex and age
 #| eval: TRUE
@@ -5497,6 +5581,7 @@ plt.close(fig3)
 ```
 
 ![Boxplot of process indicators' traces' fitness by cumulative year and by sex](../../outputs/fitness2sex_by_year.png){#fitness2sex_by_year fig-align="center" width="80%"}
+
 ![Boxplot of process indicators' traces' fitness by cumulative year and by age](../../outputs/fitness2age_by_year.png){#fitness2age_by_year fig-align="center" width="80%"}
 
 Now treatments' analysis' and process indicators' fitness are linked with the next plot:
@@ -5530,7 +5615,9 @@ con.close()
 
 #### Prediction Models
 
-In the next example, we choose fitness, age, sex and copayment to try to predict a hospitalization with a time dependent Cox model, and the summary of it is:
+##### Time Dependent Cox Model
+
+In the next example, we choose fitness, age, sex and copayment to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependent Cox model, and the summary of it is:
 
 
 ```{r}
@@ -5549,14 +5636,16 @@ df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 
-model <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
+time_dep_PI <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
                data=df)
 
-summary(model)
+summary(time_dep_PI)
 ```
 
- 
+##### Joint Latent Class Model
+
 Using same predictive variables a joint latent class model of two classes is made:
+
 ```{r}
 #| label: JLCM model (process indicators)
 #| eval: TRUE
@@ -5568,45 +5657,50 @@ Using same predictive variables a joint latent class model of two classes is mad
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
-                 hazardtype="PH",ng=1,data=df, verbose=FALSE,
-                 B=c(1,1,0,0,0,0,0,1,0,1,1))
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
 ### 2 latent class
 tryCatch(
-{mj2 <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
+{mj2PI <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
                             hazard="Weibull",hazardtype="PH",
                             ng=2,data=df, verbose=FALSE),cl=4)
 
-summary(mj2)
+summary(mj2PI)
 
-postprob(mj2)
+postprob(mj2PI)
 
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs/joint1_PI.png")),
-    width = 600, height = 750, units = "px")
-plot(mj2, which = "fit", var.time = "t_0", marg = F, break.times = 5, bty = "l",
-     legend.loc = 'bottomright',ylab = "fitness",
-     xlab = "Time in days",shades=TRUE,ylim = c(0.1,1.0),xlim=c(0,1000),xlim=c(0,1000))
-dev.off()
- 
-d1 <- data.frame(t_0=seq(1,1000,length.out=100))
+df <- merge(df,mj2PI$pprob %>%
+              mutate(class = case_when(
+                class == 1 ~ "class 1",
+                class == 2 ~ "class 2")),
+              by='ID2',all.x = FALSE)
+d1 <- data.frame(t_0=seq(1,1100,length.out=100))
 data.new <-data.frame(d1,age=65,sex='Female',charlson=1)
-mj2.pred <- predictY(mj2, data.new , var.time = "t_0")
+mj2PI.pred <- predictY(mj2PI, data.new , var.time = "t_0")
 
-png(filename=gsub("src/analysis-scripts/","",
+
+ggplot(data = df %>% filter(t_0<1100), aes(x = t_0, y = fitness, group = ID2))+ 
+  geom_line(colour='grey') + 
+  #stat_smooth(aes(group = 1),method = "lm",se=TRUE) +
+  stat_summary(aes(group = 1), geom = "point", fun = mean, shape = 16, size = 2) + 
+  geom_line(data=data.frame(mj2PI.pred$times,mj2PI.pred$pred,class='class 1'), aes(t_0, Ypred_class1,group = 1), color = "red", linetype = "dashed",size=1) +
+  geom_line(data=data.frame(mj2PI.pred$times,mj2PI.pred$pred,class='class 2'), aes(t_0, Ypred_class2,group = 1), color = "red", linetype = "dashed",size=1) +
+  facet_grid(. ~ class) +   
+  labs(x = "Days", y = "Fitness", col = "class") + 
+  guides(col = guide_legend(nrow = 3),)
+ggsave(filename=gsub("src/analysis-scripts/","",
+                  here("outputs/joint1_PI.png")),
+        plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)
+
+
+survfit(Surv(t_min, t_max, status2) ~ class, data=df %>%
+          select(ID2,t_min,t_max,status2,class) %>% unique()) %>%
+  autoplot(xlab = "Day", ylab = "Survival probability")
+ggsave(filename=gsub("src/analysis-scripts/","",
                   here("outputs/joint2_PI.png")),
-    width = 600, height = 750, units = "px")
-plot(mj2.pred, bty = "l", ylim = c(0, 1), legend.loc = 'bottomleft',
-     ylab = "fitness", xlab = "days", lwd = 2)
-dev.off()
-png(filename=gsub("src/analysis-scripts/","",
-                  here("outputs/joint3_PI.png")),
-    width = 600, height = 750, units = "px")
-plot(mj2, which = "survival", lwd = 2, legend.loc = 'bottomleft', bty = "l",
-     xlab = "days", ylab = "event-free probability",xlim=c(0,1000))
-dev.off()},
+        plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)},
 error = function(cond_) {
             message(conditionMessage(cond_))
         }
@@ -5615,11 +5709,9 @@ error = function(cond_) {
 log_info('Analyses finish')
 
 ```
-![Class-specific weighted marginal and subject-specific mean predicted fitness trajectories](../../outputs/joint1_PI.png){#fig-joint1_PI fig-align="center" width="80%"}
 
-![Class-specific mean predicted fitness trajectory](../../outputs/joint2_PI.png){#fig-joint2_PI fig-align="center" width="80%"}
 
-![Class-specific survival functions](../../outputs/joint3_PI.png){#fig-joint3_PI fig-align="center" width="80%"}
+##### Two time windows Cox Model
 
 A Cox survival model with two time windows it is implemented below:
 
@@ -5636,59 +5728,120 @@ dbDisconnect(con, shutdown = TRUE)
 
 df$sex <- as.factor(ifelse(df$sex == 0, 'Male', 'Female'))
 
-cox.model <- coxph(Surv(time, status) ~ age + sex + fitness + charlson,
+cox2w_PI <- coxph(Surv(time, status) ~ age + sex + fitness + charlson,
                data=df)
 
-summary(cox.model)
+summary(cox2w_PI)
 
 ```
 
 
 ### Joint latent class models' summary
 
-::: {#fig-summary .column-page layout-ncol=3}
 
-!['else' patients' class-specific weighted marginal and subject-specific mean predicted treatments' fitness trajectories](../../outputs/joint1_else.png){#fig-elsef1}
+```{r}
 
-!['else' patients' class-specific mean  predicted treatments' fitness trajectory](../../outputs/joint2_else.png){#fig-elsef2}
+#| label: tbl-modelsummary
+#| tbl-cap: "Models summary"
+#| tbl-colwidths: [60,40]
+df_cond <- function(cond,m1,m2,m3){
+  hazard_ratios <- data.frame(
+  Group = c(rep(cond, 12)),
+  Model = c(rep("Two time windows' Cox",4),rep("Time dependent Cox",4),rep("Joint latent class", 4)),
+  Variable = c("age", "sexMale", "fitness", "charlson", "age", "sexMale", "fitness", "charlson","age", "sexMale", "class1", "charlson"),
+  HR = c(
+    round(summary(m1)$conf.int[1,1],2),
+    round(summary(m1)$conf.int[2,1],2),
+    round(summary(m1)$conf.int[3,1],2),
+    round(summary(m1)$conf.int[4,1],2),
+    round(summary(m2)$conf.int[1,1],2),
+    round(summary(m2)$conf.int[2,1],2),
+    round(summary(m2)$conf.int[3,1],2),
+    round(summary(m2)$conf.int[4,1],2),
+    round(exp(coef(m3))[5],2),
+    round(exp(coef(m3))[6],2),
+    round(exp(coef(m3))[4],2),
+    round(exp(coef(m3))[7],2)
+  ),
+    CI = c(
+    paste0("(",round(summary(m1)$conf.int[1,3],2),",",
+           round(summary(m1)$conf.int[1,4],2),")"),
+    paste0("(",round(summary(m1)$conf.int[2,3],2),",",
+           round(summary(m1)$conf.int[2,4],2),")"),
+    paste0("(",round(summary(m1)$conf.int[3,3],2),",",
+           round(summary(m1)$conf.int[3,4],2),")"),
+    paste0("(",round(summary(m1)$conf.int[4,3],2),","
+           ,round(summary(m1)$conf.int[4,4],2),")"),
+    paste0("(",round(summary(m2)$conf.int[1,3],2),",",
+           round(summary(m2)$conf.int[1,4],2),")"),
+    paste0("(",round(summary(m2)$conf.int[2,3],2),",",
+           round(summary(m2)$conf.int[2,4],2),")"),
+    paste0("(",round(summary(m2)$conf.int[3,3],2),",",
+           round(summary(m2)$conf.int[3,4],2),")"),
+    paste0("(",round(summary(m2)$conf.int[4,3],2),",",
+           round(summary(m2)$conf.int[4,4],2),")"),
+    paste0("(",round(exp(confint(m3))[5,1],2),",",
+       round(exp(confint(m3))[5,2],2),")"),
+    paste0("(",round(exp(confint(m3))[6,1],2),",",
+       round(exp(confint(m3))[6,2],2),")"),
+    paste0("(",round(exp(confint(m3))[4,1],2),",",
+       round(exp(confint(m3))[4,2],2),")"),
+    paste0("(",round(exp(confint(m3))[7,1],2),",",
+       round(exp(confint(m3))[7,2],2),")")
+  )
+  )
+  return(hazard_ratios)
+}
 
-!['else' patients' class-specific survival functions](../../outputs/joint3_else.png){#fig-elsef3}
+results <- rbind(
+  df_cond('No predominant condition',cox2w_else,time_dep_else,mj2else),
+  df_cond('Obesity',cox2w_ob,time_dep_ob,mj2ob),
+  df_cond('Fragility',cox2w_f,time_dep_f,mj2f),
+  df_cond('Chronic kidney disease',cox2w_ckd,time_dep_ckd,mj2ckd),
+  df_cond('Heart failure',cox2w_hf,time_dep_hf,mj2hf),
+  df_cond('Cardiovascular disease',cox2w_cvd,time_dep_cvd,mj2cvd),
+  df_cond('Process indicators',cox2w_PI,time_dep_PI,mj2PI)
+) %>%
+    mutate(
+        Group = ifelse(row_number() == 1, Group, ifelse(Group == lag(Group), "", Group)),
+        Model = ifelse(row_number() == 1, Model, ifelse(Model == lag(Model), "", Model))
+    ) %>%
+  rename('95% CI (LL,UL)' = CI)
 
-![cvd patients' class-specific weighted marginal and subject-specific mean predicted treatments' fitness trajectories](../../outputs/joint1_cvd.png){#fig-cvdf1}
+kable(results, row.names=FALSE, align=c("l", "l", rep("r",5)))
+```
 
-![cvd patients' class-specific mean  predicted treatments' fitness trajectory](../../outputs/joint2_cvd.png){#fig-cvdf2}
+::: {#fig-summary .column-page layout-ncol=2}
 
-![cvd patients' class-specific survival functions](../../outputs/joint3_cvd.png){#fig-cvdf3}
+![Observed fitness trajectories of 'the'else' patients (grey lines)  a posteriori classified into the latent class with their mean fitness (points) and class-specidfic predicted fitness trajectory (red lines)](../../outputs/joint1_else.png){#fig-elsef1}
 
-![hf patients' class-specific weighted marginal and subject-specific mean predicted treatments' fitness trajectories](../../outputs/joint1_hf.png){#fig-hff1}
 
-![hf patients' class-specific fitness mean  predicted treatments' fitness trajectory](../../outputs/joint2_hf.png){#fig-hff2}
+!['else' patients' class-specific Kaplan-Meyer curves](../../outputs/joint2_else.png){#fig-elsef2}
 
-![hf patients' class-specific survival functions](../../outputs/joint3_hf.png){#fig-hff3}
+![Observed fitness trajectories of obese patients (grey lines)  a posteriori classified into the latent class with their mean fitness (points) and class-specidfic predicted fitness trajectory (red lines)](../../outputs/joint1_ob.png){#fig-obf1}
 
-![ckd patients' class-specific weighted marginal and subject-specific mean predicted treatments' fitness trajectories](../../outputs/joint1_ckd.png){#fig-ckdf1}
+![Obese patients' class-specific Kaplan-Meyer curves](../../outputs/joint2_ob.png){#fig-obf2}
 
-![ckd patients' class-specific mean  predicted treatments' fitness trajectory](../../outputs/joint2_ckd.png){#fig-ckdf2}
+![Observed fitness trajectories of fragile patients (grey lines)  a posteriori classified into the latent class with their mean fitness (points) and class-specidfic predicted fitness trajectory (red lines)](../../outputs/joint1_f.png){#fig-ff1}
 
-![ckd patients' class-specific survival functions](../../outputs/joint3_ckd.png){#fig-ckdf3}
+![Fragile patients' class-specific Kaplan-Meyer curves](../../outputs/joint2_f.png){#fig-ff2}
 
-![Fragile patients' class-specific weighted marginal and subject-specific mean predicted treatments' fitness trajectories](../../outputs/joint1_f.png){#fig-ff1}
+![Observed fitness trajectories of ckd patients (grey lines)  a posteriori classified into the latent class with their mean fitness (points) and class-specidfic predicted fitness trajectory (red lines)](../../outputs/joint1_ckd.png){#fig-ckdf1}
 
-![Fragile patients' class-specific mean  predicted treatments' fitness trajectory](../../outputs/joint2_f.png){#fig-ff2}
+![ckd patients' class-specific Kaplan-Meyer curves](../../outputs/joint2_ckd.png){#fig-ckdf2}
 
-![Fragile patients' class-specific survival functions](../../outputs/joint3_f.png){#fig-ff3}
+![Observed fitness trajectories of hf patients (grey lines)  a posteriori classified into the latent class with their mean fitness (points) and class-specidfic predicted fitness trajectory (red lines)](../../outputs/joint1_hf.png){#fig-hff1}
 
-![Obese patients' class-specific weighted marginal and subject-specific mean predicted treatments' fitness trajectories](../../outputs/joint1_ob.png){#fig-obf1}
+![hf patients' class-specific Kaplan-Meyer curves](../../outputs/joint2_hf.png){#fig-hff2}
 
-![Obese patients' class-specific mean  predicted treatments' fitness trajectory](../../outputs/joint2_ob.png){#fig-obf2}
+![Observed fitness trajectories of cvd patients (grey lines)  a posteriori classified into the latent class with their mean fitness (points) and class-specidfic predicted fitness trajectory (red lines)](../../outputs/joint1_cvd.png){#fig-cvdf1}
 
-![Obese patients' class-specific survival functions](../../outputs/joint3_ob.png){#fig-obf3}
+![cvd patients' class-specific Kaplan-Meyer curves](../../outputs/joint2_cvd.png){#fig-cvdf2}
 
-![Class-specific weighted marginal and subject-specific mean predicted process indicators' fitness trajectories](../../outputs/joint1_PI.png){#fig-pf1}
 
-![Class-specific mean  predicted process indicators' fitness trajectory](../../outputs/joint2_PI.png){#fig-pf2}
+![Process indicators' observed fitness trajectories of the patients (grey lines)  a posteriori classified into the latent class with their mean fitness (points) and class-specidfic predicted fitness trajectory (red lines)](../../outputs/joint1_PI.png){#fig-pf1}
 
-![Class-specific survival functions](../../outputs/joint3_PI.png){#fig-pf3}
+![Class-specific Kaplan-Meyer curves](../../outputs/joint2_PI.png){#fig-pf2}
 
-Joint latent class models' plots' panel
+Joint latent class models' plots panel
 :::
