@@ -27,7 +27,7 @@ RUN micromamba install -y -n aspire -f /tmp/env_project.yaml \
 # Installing R packages not found in conda-forge
 RUN micromamba run -n aspire Rscript -e 'remotes::install_cran("bupaR")'
 RUN micromamba run -n aspire Rscript -e 'remotes::install_cran("processmapR")'
-RUN micromamba run -n aspire Rscript -e 'remotes::install_github("paquetes_R/Comorbilidades_0.3.22.tar.gz")'
+RUN micromamba run -n aspire Rscript -e 'remotes::install_github("paquetes_R/Comorbilidades_0.3.22")'
 
 ENV RETICULATE_PYTHON=/opt/conda/envs/aspire/bin/python
 
