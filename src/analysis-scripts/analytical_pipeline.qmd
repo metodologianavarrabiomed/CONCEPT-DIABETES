@@ -3009,7 +3009,7 @@ treatments_clusters_boxplot(con,cond,
 
 ##### Time Dependent Cox Model
 
-In the next example, we choose fitness, age, sex and copayment to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
 
 ```{python}
 #| label: create fitness by period table (else)
@@ -3429,7 +3429,7 @@ treatments_clusters_boxplot(con,cond,
 
 ##### Time Dependent Cox Model
 
-In the next example, we choose fitness, age, sex and copayment to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
 
 ```{python}
 #| label: create fitness by period table (ob)
@@ -3848,7 +3848,7 @@ treatments_clusters_boxplot(con,cond,
 
 ##### Time Dependent Cox Model
 
-In the next example, we choose fitness, age, sex and copayment to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
 
 ```{python}
 #| label: create fitness by period table (f)
@@ -4267,7 +4267,7 @@ treatments_clusters_boxplot(con,cond,
 
 ##### Time Dependent Cox Model
 
-In the next example, we choose fitness, age, sex and copayment to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
 
 ```{python}
 #| label: create fitness by period table (ckd)
@@ -4686,7 +4686,7 @@ treatments_clusters_boxplot(con,cond,
 
 ##### Time Dependent Cox Model
 
-In the next example, we choose fitness, age, sex and copayment to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
 
 ```{python}
 #| label: create fitness by period table (hf)
@@ -5108,7 +5108,7 @@ treatments_clusters_boxplot(con,cond,
 
 ##### Time Dependent Cox Model
 
-In the next example, we choose fitness, age, sex and copayment to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
 
 ```{python}
 #| label: create fitness by period table (cvd)
@@ -5646,7 +5646,7 @@ con.close()
 
 ##### Time Dependent Cox Model
 
-In the next example, we choose fitness, age, sex and copayment to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependent Cox model, and the summary of it is:
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependent Cox model, and the summary of it is:
 
 
 ```{r}
