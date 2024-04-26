@@ -3091,7 +3091,7 @@ summary(mj2else)
 
 postprob(mj2else)
 
-df <- merge(df,mj2else$pprob %>%
+df <- merge(df,mj2else$pprobY %>%
               mutate(class = case_when(
                 class == 1 ~ "class 1",
                 class == 2 ~ "class 2")),
@@ -3511,7 +3511,7 @@ summary(mj2ob)
 
 postprob(mj2ob)
 
-df <- merge(df,mj2ob$pprob %>%
+df <- merge(df,mj2ob$pprobY %>%
               mutate(class = case_when(
                 class == 1 ~ "class 1",
                 class == 2 ~ "class 2")),
@@ -3930,7 +3930,7 @@ summary(mj2f)
 
 postprob(mj2f)
 
-df <- merge(df,mj2f$pprob %>%
+df <- merge(df,mj2f$pprobY %>%
               mutate(class = case_when(
                 class == 1 ~ "class 1",
                 class == 2 ~ "class 2")),
@@ -4349,7 +4349,7 @@ summary(mj2ckd)
 
 postprob(mj2ckd)
 
-df <- merge(df,mj2ckd$pprob %>%
+df <- merge(df,mj2ckd$pprobY %>%
               mutate(class = case_when(
                 class == 1 ~ "class 1",
                 class == 2 ~ "class 2")),
@@ -4768,7 +4768,7 @@ summary(mj2hf)
 
 postprob(mj2hf)
 
-df <- merge(df,mj2hf$pprob %>%
+df <- merge(df,mj2hf$pprobY %>%
               mutate(class = case_when(
                 class == 1 ~ "class 1",
                 class == 2 ~ "class 2")),
@@ -5190,7 +5190,7 @@ summary(mj2cvd)
 
 postprob(mj2cvd)
 
-df <- merge(df,mj2cvd$pprob %>%
+df <- merge(df,mj2cvd$pprobY %>%
               mutate(class = case_when(
                 class == 1 ~ "class 1",
                 class == 2 ~ "class 2")),
@@ -5657,13 +5657,15 @@ In the next example, we choose fitness, age, sex and charlson's index to try to 
 #| output: TRUE
 con <- dbConnect(duckdb(), dbdir = db_path)
 
-df <- dbGetQuery(con, paste0("SELECT p2p.ID, p2p.t_0, p2p.t_1, p2p.fitness, p2p.status,p2p.status2, piv.age_dx as age, piv.sex, piv.copayment,piv.charlson FROM period2process_fitness p2p LEFT JOIN patient_incidents_view_ch piv ON p2p.ID=piv.patient_id"))
+df <- dbGetQuery(con, "SELECT pp.*, pc.initial_status, pc.final_status FROM (SELECT p2p.ID, p2p.t_0, p2p.t_1, p2p.fitness, p2p.status,p2p.status2, piv.age_dx as age, piv.sex, piv.copayment,piv.charlson,piv.country FROM period2process_fitness p2p LEFT JOIN patient_incidents_view_ch piv ON p2p.ID=piv.patient_id) pp LEFT JOIN patient_condition_hosp pc ON pp.ID=pc.patient_id") %>%
+  left_join( country2cont %>% select(country, a.3), by = "country")
 dbDisconnect(con, shutdown = TRUE)
 
 df$sex <- as.factor(ifelse(df$sex == 0, 'Male', 'Female'))
 df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
+df$country <- df$a.3
 
 time_dep_PI <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
                data=df)
@@ -5700,7 +5702,7 @@ summary(mj2PI)
 
 postprob(mj2PI)
 
-df <- merge(df,mj2PI$pprob %>%
+df_ <- merge(df,mj2PI$pprobY %>%
               mutate(class = case_when(
                 class == 1 ~ "class 1",
                 class == 2 ~ "class 2")),
@@ -5710,7 +5712,7 @@ data.new <-data.frame(d1,age=65,sex='Female',charlson=1)
 mj2PI.pred <- predictY(mj2PI, data.new , var.time = "t_0")
 
 
-ggplot(data = df %>% filter(t_0<1100), aes(x = t_0, y = fitness, group = ID2))+ 
+ggplot(data = df_ %>% filter(t_0<1100), aes(x = t_0, y = fitness, group = ID2))+ 
   geom_line(colour='grey') + 
   #stat_smooth(aes(group = 1),method = "lm",se=TRUE) +
   stat_summary(aes(group = 1), geom = "point", fun = mean, shape = 16, size = 2) + 
@@ -5724,7 +5726,7 @@ ggsave(filename=gsub("src/analysis-scripts/","",
         plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)
 
 
-survfit(Surv(t_min, t_max, status2) ~ class, data=df %>%
+survfit(Surv(t_min, t_max, status2) ~ class, data=df_ %>%
           select(ID2,t_min,t_max,status2,class) %>% unique()) %>%
   autoplot(xlab = "Day", ylab = "Survival probability")
 ggsave(filename=gsub("src/analysis-scripts/","",
@@ -5767,7 +5769,7 @@ summary(cox2w_PI)
 
 ### Prediction models' summary
 
-
+#### Treatment models
 ```{r}
 
 #| label: tbl-modelsummary
@@ -5777,6 +5779,9 @@ df_cond <- function(cond,m1,m2,m3){
   hazard_ratios <- data.frame(
   Group = c(rep(cond, 12)),
   Model = c(rep("Two time windows' Cox",4),rep("Time dependent Cox",4),rep("Joint latent class", 4)),
+  n = c(m1$n,m1$n,m1$n,m1$n,m3$ns,m3$ns,
+          m3$ns,m3$ns,m3$ns,m3$ns,m3$ns,m3$ns
+  ),
   Variable = c("age", "sexMale", "fitness", "charlson", "age", "sexMale", "fitness", "charlson","age", "sexMale", "class1", "charlson"),
   HR = c(
     round(summary(m1)$conf.int[1,1],2),
@@ -5833,12 +5838,14 @@ results <- rbind(
 ) %>%
     mutate(
         Group = ifelse(row_number() == 1, Group, ifelse(Group == lag(Group), "", Group)),
-        Model = ifelse(row_number() == 1, Model, ifelse(Model == lag(Model), "", Model))
+        Model = ifelse(row_number() == 1, Model, ifelse(Model == lag(Model), "", Model)),
+        n = ifelse(row_number() == 1, n, ifelse(n == lag(n), "", n))
     ) %>%
   rename('95% CI (LL,UL)' = CI)
 
-kable(results, row.names=FALSE, align=c("l", "l", rep("r",5)))
+kable(results[1:72,], row.names=FALSE, align=c("l", "l", rep("r",5)))
 ```
+
 
 ::: {#fig-summary .column-page layout-ncol=2}
 
@@ -5867,10 +5874,44 @@ kable(results, row.names=FALSE, align=c("l", "l", rep("r",5)))
 
 ![cvd patients' class-specific Kaplan-Meyer curves](../../outputs/joint2_cvd.png){#fig-cvdf2}
 
+Treatments' joint latent class models' plots panel
+:::
+
+#### Process indicators' model
+```{r}
+#| label: tbl-modelsummary2
+#| tbl-cap: "Process indicators models' summary"
+#| tbl-colwidths: [60,40]
+kable(results[73:84,], row.names=FALSE, align=c("l", "l", rep("r",5)))
+
+```
+
+```{r}
+#| label: tbl-modelsummary3
+#| tbl-cap: "Process indicators joint latent classes' summary"
+#| tbl-colwidths: [60,40]
+df_ %>% select(ID,ID2,age,sex,copayment,charlson,t_max,
+               class,initial_status,final_status,country) %>%
+  distinct() %>%
+  summary_factorlist("class",
+                     c("age","sex","copayment","charlson","t_max",
+                       "initial_status","final_status","country"),
+                     total_col = TRUE,
+                     cont="mean",
+                     cont_cut=10,
+                     na_include = TRUE,
+                     na_to_prop =  FALSE,
+                     include_col_totals_percent	=FALSE,
+                     add_col_totals = TRUE)-> df_tab
+
+kable(df_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
+```
+::: {#fig-summary2 .column-page layout-ncol=2}
 
 ![Process indicators' observed fitness trajectories of the patients (grey lines)  a posteriori classified into the latent class with their mean fitness (points) and class-specidfic predicted fitness trajectory (red lines)](../../outputs/joint1_PI.png){#fig-pf1}
 
 ![Class-specific Kaplan-Meyer curves](../../outputs/joint2_PI.png){#fig-pf2}
 
-Joint latent class models' plots panel
+Process Indicators' joint latent class model's plots panel
 :::
+
