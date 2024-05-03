@@ -3492,14 +3492,14 @@ Using same predictive variables a joint latent class model of two classes is mad
 #| warning: FALSE
 #| output: TRUE
 
-### 1 latent class
+tryCatch(
+{### 1 latent class
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
 ### 2 latent class
-tryCatch(
-{mj2PI <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
+mj2PI <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
@@ -3906,14 +3906,14 @@ Using same predictive variables a joint latent class model of two classes is mad
 #| warning: FALSE
 #| output: TRUE
 
-### 1 latent class
+tryCatch(
+{### 1 latent class
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
 ### 2 latent class
-tryCatch(
-{mj2else <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
+mj2else <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
@@ -4272,12 +4272,12 @@ Using same predictive variables a joint latent class model of two classes is mad
 
 ### 1 latent class
 
-mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
+tryCatch(
+{mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
 ### 2 latent class
-tryCatch(
-{mj2ob <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
+mj2ob <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
@@ -4633,14 +4633,14 @@ Using same predictive variables a joint latent class model of two classes is mad
 #| warning: FALSE
 #| output: TRUE
 
-### 1 latent class
+tryCatch(
+{### 1 latent class
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
 ### 2 latent class
-tryCatch(
-{mj2f <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
+mj2f <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
@@ -4996,14 +4996,14 @@ Using same predictive variables a joint latent class model of two classes is mad
 #| warning: FALSE
 #| output: TRUE
 
-### 1 latent class
+tryCatch(
+{### 1 latent class
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
 ### 2 latent class
-tryCatch(
-{mj2ckd <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
+mj2ckd <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
@@ -5358,14 +5358,14 @@ Using same predictive variables a joint latent class model of two classes is mad
 #| warning: FALSE
 #| output: TRUE
 
-### 1 latent class
+tryCatch(
+{### 1 latent class
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
 ### 2 latent class
-tryCatch(
-{mj2hf <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
+mj2hf <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
@@ -5722,12 +5722,12 @@ Using same predictive variables a joint latent class model of two classes is mad
 
 ### 1 latent class
 
-mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
+tryCatch(
+{mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
 ### 2 latent class
-tryCatch(
-{mj2cvd <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
+mj2cvd <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
                             random=~t_0,subject="ID2",
                             survival = Surv(t_min,t_max,status2)~ age+sex+charlson,
@@ -5807,7 +5807,8 @@ summary(cox2w_cvd)
 #| label: tbl-modelsummary1
 #| tbl-cap: "Process indicators models' summary"
 #| tbl-colwidths: [60,40]
-df_cond <- function(cond,m1,m2,m3){
+df_cond <- function(cond,m1,m2,m3,all){
+  if(all){
   hazard_ratios <- data.frame(
   Group = c(rep(cond, 12)),
   Model = c(rep("Two time windows' Cox",4),rep("Time dependent Cox",4),rep("Joint latent class", 4)),
@@ -5856,17 +5857,63 @@ df_cond <- function(cond,m1,m2,m3){
        round(exp(confint(m3))[7,2],2),")")
   )
   )
+  } else {
+  hazard_ratios <- data.frame(
+  Group = c(rep(cond, 12)),
+  Model = c(rep("Two time windows' Cox",4),rep("Time dependent Cox",4),rep("Joint latent class", 4)),
+  n = c(m1$n,m1$n,m1$n,m1$n,NaN,NaN,
+          NaN,NaN,NaN,NaN,NaN,NaN
+  ),
+  Variable = c("age", "sexMale", "fitness", "charlson", "age", "sexMale", "fitness", "charlson","age", "sexMale", "class1", "charlson"),
+  HR = c(
+    round(summary(m1)$conf.int[1,1],2),
+    round(summary(m1)$conf.int[2,1],2),
+    round(summary(m1)$conf.int[3,1],2),
+    round(summary(m1)$conf.int[4,1],2),
+    round(summary(m2)$conf.int[1,1],2),
+    round(summary(m2)$conf.int[2,1],2),
+    round(summary(m2)$conf.int[3,1],2),
+    round(summary(m2)$conf.int[4,1],2),
+    '',
+    '',
+    '',
+    ''
+  ),
+    CI = c(
+    paste0("(",round(summary(m1)$conf.int[1,3],2),",",
+           round(summary(m1)$conf.int[1,4],2),")"),
+    paste0("(",round(summary(m1)$conf.int[2,3],2),",",
+           round(summary(m1)$conf.int[2,4],2),")"),
+    paste0("(",round(summary(m1)$conf.int[3,3],2),",",
+           round(summary(m1)$conf.int[3,4],2),")"),
+    paste0("(",round(summary(m1)$conf.int[4,3],2),","
+           ,round(summary(m1)$conf.int[4,4],2),")"),
+    paste0("(",round(summary(m2)$conf.int[1,3],2),",",
+           round(summary(m2)$conf.int[1,4],2),")"),
+    paste0("(",round(summary(m2)$conf.int[2,3],2),",",
+           round(summary(m2)$conf.int[2,4],2),")"),
+    paste0("(",round(summary(m2)$conf.int[3,3],2),",",
+           round(summary(m2)$conf.int[3,4],2),")"),
+    paste0("(",round(summary(m2)$conf.int[4,3],2),",",
+           round(summary(m2)$conf.int[4,4],2),")"),
+    '',
+    '',
+    '',
+    ''
+  )
+  )
+  }
   return(hazard_ratios)
 }
 
 results <- rbind(
-  df_cond('No predominant condition',cox2w_else,time_dep_else,mj2else),
-  df_cond('Obesity',cox2w_ob,time_dep_ob,mj2ob),
-  df_cond('Fragility',cox2w_f,time_dep_f,mj2f),
-  df_cond('Chronic kidney disease',cox2w_ckd,time_dep_ckd,mj2ckd),
-  df_cond('Heart failure',cox2w_hf,time_dep_hf,mj2hf),
-  df_cond('Cardiovascular disease',cox2w_cvd,time_dep_cvd,mj2cvd),
-  df_cond('Process indicators',cox2w_PI,time_dep_PI,mj2PI)
+  df_cond('No predominant condition',cox2w_else,time_dep_else,mj2else,exists('mj2else')),
+  df_cond('Obesity',cox2w_ob,time_dep_ob,mj2ob,exists('mj2ob')),
+  df_cond('Fragility',cox2w_f,time_dep_f,mj2f,exists('mj2f')),
+  df_cond('Chronic kidney disease',cox2w_ckd,time_dep_ckd,mj2ckd,exists('mj2ckd')),
+  df_cond('Heart failure',cox2w_hf,time_dep_hf,mj2hf,exists('mj2hf')),
+  df_cond('Cardiovascular disease',cox2w_cvd,time_dep_cvd,mj2cvd,exists('mj2cvd')),
+  df_cond('Process indicators',cox2w_PI,time_dep_PI,mj2PI,exists('mj2PI'))
 ) %>%
     mutate(
         Group = ifelse(row_number() == 1, Group, ifelse(Group == lag(Group), "", Group)),
