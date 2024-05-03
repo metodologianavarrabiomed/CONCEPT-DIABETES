@@ -48,7 +48,7 @@ Follow the steps below.
 | Surname, name | Affiliation | ![orcid](https://orcid.org/sites/default/files/images/orcid_16x16.png) ORCID |
 |---------------|-------------|------------------------------------------------------------------------------|
 | Unidad de Metodología | Navarrabiomed-HUN-UPNA, Instituto de Investigación Sanitaria de Navarra (IdiSNA) | |
-| Oscoz-Villanueva, Ignacio | Instituto de Investigación Sanitaria de Navarra (IdiSNA)| https://https://orcid.org/0009-0004-0387-6056 |
+| Oscoz-Villanueva, Ignacio | Instituto de Investigación Sanitaria de Navarra (IdiSNA)| https://orcid.org/0009-0004-0387-6056 |
 | Tamayo, Ibai | Navarrabiomed-HUN-UPNA | https://orcid.org/0000-0003-2860-3359 |
 | Ballesteros-Domínguez, Asier | Instituto de Investigación Sanitaria de Navarra (IdiSNA) | https://orcid.org/0000-0002-2195-4669 |
 | Librero, Julián | Navarrabiomed-HUN-UPNA | https://orcid.org/0000-0002-4859-9054 |
