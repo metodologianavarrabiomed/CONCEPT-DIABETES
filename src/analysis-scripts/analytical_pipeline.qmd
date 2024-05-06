@@ -3520,7 +3520,7 @@ data.new <-data.frame(d1,age=65,sex='Female',charlson=1)
 mj2PI.pred <- predictY(mj2PI, data.new , var.time = "t_0")
 
 
-ggplot(data = df_ %>% filter(t_0<1100), aes(x = t_0, y = fitness, group = ID2))+ 
+ggplot(data = df_pi %>% filter(t_0<1100), aes(x = t_0, y = fitness, group = ID2))+ 
   geom_line(colour='grey') + 
   #stat_smooth(aes(group = 1),method = "lm",se=TRUE) +
   stat_summary(aes(group = 1), geom = "point", fun = mean, shape = 16, size = 2) + 
@@ -3534,7 +3534,7 @@ ggsave(filename=gsub("src/analysis-scripts/","",
         plot=last_plot(),width = 1000, height = 750, units = "px",dpi=150)
 
 
-survfit(Surv(t_min, t_max, status2) ~ class, data=df_ %>%
+survfit(Surv(t_min, t_max, status2) ~ class, data=df_pi %>%
           select(ID2,t_min,t_max,status2,class) %>% unique()) %>%
   autoplot(xlab = "Days", ylab = "Survival probability")
 ggsave(filename=gsub("src/analysis-scripts/","",
@@ -5001,7 +5001,7 @@ tryCatch(
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
-                 hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=400)
 ### 2 latent class
 mj2ckd <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
@@ -5363,7 +5363,7 @@ tryCatch(
 
 mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
-                 hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
+                 hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=400)
 ### 2 latent class
 mj2hf <- gridsearch(rep = 20, maxiter = 15, minit = mj1, 
                   Jointlcmm(fixed= fitness ~ t_0 ,mixture =~ t_0,
@@ -5861,8 +5861,8 @@ df_cond <- function(cond,m1,m2,m3,all){
   hazard_ratios <- data.frame(
   Group = c(rep(cond, 12)),
   Model = c(rep("Two time windows' Cox",4),rep("Time dependent Cox",4),rep("Joint latent class", 4)),
-  n = c(m1$n,m1$n,m1$n,m1$n,NaN,NaN,
-          NaN,NaN,NaN,NaN,NaN,NaN
+  n = c(m1$n,m1$n,m1$n,m1$n,"NaN","NaN",
+          "NaN","NaN","NaN","NaN","NaN","NaN"
   ),
   Variable = c("age", "sexMale", "fitness", "charlson", "age", "sexMale", "fitness", "charlson","age", "sexMale", "class1", "charlson"),
   HR = c(
@@ -5930,8 +5930,10 @@ kable(results[73:84,], row.names=FALSE, align=c("l", "l", rep("r",5)))
 #| label: tbl-modelsummary2
 #| tbl-cap: "Process indicators joint latent classes' summary"
 #| tbl-colwidths: [60,40]
-df_$country <- ifelse(df_$country=='ESP', 'ESP', 'Others')
-df_ %>%
+tryCatch(
+{
+df_pi$country <- ifelse(df_pi$country=='ESP', 'ESP', 'Others')
+df_pi %>%
   mutate(copayment=factor(copayment,levels=c(0,1),
                     labels=c("less than 18000",
                              "more or equal than 18000"))) %>% select(ID,ID2,age,sex,copayment,charlson,t_max,
@@ -5949,6 +5951,11 @@ df_ %>%
                      add_col_totals = TRUE)-> df_tab
 
 kable(df_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
+},
+error = function(e) {
+            message(conditionMessage(e))
+        }
+)
 ```
 
 ::: {#fig-summary2 .column-page layout-ncol="2"}
