@@ -3510,7 +3510,7 @@ summary(mj2PI)
 
 postprob(mj2PI)
 
-df_ <- merge(df,mj2PI$pprobY %>%
+df_pi <- merge(df,mj2PI$pprobY %>%
               mutate(class = case_when(
                 class == 1 ~ "class 1",
                 class == 2 ~ "class 2")),
@@ -5720,10 +5720,9 @@ Using same predictive variables a joint latent class model of two classes is mad
 #| warning: FALSE
 #| output: TRUE
 
-### 1 latent class
-
 tryCatch(
-{mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
+{### 1 latent class
+mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
                  hazardtype="PH",ng=1,data=df, verbose=FALSE,maxiter=250)
 ### 2 latent class
@@ -5927,9 +5926,12 @@ kable(results[73:84,], row.names=FALSE, align=c("l", "l", rep("r",5)))
 ```
 
 ```{r}
-#| label: tbl-modelsummary2
-#| tbl-cap: "Process indicators joint latent classes' summary"
-#| tbl-colwidths: [60,40]
+#| label: get tbl-modelsummary2
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+df_tab <- data.frame()
 tryCatch(
 {
 df_pi$country <- ifelse(df_pi$country=='ESP', 'ESP', 'Others')
@@ -5957,6 +5959,14 @@ error = function(e) {
         }
 )
 ```
+
+```{r}
+#| label: tbl-modelsummary2
+#| tbl-cap: "Process indicators joint latent classes' summary"
+#| tbl-colwidths: [60,40]
+kable(df_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
+```
+
 
 ::: {#fig-summary2 .column-page layout-ncol="2"}
 ![Process indicators' observed fitness trajectories of the patients (grey lines) a posteriori classified into the latent class with their mean fitness (points) and class-specidfic predicted fitness trajectory (red lines)](../../outputs/joint1_PI.png){#fig-pf1}
