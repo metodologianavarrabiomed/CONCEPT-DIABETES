@@ -9,6 +9,21 @@ CONCEPT-DIABETES is a project that focuses on assessing the effectiveness of a s
 ## CONCEPT Project Coordinator
 **[Berta Ibáñez Beroiz PhD](https://orcid.org/0000-0002-7797-4845)**
 
+## Main specific aims:
+- To identify and characterize both the healthcare trajectories and the therapeutic 
+trajectories experienced by patients with T2D across the healthcare system. 
+- To compare both the healthcare trajectories and the therapeutic trajectories 
+experienced by patients with T2D with theoretical trajectories derived from CGPs in 
+terms of process indicators and pharmacological treatment recommendations.  
+- To assess the effect of healthcare provider adherence to CGPs on health outcomes and 
+clinical costs.  
+- To compare the degree of compliance with medical care standards, prescription 
+patterns and clinical outcomes between regional health services, taking into account the 
+different frequencies of the trajectories obtained for each cohort.  
+- To compare traditional and new analytical methods based on process mining in terms 
+of modeling quality, predictive capacity of the derived models and information provided 
+(instrumental methodological objective).
+
 ## Cohort definition:
 
 The cohort is defined as patients with type 2 diabetes.
