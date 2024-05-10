@@ -31,13 +31,13 @@ execute:
 ## 1. Introduction
 
 ### 1.1. Project description
-
+::: {.justify}
 CONCEPT-DIABETES is part of CONCEPT, a coordinated research project initiative under the umbrella of REDISSEC, the Spanish Research Network on Health Services Research and Chronic Conditions \[www.redissec.com\], that aims at analyzing chronic care effectiveness and efficiency in a number of cohorts built on real world data (RWD). In the specific case of CONCEPT-DIABETES, the focus will be on assessing the effectiveness of a set of clinical practice actions and quality improvement strategies at different levels (patient-level, health-care provider level and health system level) on the management and health results of patients with type 2 diabetes (T2D) using process mining methodology.
 
 It is a population-based retrospective observational study centered on all T2D patients diagnosed in four Regional Health Services within the Spanish National Health Service, that includes information from all their contacts with the health services using the electronic medical record systems including Primary Care data, Specialist Care data, Hospitalizations, Urgent Care data, Pharmacy Claims, and also other registers such as the mortality and the population register. We will assess to what extent recommended interventions from evidence-based guidelines are implemented in real life and which are their effects on health outcomes. Process mining methods will be used to analyze the data, and comparison with standard methods will be also conducted.
-
+::: 
 ### 1.2. Cohort definition
-
+::: {.justify}
 The cohort is defined as patients with type 2 diabetes:
 
 -   Inclusion criteria: Patients that, at 2017-01-01 or during the follow-up from 2017-01-01 to 2022-12-31, had active health card (active TIA - tarjeta sanitaria activa) and one of the inclusion codes given in the 'inclusion code list ('T90' if CIAP-2, '250' if 'CIE-9CM' or 'E11' if CIE-10-ES).
@@ -45,17 +45,17 @@ The cohort is defined as patients with type 2 diabetes:
 -   Exclusion criteria: Patients that had none of the exclusion codes given in the exclusion codes list ('T89' if CIAP-2, '250.01' if CIE-9CM, '250.03' if CIE-9CM, '250.11' if CIE-9CM, '250.13' if CIE-9CM, '250.21' if CIE-9CM, '250.23' if CIE-9CM, '250.31' if CIE-9CM, '250.33' if CIE-9CM, '250.41' if CIE-9CM, '250.43' if CIE-9CM, '250.51' if CIE-9CM, '250.53' if CIE-9CM, '250.61' if CIE-9CM, '250.63' if CIE-9CM, '250.71' if CIE-9CM, '250.73' if CIE-9CM, '250.81' if CIE-9CM, '250.83' if CIE-9CM, '250.91' if CIE-9CM, '250.93' if CIE-9CM or 'E10' if CIE-10-ES) during their follow-up or patients with no contact with the health system from 2017-01-01 to 2022-12-31.
 
 -   Study period: 2017-01-01 until 2022-12-31.
-
+::: 
 ### 1.3. Process indicators
-
+::: {.justify}
 Process indicators are guidelines' measures that indicate whether the guidelines are being implemented as planned. Different studies pay special attention to them. First, process indicators are essential for assessing the three dimensions of healthcare quality: effectiveness, safety, and patient-centeredness. They are measured relatively easily and often do not require risk-adjustment, making their interpretation straightforward. Poor performance on process indicators can be directly attributed to the actions of healthcare providers, providing a clear indication for improvement, such as better adherence to clinical guidelines. Moreover, process indicators allow for the identification of areas for quality improvement, which is crucial in the complex healthcare environment. These indicators cover a wide range of health factors and help focus resources and efforts to improve the health and well-being of the population. Therefore, the attention given to health process indicators is justified by their crucial role in evaluating and improving healthcare quality and population health.
-
+::: 
 ### 1.4. Treatment guidelines
-
+::: {.justify}
 One of the main intermediate outcome indicators to which clinical guidelines pay special attention is a good glycaemic control, since its absence is clearly related to micro and macro-vascular complications. In clinical practice, sub-optimal glycaemic control can be mainly attributed to two reasons: the patients' non-adherence to prescribed treatment; and the healthcare providers' clinical or therapeutic guidelines' non-adherence.
 
 Treatment decisions are based on glycated hemoglobin measurements. In this context the redGDPS foundation provides DM2 treatment algorithm, a diagram that aims to help professionals to quickly and easily choose the most appropriate treatment for people with diabetes.
-
+::: 
 <object data="./Algoritmo_DM2_ENG_2023.pdf" type="application/pdf" width="800px" height="400px">
 
 <embed src="./Algoritmo_DM2_ENG_2023.pdf">
@@ -167,9 +167,9 @@ library(Comorbilidades)
 ```
 
 ### 2.2. Data preprocessing
-
+::: {.justify}
 First of all, it is important to prepare correctly the data for the analysis. The next function creates some sql views that are going to be useful later:
-
+::: 
 ```{python, warning: FALSE}
 #| label: data preprocess
 #| warning: FALSE
@@ -332,9 +332,9 @@ def general_preprocess(con):
 ### 2.3. Event log creation
 
 #### 2.3.1. Healthcare event log
-
+::: {.justify}
 For using process mining an event log is needed. Healthcare event log is made in this section with the services visited by incident patients.
-
+::: 
 ```{python}
 #| label: Healtcare eventlog creation
 
@@ -385,9 +385,9 @@ def evlog_services(con):
 ```
 
 #### 2.3.2. Process indicators' event log
-
+::: {.justify}
 With the objective of studying process indicators a function to make a process indicators' event log is coded below. There, in addition to laboratory measures and realized exams, three artificial events have been included to aid the analysis: 'INI' event denotes each patient's diabetes diagnosis date, 'yFIN' events indicate the end of each annual interval and 'FIN' event is the date of the end of the last completed annual interval.
-
+::: 
 ```{python, warning: FALSE}
 #| label: process indicators' event log creation
 #| warning: FALSE
@@ -496,7 +496,7 @@ def evlog_process_ind(con):
 ```
 
 #### 2.3.3. Treatment event log
-
+::: {.justify}
 The sort of functions below take data model's treatment and parameter tables to create an event log of glycated hemoglobin measures and treatment of patients. Glycated hemoglobin measurement events are divided into two different states, those that have a value smaller than "L" and the others. L's value depends on patient's diabetes duration, age and comorbilities and complications. Therefore with the help of expert clinicians we decided that L would take the following values:
 
 -   L=7 if age\<75 and no cardiovascular disease, heart failure, chronic kidney disease or fragility.
@@ -504,7 +504,7 @@ The sort of functions below take data model's treatment and parameter tables to 
 -   L=8.5 if else.
 
 As they are measures these events do not have any duration. In the case of treatments on the other hand a duration period exists. For treatments, events definition is based on drugs prescriptions if exists or dispensing dates and a fixed period time if else. Functions below make event logs with the previous considerations. Treatment analysis of this document is thought to do by the predominant clinical condition of patients according to DM2 treatment algorithm. In other words, patients are grouped by their predominant clinical condition and the analysis is realized independently to each group.
-
+::: 
 ```{python, warning: FALSE}
 #| label: treatments' event log creation
 #| warning: FALSE
@@ -1330,9 +1330,9 @@ def nac2comprimidos(nac_path,code_set):
 ### 2.4. Description of traces
 
 #### 2.4.1. Estimation of distances
-
+::: {.justify}
 One of the most important aim of process mining is to show and explain processes. However, the great variety of traces does not allow us to draw any clear conclusion and it is often necessary to simplify our data. Another option that we can do before simplifying, to avoid the excessive losing of information and give another perspective to the analysis is to cluster the traces and to analyze them by cluster. To do that we have to measure somehow differences between traces; the distance between them. There are some distances that we can use to this task: edit distances, vector term similarity, LDA based distances, embedding based distances... Some of them are shown below as functions to calculate the distance matrix of traces:
-
+::: 
 ```{python}
 #| label: Distance matrix functions
 
@@ -1450,11 +1450,11 @@ def calculate_dm_LDA(traces,T=10):
 ```
 
 #### 2.4.2. Clustering of traces
-
+::: {.justify}
 Once the distance matrix is obtained, we can proceed with the clustering. Each clustering method has its characteristics and its peculiarities. For example, we have to consider we have a distance matrix and not a data frame in which we apply directly the method. A hierarchical clustering algorithm seems to be a good choice in our case because in addition to the above it allows to choose the optimal number of clusters.
 
 The next code box contains two different functions to choose the optimal number of clusters:
-
+::: 
 ```{python}
 #| label: Functions to choose optimal number of clusters
 def dendogram(dm,output_png='../../outputs/dendogram.png'):
@@ -1817,9 +1817,9 @@ process_map_by_cluster <- function(evLog,t_freq,cond_code){
 ### 2.5. Conformance checking
 
 #### 2.5.1. Adherence analysis for process indicators
-
+::: {.justify}
 Conformance checking is a technique used to check process compliance by comparing event logs for a discovered process with the existing reference model (target model) of the same process. Basing on diabetes guidelines, with a software called Carassius, we created next Petri Nets that are going to be useful to analyze whether traces obey the guidelines the first five years:
-
+::: 
 ![Petri Net of process indicators of the first year](../../outputs/PN_process1.png){#fig-petrinet_process1 fig-align="center" width="100%"}
 
 ![Petri Net of process indicators of the first two years](../../outputs/PN_process2.png){#fig-petrinet_process2 fig-align="center" width="100%"}
@@ -1830,8 +1830,9 @@ Conformance checking is a technique used to check process compliance by comparin
 
 ![Petri Net of process indicators of the first five years](../../outputs/PN_process5.png){#fig-petrinet_process5 fig-align="center" width="100%"}
 
+::: {.justify}
 Fitness is the metric that measures how much a trace is distanced from a given process model, or from the guidelines in this case. There are different methods to calculate this metric but in the code below is used the token base replay method.
-
+::: 
 ```{python}
 #| label: Fitness  calculation (process_indicators)
 def id2process_fitness(con,
@@ -1893,8 +1894,9 @@ def id2process_fitness(con,
 ```
 
 #### 2.5.2. Adherence analysis for treatment trajectories
-
+::: {.justify}
 Basing on the DM2 treatment algorithm previous shown we created the next Petri Nets that are going to be useful as treatment guidelines in reference to glycated hemoglobin measures.
+:::
 
 ![DM2 Treatment Algorithm's interpretation to patients without predominant clinical condition in Petri Net format](../../outputs/PN_else.png){#fig-petrinet_else fig-align="center" width="100%\""}
 
@@ -1908,8 +1910,9 @@ Basing on the DM2 treatment algorithm previous shown we created the next Petri N
 
 ![DM2 Treatment Algorithm's interpretation to patients with some CV disease in Petri Net format](../../outputs/PN_cvd.png){#fig-petrinet_cvd fig-align="center" width="100%"}
 
+::: {.justify}
 Next functions are to return the fitness of therapeutic traces. Unlike before, now the method used to calculate the fitness is the aligned fitness method.
-
+::: 
 ```{python}
 #| label: Fitness  calculation (treatments)
 def id2treat_fitness(log ,
@@ -2161,13 +2164,13 @@ def treatments_clusters_boxplot(con,
 ### 2.6. Prediction of clinical outcomes
 
 #### 2.6.1. Time dependent Cox model
-
+::: {.justify}
 The link between guideline adherence, in terms of performed process measures, and clinical outcomes is a highly demanded issue in diabetes care. A Cox model is a statistical technique for exploring the relationship between the survival of a patient and several explanatory variables. One of the strengths of the Cox model is its ability to encompass covariates that change over time, such as treatment adherence. A time dependent Cox model can be made using each patient trace's fitness at different time interval.
-
+::: 
 #### 2.6.2. Joint Latent Class Model
-
+::: {.justify}
 Joint models are used to analyse simultaneously two related phenomena, the evolution of a variable and the occurrence of an event. Joint latent class model (JLCM) consists of a linear mixed model and a proportional hazard model linked by the latent classes. The population is split in several groups, the latent classes, and each class is characterized by a specific evolution of the dependent variable and an associated risk of event. Using fitness as time dependent treatment adherence measure we can made a joint latent class model.
-
+:::
 ## 3. Cohort description
 
 ### 3.1. Incident patients description
@@ -2431,7 +2434,9 @@ kable(use_inc_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 
 ```
 
+::: {.justify}
 @fig-predominant_cond_m shows predominant clinical condition's first change in incident patients. The number inside boxes is the number of people experienced the change and box color the number of days needed to change. Since, except in the case of obese people, the other states of predominant clinical condition can only get worse, it is observed that the lower triangle is empty.
+::: 
 
 ```{r}
 #| label: predominant_cond_inc
@@ -2705,9 +2710,9 @@ rm(param_cat_inc,param_cat_inc2unnest,param_cat_pre,param_cat_pre2unnest,param_i
 ## 4. Healthcare pathways
 
 ### 4.1. Patients without predominant clinical condition
-
+::: {.justify}
 Choosing patients without any predominant clinical condition we obtain an event log that can be represented in the below process map @fig-pm1_healthcare_else. There is shown how the visits are connected, the absolute number of visits made to each service, the proportion of patients has visited each service, the proportion of patients in which source and target visits were executed directly following each other and the mean number of days it took to make the transition. However, a spaghetti map is obtained and nothing can be concluded. Therefore, we have to simplify the process map and for example only show the most frequent traces covering 20% of the event log as in @fig-pm02_healthcare_else. Moreover, in @fig-healthcare_activity_presence_else appears the percentage of patients' traces each activity is present, and @fig-healthcare_process_matrix_else is the process matrix of the 10 most frequented specialists.
-
+::: 
 ```{r}
 #| label: condition variable in r (else) (hc)
 #| eval: TRUE
@@ -3063,9 +3068,9 @@ dbDisconnect(con, shutdown = TRUE)
 ## 5. Analysis of process indicators
 
 ### 5.1. Descriptive analysis
-
+::: {.justify}
 We selected incident patients with at least one year of follow-up to create a process indicator's event log. This log includes cholesterol, albumin-creatinine index, glycated hemoglobin, body mass index, blood pressure and glomerular filtration measures, and foot and eye examinations.
-
+::: 
 ```{python}
 #| label: Creating process indicators' event log
 #| eval: TRUE
@@ -3232,9 +3237,9 @@ dbDisconnect(con, shutdown = TRUE)
 ![Percentage of patients traces an activity is present during the fifth year](../../outputs/activity_presence_process_indicators_year5.png){#fig-activity_presence_year5 fig-align="center" width="80%"}
 
 ### 5.2. Adherence to guidelines for process indicators
-
+::: {.justify}
 As it has been explained before, in this section, the observed traces are compared with a specific theoretical process. However, instead of utilizing a single Petri net, five Petri nets are employed, one for each year, as the adherence here is considered in annual intervals from diabetes diagnosis date.
-
+::: 
 ```{python}
 #| label: Creating process indicators' conformance analysis
 #| eval: TRUE
@@ -3454,9 +3459,9 @@ con.close()
 ### 5.3. Prediction of clincal outcomes
 
 #### 5.3.1. Time Dependent Cox Model
-
+::: {.justify}
 In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependent Cox model, and the summary of it is:
-
+::: 
 ```{r}
 #| label: Time dependent COX (process indicators)
 #| eval: TRUE
@@ -3684,9 +3689,9 @@ con <- dbConnect(duckdb(), dbdir = db_path)
 evLog <- load_log(con, paste0("SELECT * FROM eventlog_",cond))
 dbDisconnect(con, shutdown = TRUE)
 ```
-
+::: {.justify}
 Choosing patients without any predominant clinical condition and after some preprocessing we obtain an event log that can be represented in the below process map @fig-pm1_else. There is shown how the events are connected, the mean number of days patients spent in each event, the proportion of patients in which the event was presented, the absolute number of times source and target events were executed directly following each other and the proportion of patients in which source and target events were executed directly following each other. However, a spaghetti map is obtained and nothing can be concluded. Therefore, we have to simplify the process map and for example only show the most frequent traces covering 20% of the event log as in @fig-pm02_else. Moreover, in @fig-activity_presence_else we show percentage of patients' traces each activity is present.
-
+::: 
 ```{r}
 #| label: proces map and activity presence (else)
 #| eval: TRUE
@@ -3716,9 +3721,9 @@ dev.off()
 ![Percentage of patients traces an activity is present](../../outputs/activity_presence_else.png){#fig-activity_presence_else fig-align="center" width="80%"}
 
 #### 6.1.2. Clustering traces
-
+::: {.justify}
 Once the set of traces to analyze are selected, there is a need to choose a distance measure to clustering. In this example Levenshtein similarity is chosen to calculate the distance matrix.
-
+::: 
 ```{python}
 #| label: dm calculation (else)
 #| eval: TRUE
@@ -3729,9 +3734,9 @@ logging.info("Make distance matrix of %s patients", cond)
 measure_f = Levenshtein.normalized_similarity
 dm = calculate_dm_ED(traces,measure_f)
 ```
-
+::: {.justify}
 When distance matrix is acquired, we are able to cluster. However, the number of clusters have to be fixed before. With these figures we are able to conclude what could be the optimal number of clusters.
-
+::: 
 ```{python}
 #| label: dendograms (else)
 #| eval: TRUE
@@ -3781,9 +3786,9 @@ con.sql(f"CREATE OR REPLACE VIEW eventlog_{cond}_clust_filtered AS \
 del dm
 del df_
 ```
-
+::: {.justify}
 Choosing the optimal number of clusters, too small clusters can appear, but we can exclude those of less than 30 traces to avoid having clusters of low representation. The process map and the most frequent traces of one of these clusters that remain are the followings.
-
+::: 
 ```{python}
 #| label: trace explorer (else)
 #| eval: TRUE
@@ -3819,9 +3824,9 @@ Cluster 0
 :::
 
 #### 6.1.3. Adherence to therapeutic guidelines
-
+::: {.justify}
 Once traces are clusterized, with a boxplot is easy to show that each cluster's behavior with respect to the treatment guides is different. Comparing traces with @fig-petrinet_else, calculating the fitness (1 being perfect match with the petri net and 0 being the lowest possible fitness) of each trace and grouping by cluster results in\_ @fig-fitness_by_cluster_else.
-
+::: 
 ```{python}
 #| label: fitness boxplot (else)
 #| eval: TRUE
@@ -3841,9 +3846,9 @@ treatments_clusters_boxplot(con,cond,
 #### 6.1.4. Prediction of clinical outcomes
 
 ##### 6.1.4.1. Time Dependent Cox Model
-
+::: {.justify}
 In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
-
+::: 
 ```{python}
 #| label: create fitness by period table (else)
 #| eval: TRUE
@@ -4205,9 +4210,9 @@ treatments_clusters_boxplot(con,cond,
 #### 6.2.4. Prediction of clinical outcomes
 
 ##### 6.2.4.1. Time Dependent Cox Model
-
+::: {.justify}
 In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
-
+::: 
 ```{python}
 #| label: create fitness by period table (ob)
 #| eval: TRUE
@@ -4568,9 +4573,9 @@ treatments_clusters_boxplot(con,cond,
 #### 6.3.4. Prediction of clinical outcomes
 
 ##### 6.3.4.1 Time Dependent Cox Model
-
+::: {.justify}
 In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
-
+::: 
 ```{python}
 #| label: create fitness by period table (f)
 #| eval: TRUE
@@ -4931,9 +4936,9 @@ treatments_clusters_boxplot(con,cond,
 #### 6.4.4. Prediction of clinical outcomes
 
 ##### 6.4.4.1. Time Dependent Cox Model
-
+::: {.justify}
 In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
-
+::: 
 ```{python}
 #| label: create fitness by period table (ckd)
 #| eval: TRUE
@@ -5293,9 +5298,9 @@ treatments_clusters_boxplot(con,cond,
 #### 6.5.4. Prediction of clinical outcomes
 
 ##### 6.5.4.1. Time Dependent Cox Model
-
+::: {.justify}
 In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
-
+::: 
 ```{python}
 #| label: create fitness by period table (hf)
 #| eval: TRUE
@@ -5655,9 +5660,9 @@ treatments_clusters_boxplot(con,cond,
 #### 6.6.4. Prediction of clinical outcomes
 
 ##### 6.6.4.1. Time Dependent Cox Model
-
+::: {.justify}
 In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
-
+::: 
 ```{python}
 #| label: create fitness by period table (cvd)
 #| eval: TRUE
@@ -5804,7 +5809,7 @@ summary(cox2w_cvd)
 
 ```{r}
 #| label: tbl-modelsummary1
-#| tbl-cap: "Process indicators models' summary"
+#| tbl-cap: "Process indicators models' summary. To interpret classes go to Figure 84"
 #| tbl-colwidths: [60,40]
 df_cond <- function(cond,m1,m2,m3,all){
   if(all){
@@ -5952,7 +5957,6 @@ df_pi %>%
                      include_col_totals_percent	=FALSE,
                      add_col_totals = TRUE)-> df_tab
 
-kable(df_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 },
 error = function(e) {
             message(conditionMessage(e))
@@ -5962,11 +5966,10 @@ error = function(e) {
 
 ```{r}
 #| label: tbl-modelsummary2
-#| tbl-cap: "Process indicators joint latent classes' summary"
+#| tbl-cap: "Process indicators joint latent classes' summary. To interpret classes go to Figure 84."
 #| tbl-colwidths: [60,40]
 kable(df_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 ```
-
 
 ::: {#fig-summary2 .column-page layout-ncol="2"}
 ![Process indicators' observed fitness trajectories of the patients (grey lines) a posteriori classified into the latent class with their mean fitness (points) and class-specidfic predicted fitness trajectory (red lines)](../../outputs/joint1_PI.png){#fig-pf1}
@@ -5979,9 +5982,8 @@ Process Indicators' joint latent class model's plots panel
 ### 7.2. By adherence to therapeutic guidelines
 
 ```{r}
-
 #| label: tbl-modelsummary3
-#| tbl-cap: "Models summary"
+#| tbl-cap: "Models summary. To interpret classes go to Figure 85."
 #| tbl-colwidths: [60,40]
 kable(results[1:72,], row.names=FALSE, align=c("l", "l", rep("r",5)))
 ```
