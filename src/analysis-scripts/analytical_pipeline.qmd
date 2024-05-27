@@ -2171,6 +2171,7 @@ The link between guideline adherence, in terms of performed process measures, an
 ::: {.justify}
 Joint models are used to analyse simultaneously two related phenomena, the evolution of a variable and the occurrence of an event. Joint latent class model (JLCM) consists of a linear mixed model and a proportional hazard model linked by the latent classes. The population is split in several groups, the latent classes, and each class is characterized by a specific evolution of the dependent variable and an associated risk of event. Using fitness as time dependent treatment adherence measure we can made a joint latent class model.
 :::
+
 ## 3. Cohort description
 
 ### 3.1. Incident patients description
@@ -6015,3 +6016,78 @@ kable(results[1:72,], row.names=FALSE, align=c("l", "l", rep("r",5)))
 
 Treatments' joint latent class models' plots panel
 :::
+
+## 8. Concept-Cost
+
+```{python}
+#| label: Get concept-cost table
+con = duckdb.connect(db_path)
+
+con.sql("select patient_id as person,STRING_AGG(health_service, ',' order by visit_date) as trace,\
+             MIN(visit_date) as start_timestamp, MAX(visit_date) as complete_timestamp,\
+             DATEDIFF('day',MIN(visit_date), MAX(visit_date)) as 'duration_in_days' \
+             from ( \
+             select *,ROW_NUMBER() over (order by patient_id,visit_date) as o \
+             from (select patient_id,visit_date,case \
+             when visit_type==1 and visit_loc==1 and visit_service=='APA' then 'general_practitioner_visit' \
+             when visit_type==1 and visit_loc==2 and visit_service=='APA' then 'general_practitioner_visit_home_visit' \
+             when visit_type==2 and visit_loc==1 and visit_service=='APA' then 'nurse_visit_first_visit' \
+             when visit_type==2 and visit_loc==2 and visit_service=='APA' then 'nurse_visit_home_visit' \
+             when visit_type==4 and visit_service=='APA' then 'accident_&_emergency_visit_health_center' \
+             when visit_service=='CAR' then 'cardiology_visit' \
+             when visit_service=='ALG' then 'allergology_visit' \
+             when visit_service=='APR' then 'pathological_anatomy_visit' \
+             when visit_service=='ANG' then 'angiology_visit_process_not_specified' \
+             when visit_service=='DIG' then 'digestive_system_visit_process_not_specified' \
+             when visit_service=='CCA' then 'cardiovascular_surgery_visit_process_not_specified' \
+             when visit_service=='CIR' then 'general_surgery_visit_process_not_specified' \
+             when visit_service=='CMF' then 'maxillofacial_surgery_visit_process_not_specified' \
+             when visit_service=='TRA' then 'orthopedic_surgery_visit_process_not_specified' \
+             when visit_service=='CPL' then 'plastic_surgery_visit_process_not_specified' \
+             when visit_service=='DER' then 'dermatology_visit_process_not_specified' \
+             when visit_service=='_____' then 'diagnostic_imaging_visit_process_not_specified' \
+             when visit_service=='END' then 'endrocrinology_visit_process_not_specified' \
+             when visit_service=='GRT' then 'geriatrics_visit_process_not_specified' \
+             when visit_service=='HEM' then 'hematology_visit_process_not_specified' \
+             when visit_service=='REH' then 'rehabilitation_service_visit_process_not_specified' \
+             when visit_service=='MIR' then 'internal_medicine_visit_process_not_specified' \
+             when visit_service=='NEF' then 'nephrology_visit_process_not_specified' \
+             when visit_service=='NML' then 'pneumology_visit_process_not_specified' \
+             when visit_service=='NRC' then 'neurosurgeon_visit_process_not_specified' \
+             when visit_service=='NRL' then 'neurology_visit_process_not_specified' \
+             when visit_service=='OBG' then 'obstetrics_visit_process_not_specified' \
+             when visit_service=='_____' then 'dentistry_visit_process_not_specified' \
+             when visit_service=='OFT' then 'ophthalmology_visit_process_not_specified' \
+             when visit_service=='ORL' then 'otorhinolaryngologist_visit_process_not_specified' \
+             when visit_service=='PSQ' then 'psychiatry_visit_process_not_specified' \
+             when visit_service=='_____' then 'psycologist_visit' \
+             when visit_service=='RDT' then 'radiotherapy_visit_process_not_specified' \
+             when visit_service=='RAD' then 'radiology_visit_process_not_specified' \
+             when visit_service=='REU' then 'rheumatology_visit_process_not_specified' \
+             when visit_service=='URO' then 'urology_visit_process_not_specified' \
+             when visit_service=='_____' then 'laboratory' \
+             else 'specialist_visit'   end as health_service \
+             from main.ss_use where health_service!='OTROS' \
+             union all select patient_id, admission_date as visit_date, case \
+             when contact_type==4 then 'minor_ambulatory_surgery' \
+             when contact_type==5 then 'major_ambulatory_surgery' \
+             when contact_type==6 then 'accident_&_emergency_visit_hospital' \
+             else 'OTROS' end as health_service \
+             from main.cmbd where health_service!='OTROS' \
+             union all select distinct patient_id, param_date as visit_date, \
+             'laboratory' as health_service from main.param \
+             where param_name in ('col','hdl','ldl','hba1c') \
+             union all SELECT patient_id, date AS visit_date, 'day_of_hospitalization' AS health_service FROM \
+             (SELECT patient_id, unnest(date) AS date, contact_type FROM \
+             (SELECT patient_id, date, contact_type \
+             FROM (SELECT patient_id, \
+             generate_series(admission_date, discharge_date, interval '1 day') AS date, contact_type \
+             FROM main.cmbd WHERE contact_type IN (1,3)) AS expanded_activities \
+             ORDER BY patient_id, date) AS expanded_dates ORDER BY patient_id, date) )\
+             ) group by person order by person"
+             ).df().to_csv('../../outputs/aggregated_traces.csv',index=False)
+
+con.close()
+
+```
+
