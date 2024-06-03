@@ -275,7 +275,7 @@ def general_preprocess(con):
                       ROW_NUMBER() OVER(PARTITION BY patient_id, param_name \
                                         ORDER BY param_date DESC) AS rn \
                           FROM param_incidents_predx_view \
-                          WHERE param_value!=9999) t WHERE rn = 1;")
+                          WHERE param_value!=999) t WHERE rn = 1;")
 
     con.sql("CREATE OR REPLACE VIEW param_incidents_postdx_view AS SELECT * FROM (\
             SELECT * FROM (SELECT patient_id, param_name, param_value, param_date \
@@ -289,7 +289,7 @@ def general_preprocess(con):
                       ROW_NUMBER() OVER(PARTITION BY patient_id, param_name \
                                         ORDER BY param_date ASC) AS rn \
                           FROM param_incidents_postdx_view \
-                          WHERE param_value!=9999) t WHERE rn = 1;")
+                          WHERE param_value!=999) t WHERE rn = 1;")
                     
     con.sql("CREATE OR REPLACE VIEW param_cat_incidents_predx_view AS SELECT * FROM (\
             SELECT * FROM (SELECT patient_id, param_cat_name, param_cat_value, param_cat_date \
@@ -313,7 +313,7 @@ def general_preprocess(con):
                       ROW_NUMBER() OVER(PARTITION BY patient_id, param_name \
                                         ORDER BY param_date DESC) AS rn \
                           FROM param_prevalents_pre_view \
-                              WHERE param_value!=9999) t WHERE rn = 1;")
+                              WHERE param_value!=999) t WHERE rn = 1;")
                     
     con.sql("CREATE OR REPLACE VIEW param_cat_prevalents_pre_view AS \
             SELECT DISTINCT * FROM main.param_cat \
@@ -2733,7 +2733,7 @@ log_info('Make {cond} healtcare analysis')
 con <- dbConnect(duckdb(), dbdir = db_path)
 evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
                                          cond,
-                                         "' AND Event NOT IN ('APA','URG')"))
+                                         "' AND Event NOT IN ('APR','URG')"))
 make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
                               here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
                                                      cond))))
@@ -2792,7 +2792,7 @@ log_info('Make {cond} healtcare analysis')
 con <- dbConnect(duckdb(), dbdir = db_path)
 evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
                                          cond,
-                                         "' AND Event NOT IN ('APA','URG')"))
+                                         "' AND Event NOT IN ('APR','URG')"))
 make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
                               here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
                                                      cond))))
@@ -2851,7 +2851,7 @@ log_info('Make {cond} healtcare analysis')
 con <- dbConnect(duckdb(), dbdir = db_path)
 evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
                                          cond,
-                                         "' AND Event NOT IN ('APA','URG')"))
+                                         "' AND Event NOT IN ('APR','URG')"))
 make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
                               here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
                                                      cond))))
@@ -2910,7 +2910,7 @@ log_info('Make {cond} healtcare analysis')
 con <- dbConnect(duckdb(), dbdir = db_path)
 evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
                                          cond,
-                                         "' AND Event NOT IN ('APA','URG')"))
+                                         "' AND Event NOT IN ('APR','URG')"))
 make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
                               here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
                                                      cond))))
@@ -2969,7 +2969,7 @@ log_info('Make {cond} healtcare analysis')
 con <- dbConnect(duckdb(), dbdir = db_path)
 evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
                                          cond,
-                                         "' AND Event NOT IN ('APA','URG')"))
+                                         "' AND Event NOT IN ('APR','URG')"))
 make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
                               here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
                                                      cond))))
@@ -3028,7 +3028,7 @@ log_info('Make {cond} healtcare analysis')
 con <- dbConnect(duckdb(), dbdir = db_path)
 evLog_healthcare <- load_log(con, paste0(" SELECT * FROM ss_log WHERE type='",
                                          cond,
-                                         "' AND Event NOT IN ('APA','URG')"))
+                                         "' AND Event NOT IN ('APR','URG')"))
 make_process_map_healthcare(evLog_healthcare,1,gsub("src/analysis-scripts/","",
                               here("outputs",sprintf("evlog_healthcare_pm_1_%s.png",
                                                      cond))))
@@ -6029,14 +6029,14 @@ con.sql("select patient_id as person,STRING_AGG(health_service, ',' order by vis
              from ( \
              select *,ROW_NUMBER() over (order by patient_id,visit_date) as o \
              from (select patient_id,visit_date,case \
-             when visit_type==1 and visit_loc==1 and visit_service=='APA' then 'general_practitioner_visit' \
-             when visit_type==1 and visit_loc==2 and visit_service=='APA' then 'general_practitioner_visit_home_visit' \
-             when visit_type==2 and visit_loc==1 and visit_service=='APA' then 'nurse_visit_first_visit' \
-             when visit_type==2 and visit_loc==2 and visit_service=='APA' then 'nurse_visit_home_visit' \
-             when visit_type==4 and visit_service=='APA' then 'accident_&_emergency_visit_health_center' \
+             when visit_type==1 and visit_loc==1 and visit_service=='APR' then 'general_practitioner_visit' \
+             when visit_type==1 and visit_loc==2 and visit_service=='APR' then 'general_practitioner_visit_home_visit' \
+             when visit_type==2 and visit_loc==1 and visit_service=='APR' then 'nurse_visit_first_visit' \
+             when visit_type==2 and visit_loc==2 and visit_service=='APR' then 'nurse_visit_home_visit' \
+             when visit_type==4 and visit_service=='APR' then 'accident_&_emergency_visit_health_center' \
              when visit_service=='CAR' then 'cardiology_visit' \
              when visit_service=='ALG' then 'allergology_visit' \
-             when visit_service=='APR' then 'pathological_anatomy_visit' \
+             when visit_service=='APA' then 'pathological_anatomy_visit' \
              when visit_service=='ANG' then 'angiology_visit_process_not_specified' \
              when visit_service=='DIG' then 'digestive_system_visit_process_not_specified' \
              when visit_service=='CCA' then 'cardiovascular_surgery_visit_process_not_specified' \
