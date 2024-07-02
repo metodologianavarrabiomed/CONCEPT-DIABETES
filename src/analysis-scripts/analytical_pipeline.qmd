@@ -6023,7 +6023,14 @@ Treatments' joint latent class models' plots panel
 #| label: Get concept-cost table
 con = duckdb.connect(db_path)
 
-con.sql("select patient_id as person,STRING_AGG(health_service, ',' order by visit_date) as trace,\
+con.sql("SELECT DISTINCT trace,\
+           COUNT(person) OVER (PARTITION BY trace) AS freq_trace, \
+           AVG(duration_in_days) OVER (PARTITION BY trace) AS duration_mean, \
+           quantile_cont(duration_in_days,0.5) OVER (PARTITION BY trace) AS duration_median, \
+           STDDEV_POP(duration_in_days) OVER (PARTITION BY trace) AS duration_standard_error, \
+           quantile_cont(duration_in_days,0.75) OVER (PARTITION BY trace) - \
+               quantile_cont(duration_in_days,0.25) OVER (PARTITION BY trace) AS duration_iqr \
+           FROM (select patient_id as person,STRING_AGG(health_service, ',' order by visit_date) as trace,\
              MIN(visit_date) as start_timestamp, MAX(visit_date) as complete_timestamp,\
              DATEDIFF('day',MIN(visit_date), MAX(visit_date)) as 'duration_in_days' \
              from ( \
@@ -6084,7 +6091,7 @@ con.sql("select patient_id as person,STRING_AGG(health_service, ',' order by vis
              generate_series(admission_date, discharge_date, interval '1 day') AS date, contact_type \
              FROM main.cmbd WHERE contact_type IN (1,3)) AS expanded_activities \
              ORDER BY patient_id, date) AS expanded_dates ORDER BY patient_id, date) )\
-             ) group by person order by person"
+             ) group by person order by person)"
              ).df().to_csv('../../outputs/aggregated_traces.csv',index=False)
 
 con.close()
