@@ -186,9 +186,6 @@ def general_preprocess(con):
     con.sql("CREATE OR REPLACE VIEW ss_use_incidents_view AS SELECT * FROM main.ss_use \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
                                  WHERE dx_date >='2017-01-01')")
-    con.sql("CREATE OR REPLACE VIEW comorb_incidents_view AS SELECT * FROM main.comorb \
-            WHERE patient_id IN (SELECT patient_id FROM main.patient \
-                                 WHERE dx_date >='2017-01-01')")
     con.sql("CREATE OR REPLACE VIEW param_incidents_view_ AS SELECT DISTINCT * FROM main.param \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
                                  WHERE dx_date >='2017-01-01') \
@@ -208,6 +205,11 @@ def general_preprocess(con):
             DATE_ADD(month_nac, INTERVAL 65 YEAR) AS 'turn_to_65' \
                 FROM main.patient WHERE patient_id IN (SELECT patient_id \
                         FROM main.patient WHERE dx_date >='2017-01-01')")
+    con.sql("CREATE OR REPLACE VIEW comorb_incidents_view AS SELECT * FROM main.comorb \
+            WHERE patient_id IN (SELECT patient_id FROM main.patient \
+                                 WHERE dx_date >='2017-01-01') AND \
+            comorb_date_ini <= (SELECT dx_date FROM patient_incidents_view \
+          WHERE  patient_incidents_view.patient_id = main.comorb.patient_id)")
     con.sql("CREATE OR REPLACE VIEW treat_incidents_view AS SELECT * FROM main.treat \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
                                  WHERE dx_date >='2017-01-01')")
