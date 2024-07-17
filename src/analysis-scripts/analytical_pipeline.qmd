@@ -1801,7 +1801,7 @@ make_process_map_healthcare <- function(log,t_freq,output_file){
                 render = T) %>% 
     export_svg %>% 
     charToRaw %>%
-    rsvg_png (output_file,width=2000)
+    rsvg_png (output_file,width=4000)
 }
 process_map_by_cluster <- function(evLog,t_freq,cond_code){
   for (clust in unique(evLog$cluster)) {
