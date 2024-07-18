@@ -32,7 +32,7 @@ execute:
 
 ### 1.1. Project description
 ::: {.justify}
-
+CONCEPT-DIABETES is part of CONCEPT, a coordinated research project initiative that was born under the umbrella of REDISSEC, the Spanish Research Network on Health Services Research and Chronic Conditions [www.redissec.com], and which continues under RICAPPS the Spanish Research Network on Chronicity, Primary Care, and Health Promotion [www.ricapps.es]. This project aims at analyzing chronic care effectiveness and efficiency in a number of cohorts built on real world data (RWD). In the specific case of CONCEPT-DIABETES, the focus will be on assessing the effectiveness of a set of clinical practice actions and quality improvement strategies at different levels (patient-level, health-care provider level and health system level) on the management and health results of patients with type 2 diabetes (T2D) using process mining methodology.
 
 It is a population-based retrospective observational study centered on all T2D patients diagnosed in four Regional Health Services within the Spanish National Health Service, that includes information from all their contacts with the health services using the electronic medical record systems including Primary Care data, Specialist Care data, Hospitalizations, Urgent Care data, Pharmacy Claims, and also other registers such as the mortality and the population register. We will assess to what extent recommended interventions from evidence-based guidelines are implemented in real life and which are their effects on health outcomes. Process mining methods will be used to analyze the data, and comparison with standard methods will be also conducted.
 ::: 
