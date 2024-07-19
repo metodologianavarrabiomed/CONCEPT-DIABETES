@@ -26,7 +26,7 @@ RUN micromamba install -y -n aspire -f /tmp/env_project.yaml \
 
 # Installing R packages not found in conda-forge
 RUN micromamba run -n aspire Rscript -e 'remotes::install_cran("bupaR")'
-RUN micromamba run -n aspire Rscript -e 'remotes::install_version("pak")'
+RUN micromamba run -n aspire Rscript -e 'remotes::install_cran("pak")'
 RUN micromamba run -n aspire Rscript -e 'pak::pkg_install("processmapR@0.5.3")'
 RUN micromamba run -n aspire Rscript -e 'remotes::install_github("ibaitamayo/BARDENA/paquetes_R/Comorbilidades")'
 
