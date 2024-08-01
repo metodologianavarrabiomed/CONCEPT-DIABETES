@@ -2205,7 +2205,10 @@ country2cont = read.csv('./country2continent.csv') %>%
   transform(country = as.numeric(country))
 
 comorb_ch <- comorb(archivo = dbGetQuery(con,
-        "SELECT patient_id AS id,comorb_code AS cod,\
+        "SELECT patient_id AS id,\
+        CASE WHEN comorb_code='250' THEN '250.0' \
+        WHEN comorb_code IN ('E10','E11','E12','E13','E14') THEN 'E10.0' \
+        ELSE comorb_code END AS cod,\
         CASE WHEN comorb_codif='CIAP2' THEN 'CIAP2' \
         WHEN comorb_codif='ICD9' THEN '9' \
         WHEN comorb_codif='ICD10' THEN '10ES'\
