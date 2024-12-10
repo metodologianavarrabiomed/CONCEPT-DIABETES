@@ -1876,6 +1876,7 @@ def id2process_fitness(con,
     date_list = []
     fit_list = []
     id_list = list(set(event_log[id_col]))
+    length_list = []
     for id in tqdm(id_list):
         log = event_log.drop(event_log.index[event_log['case:concept:name'] !=id]
                               ).sort_values('time:timestamp')
@@ -1883,6 +1884,7 @@ def id2process_fitness(con,
             log, net, initial_marking, final_marking)
         date_list.append(list(log['time:timestamp'])[-2])
         fit_list.append(fit_obj[0]['trace_fitness'])
+        length_list.append(len(log))
         
     log_0 = log[log['concept:name'].isin(['INI','FIN','yFIN'])]
     alfa = pm4py.conformance.conformance_diagnostics_token_based_replay(
@@ -1892,6 +1894,7 @@ def id2process_fitness(con,
     df['ID'] = id_list
     df['fitness'] = [(x-alfa)/(1-alfa) for x in fit_list]
     df['date'] = date_list
+    df['trace_length'] = length_list
     return df
 ```
 
@@ -1937,7 +1940,7 @@ def id2treat_fitness(log ,
     Returns:
       df (dataframe): traces, their clusters and their fitnesses  
   '''
-  id2trace = {id:list(log['Event'][log['case:concept:name']==id]
+  id2trace = {id:list(log[ev_col][log['case:concept:name']==id]
                       ) for id in set(log['case:concept:name'])}
   id2ids = {id:[id2 for id2 in set(id2trace.keys()) if id2trace[id]==id2trace[id2]
                 ] for id in set(log['case:concept:name'])}
@@ -1983,6 +1986,7 @@ The function below takes a treatments' event log and returns each patient's fitn
 def id2treat_fitness_by_interval(con,
                            cond,
                            pn_file,
+                           pn_png_file,
                            ini_place='place100',
                            fin_place='place111',
                            date_n_col='date',
@@ -2005,6 +2009,7 @@ def id2treat_fitness_by_interval(con,
     final_marking = Marking()
     final_marking[list(net.places)[[str(p) for p in net.places].index(
         fin_place)]] = 1
+    pm4py.save_vis_petri_net(net, initial_marking, final_marking,pn_png_file)
     event_log = pm4py.format_dataframe(con.sql(f"SELECT * FROM eventlog_{cond}_clust \
     WHERE cycle = 'start'").df(),
                                 case_id='ID',
@@ -2044,6 +2049,7 @@ def id2treat_fitness_by_interval(con,
     fitness = []
     date_0 = []
     status = []
+    trace_length = []
     id_list = list(set(event_log['ID']))
     for id in tqdm(id_list):
         event_log_id = event_log[event_log['ID']==id]
@@ -2079,6 +2085,7 @@ def id2treat_fitness_by_interval(con,
             p_end.append(p_end_value)
             fitness.append(aligned_fitness)
             date_0.append(date_min)
+            trace_length.append(len(event_log_id_n))
             if (n==n_periods or n==n_periods_r-1) and hosp_d==date_max :
                 status.append(1)
                 break
@@ -2091,6 +2098,7 @@ def id2treat_fitness_by_interval(con,
     period2fitness['fitness'] = fitness
     period2fitness['ini_date'] = date_0
     period2fitness['status'] = status
+    period2fitness['trace_length'] = trace_length
     con.sql(f"CREATE OR REPLACE TABLE period2fitness_{cond} AS SELECT *,\
             MAX(status) OVER (PARTITION BY ID) AS status2  FROM period2fitness \
             WHERE t_0!=t_1") 
@@ -2102,64 +2110,32 @@ In the next function is shown a boxplot function to show clusters' fitness distr
 #| label: Fitness boxplot
 def treatments_clusters_boxplot(con,
                 cond,
-                pn_file,
-                pn_png_file,
-                ini_place='place100',
-                fin_place='place111',
-                date_col='date',
-                ev_col='Event',
-                clust_col='cluster',
                 output_png='../../outputs/fitness_by_cluster.png'):
   '''Barplot of the fitness of each cluster
     
     Args:
       con: db connector variable
       cond (str): predominant clinical condition
-      pn_file: petri net's path
-      ini_marking: initial place in the petri net
-      fin_marking: final place in the petri net
-      date_col (str): events dates column's name in log
-      clust_col (str): cluster column's name in log
-      ev_col (str): events column's name in log
       output_png (str): created figure's path
   '''
-  log = pm4py.format_dataframe(con.sql(f"SELECT * FROM eventlog_{cond}_clust_filtered \
-  WHERE cycle = 'start'").df(),
-                                case_id='ID',
-                                activity_key=ev_col,
-                                timestamp_key=date_col)                  
-
-  log = log.sort_values(date_col)
-  log.index = range(len(log))
-  net, initial_marking, final_marking = pm4py.read_pnml(pn_file)
-  initial_marking = Marking()
-  initial_marking[list(net.places)[[str(p) for p in net.places].index(
-    ini_place)]] = 1
-  final_marking = Marking()
-  final_marking[list(net.places)[[str(p) for p in net.places].index(
-    fin_place)]] = 1
-  pm4py.save_vis_petri_net(net, initial_marking, final_marking,pn_png_file)
-  df = id2treat_fitness(log,net,initial_marking,final_marking,
-                  clust_col,date_col,ev_col)
-  df['aligned_fitness'] = pd.to_numeric(df['aligned_fitness'])
-  df['cluster'] = pd.to_numeric(df['cluster'])
-  df['ID'] = df['ID'].astype("string")
-  con.sql(f"CREATE OR REPLACE TABLE eventlog_{cond}_byclust AS \
-  SELECT * FROM df")
-  data = [list(df['aligned_fitness'][df[clust_col]==i])
-          for i in sorted(set(df[clust_col]))]
-   
+  df = con.sql(f"SELECT f.ID,f.fitness,c.cluster \
+            FROM (SELECT * FROM (SELECT *,ROW_NUMBER() OVER (\
+                  PARTITION BY ID ORDER BY t_0 DESC) AS rn \
+                  FROM period2fitness_{cond}) \
+  WHERE rn=1) f LEFT JOIN (SELECT DISTINCT ID,cluster \
+  FROM eventlog_{cond}_clust_filtered) c ON c.ID=f.ID"
+  ).df().dropna(subset=["cluster"]) 
+  
+  data = [list(df['fitness'][df['cluster']==i])
+            for i in sorted(set(df['cluster']))]
+     
   fig = plt.figure(figsize =(10, 7))
-  # Creating axes instance
   ax = fig.add_axes([0, 0, 1, 1])
-  # Creating plot
-  bp = ax.boxplot(data,labels=[i for i in sorted(set(df[clust_col]))])
+  bp = ax.boxplot(data,labels=[int(i) for i in sorted(set(df['cluster']))])
   plt.xlabel("Clusters")
   plt.ylabel("Aligned Fitness")
-  # show plot
   plt.savefig(output_png,bbox_inches='tight')
   plt.close(fig)
-  
 
 ```
 
@@ -3320,30 +3296,12 @@ boxplot1 = sns.boxplot(x = df2year['year'],
 fig1 = boxplot1.get_figure()
 fig1.savefig("../../outputs/fitness_by_year.png")
 plt.close(fig1)
-#con.sql("CREATE OR REPLACE TABLE period2process_fitness AS \
-#SELECT ID, \
-#DATEDIFF('day', initial_date,date) AS t_0, \
-#DATEDIFF('day', initial_date,final_date) AS t_1, fitness, initial_date, \
-#status, MAX(status) OVER (PARTITION BY ID) AS status2 \
-#FROM (SELECT a.*,COALESCE(b.deregistration_date,'2022-12-31'),\
-#             COALESCE( LEAD(date, 1) OVER (PARTITION BY ID ORDER BY date), \
-#             LEAST(deregistration_date, \
-#                   COALESCE(admission_date,\
-#                            CAST('2022-12-31' AS DATE)) )) AS final_date, \
-#             CASE WHEN admission_date=final_date THEN 1 ELSE 0 END AS status, \
-#             MIN(date) OVER (PARTITION BY ID) AS initial_date\
-#             FROM (SELECT * FROM (SELECT df2year.*, \
-#                  cmbd_incidents_postdx_first_view.admission_date AS admission_date \
-#                  FROM df2year LEFT JOIN cmbd_incidents_postdx_first_view ON \
-#                    df2year.ID = cmbd_incidents_postdx_first_view.patient_id) \
-#                      WHERE date<admission_date OR admission_date IS NULL) a \
-#                  LEFT JOIN patient_incidents_view b ON a.ID=b.patient_id) WHERE t_0!=t_1")
 
  ## with predominant condition change and hosp   
 con.sql("CREATE OR REPLACE TABLE period2process_fitness AS \
             SELECT ID, \
 DATEDIFF('day', initial_date,date) AS t_0, \
-DATEDIFF('day', initial_date,final_date) AS t_1, fitness, initial_date, \
+DATEDIFF('day', initial_date,final_date) AS t_1, fitness,trace_length, initial_date, \
 status, MAX(status) OVER (PARTITION BY ID) AS status2 \
 FROM (SELECT a.*,COALESCE(b.deregistration_date,'2022-12-31'),\
              COALESCE( LEAD(date, 1) OVER (PARTITION BY ID ORDER BY date), \
@@ -3366,7 +3324,7 @@ FROM (SELECT a.*,COALESCE(b.deregistration_date,'2022-12-31'),\
                       WHERE date<admission_date OR admission_date IS NULL) a \
                   LEFT JOIN patient_incidents_view b ON a.ID=b.patient_id) WHERE t_0!=t_1")
 con.sql("CREATE OR REPLACE TABLE window2process_fitness AS \
-             SELECT ID, fitness,\
+             SELECT ID, fitness, trace_length,\
              CASE WHEN DATEDIFF('day',date,admission_date)<=yyyy*365 THEN 1 \
                  ELSE 0 END AS status, \
              CASE WHEN status=0 THEN yyyy*365 \
@@ -3378,6 +3336,26 @@ con.sql("CREATE OR REPLACE TABLE window2process_fitness AS \
                       WHERE (date<admission_date OR admission_date IS NULL) AND \
                           DATEDIFF('day',date,CAST('2022-12-31' AS TIMESTAMP))>=yyyy*365)\
                  ".replace("yyyy",'1'))
+con.close()
+```
+
+```{r}
+#| label: tbl-fitness_pi
+#| tbl-cap: "Adherence to process indicators by years"
+#| tbl-colwidths: [60,40]
+log_info("Process indicators fitness performance")
+con <- dbConnect(duckdb(), dbdir = db_path)
+tbl_pi_fitness <- dbGetQuery(con, "SELECT ROW_NUMBER() OVER (ORDER BY t_0) AS year, mean, SD, first_quartile,median, third_quartile, n \
+        FROM (SELECT  t_0, \
+        AVG(fitness) AS mean, \
+        STDDEV(fitness) AS SD, \
+        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY fitness) AS first_quartile, \
+        MEDIAN(fitness) AS median, \
+        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY fitness) AS third_quartile, \
+        COUNT(*) AS n \
+          FROM  period2process_fitness GROUP BY t_0 ORDER BY t_0)")
+dbDisconnect(con, shutdown = TRUE)
+kable(tbl_pi_fitness, row.names=FALSE, align=c("l", "l", rep("r",5)))
 ```
 
 ![Boxplot of process indicators' traces' fitness by cumulative years)](../../outputs/fitness_by_year.png){#fitness_by_year fig-align="center" width="80%"}
@@ -3390,14 +3368,15 @@ Sex and age and process indicators' fitness are linked with the next plots:
 #| echo: FALSE
 #| warning: FALSE
 #| output: FALSE
+con = duckdb.connect(db_path)
 df2finess = con.sql("SELECT d.*,\
               CASE WHEN p.sex=0 THEN 'male' \
               ELSE 'female' END AS sex, p.age_dx AS age_,\
-              CASE WHEN age_<50 THEN '[0,50)'\
-              WHEN age_>=50 AND age_<60 THEN '[50,60)' \
-              WHEN age_>=60 AND age_<70 THEN '[60,70)' \
-              WHEN age_>=70 AND age_<80 THEN '[70,80)' \
-              WHEN age_>=80 AND age_<90 THEN '[80,90)' \
+              CASE WHEN p.age_dx<50 THEN '[0,50)'\
+              WHEN p.age_dx>=50 AND p.age_dx<60 THEN '[50,60)' \
+              WHEN p.age_dx>=60 AND p.age_dx<70 THEN '[60,70)' \
+              WHEN p.age_dx>=70 AND p.age_dx<80 THEN '[70,80)' \
+              WHEN p.age_dx>=80 AND p.age_dx<90 THEN '[80,90)' \
               ELSE '[90,+)' END AS age\
               FROM (SELECT *,1 AS year FROM df_1 \
                     UNION ALL SELECT *,2 AS year FROM df_2 \
@@ -3462,11 +3441,52 @@ con.close()
 
 ![Boxplot of process indicators' traces' fitness by cumulative year and by predominant clinical condition](../../outputs/fitness2cond_by_year.png){#fitness2cond_by_year fig-align="center" width="80%"}
 
+::: {.justify}
+A linear model can be employed to describe fitness by examining the effects of key variables. This approach utilizes factors such as sex, age, time, and the individual's clinical predominant condition. By incorporating these variables into a linear model, we can quantify and analyze how each factor influences overall fitness.
+:::
+
+```{r}
+#| label: process indicators' conformance analysis by different variables
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+
+con <- dbConnect(duckdb(), dbdir = db_path)
+df <- dbGetQuery(con,"SELECT a.*, b.param_value FROM (SELECT pp.*, pc.initial_status AS cpc \
+            FROM (SELECT p2p.ID, p2p.t_0 AS time, p2p.fitness, piv.age_dx as age,piv.education as education,\
+                             CASE WHEN piv.age_dx<50 THEN '[0,50)'\
+                             WHEN piv.age_dx>=50 AND piv.age_dx<60 THEN '[50,60)' \
+                             WHEN piv.age_dx>=60 AND piv.age_dx<70 THEN '[60,70)' \
+                             WHEN piv.age_dx>=70 AND piv.age_dx<80 THEN '[70,80)' \
+                             WHEN piv.age_dx>=80 AND piv.age_dx<90 THEN '[80,90)' \
+                             ELSE '[90,+)' END AS age_,\
+            piv.sex, piv.copayment,piv.charlson FROM period2process_fitness p2p \
+            LEFT JOIN patient_incidents_view_ch piv ON p2p.ID=piv.patient_id \
+            ) pp LEFT JOIN \
+            patient_condition_hosp pc ON pp.ID=pc.patient_id) a LEFT JOIN \
+            hba1c_predx_last_view b ON a.ID = b.patient_id")
+
+dbDisconnect(con, shutdown = TRUE)
+df$sex <- as.factor(ifelse(df$sex == 0, 'Male', 'Female'))
+df$copayment <- as.factor(df$copayment)
+df$charlson <- as.factor(df$charlson)
+df$cpc <- as.factor(df$cpc)
+df$time <- as.factor(df$time)
+df$age_ <- as.factor(df$age_)
+df$education <- as.factor(df$education)
+
+df <- within(df, cpc <- relevel(cpc, ref = 'else'))
+fitness_pi_lm <- lm(fitness ~ sex  +time+age_+copayment+cpc, data=df)
+rm(df)
+summary(fitness_pi_lm)
+```
+
 ### 5.3. Prediction of clincal outcomes
 
 #### 5.3.1. Time Dependent Cox Model
 ::: {.justify}
-In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependent Cox model, and the summary of it is:
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominat clinical condition change to 'cvd','hf' or 'ckd') with a time dependent Cox model, and the summary of it is:
 ::: 
 ```{r}
 #| label: Time dependent COX (process indicators)
@@ -3474,8 +3494,8 @@ In the next example, we choose fitness, age, sex and charlson's index to try to 
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
+log_info("Create time dependent Cox model for PI")
 con <- dbConnect(duckdb(), dbdir = db_path)
-
 df <- dbGetQuery(con, "SELECT pp.*, pc.initial_status, pc.final_status FROM (SELECT p2p.ID, p2p.t_0, p2p.t_1, p2p.fitness, p2p.status,p2p.status2, piv.age_dx as age, piv.sex, piv.copayment,piv.charlson,piv.country FROM period2process_fitness p2p LEFT JOIN patient_incidents_view_ch piv ON p2p.ID=piv.patient_id) pp LEFT JOIN patient_condition_hosp pc ON pp.ID=pc.patient_id") %>%
   left_join( country2cont %>% select(country, a.3), by = "country")
 dbDisconnect(con, shutdown = TRUE)
@@ -3502,7 +3522,7 @@ Using same predictive variables a joint latent class model of two classes is mad
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-
+log_info("Create JLCM model for PI")
 tryCatch(
 {### 1 latent class
 
@@ -3830,31 +3850,8 @@ Cluster 0
 :::
 
 #### 6.1.3. Adherence to therapeutic guidelines
-::: {.justify}
-Once traces are clusterized, with a boxplot is easy to show that each cluster's behavior with respect to the treatment guides is different. Comparing traces with @fig-petrinet_else, calculating the fitness (1 being perfect match with the petri net and 0 being the lowest possible fitness) of each trace and grouping by cluster results in\_ @fig-fitness_by_cluster_else.
-::: 
-```{python}
-#| label: fitness boxplot (else)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make conformance checking analysis of %s patients", cond)
-con = duckdb.connect(db_path)
-treatments_clusters_boxplot(con,cond,
-            pn_file='./PN_%s.pnml' % cond,
-            pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
-```
 
-![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_else.png){#fig-fitness_by_cluster_else fig-align="center" width="80%"}
 
-#### 6.1.4. Prediction of clinical outcomes
-
-##### 6.1.4.1. Time Dependent Cox Model
-::: {.justify}
-In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
-::: 
 ```{python}
 #| label: create fitness by period table (else)
 #| eval: TRUE
@@ -3865,27 +3862,52 @@ logging.info("Create  %s patients prediction models", cond)
 con = duckdb.connect(db_path)
 id2treat_fitness_by_interval(con, cond,
             pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
             ini_place='place100',fin_place='place111',
             fixed_period_time=90)
 con.close()
 ```
 
 ```{r}
-#| label: Time dependent COX (else)
+#| label: tbl-fitness_else
+#| tbl-cap: "Adherence to therapeutic guidelines of patients without predominant clinical conditions."
+#| tbl-colwidths: [60,40]
+log_info("Fitness performance {cond} patients ")
+con <- dbConnect(duckdb(), dbdir = db_path)
+tbl_else_fitness <- dbGetQuery(con, paste0("SELECT  AVG(fitness) AS mean, \
+        STDDEV(fitness) AS SD, \
+        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY fitness) AS first_quartile, \
+        MEDIAN(fitness) AS median, \
+        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY fitness) AS third_quartile, \
+        COUNT(*) AS n \
+          FROM  (SELECT *,ROW_NUMBER() OVER (\
+                PARTITION BY ID ORDER BY t_0 DESC) AS rn FROM period2fitness_",cond,") \
+        WHERE rn=1"))
+dbDisconnect(con, shutdown = TRUE)
+kable(tbl_else_fitness, row.names=FALSE, align=c("l", "l", rep("r",5)))
+```
+
+::: {.justify}
+As in the analysis of process indicators adherence here a linear model can be employed to analyse the effect of some variables on fitness:
+:::
+
+```{r}
+#| label: treatment conformance analysis by different variables (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-con <- dbConnect(duckdb(), dbdir = db_path)
 
+log_info("Create  {cond} patients fitness regressions")
+con <- dbConnect(duckdb(), dbdir = db_path)
 df <- dbGetQuery(con, paste0("SELECT p2f.ID,p2f.t_0,p2f.t_1,p2f.fitness,\
                              p2f.status,p2f.status2,\
                              piv.age_dx as age,\
-                             CASE WHEN age<50 THEN '[0,50)'\
-                             WHEN age>=50 AND age<60 THEN '[50,60)' \
-                             WHEN age>=60 AND age<70 THEN '[60,70)' \
-                             WHEN age>=70 AND age<80 THEN '[70,80)' \
-                             WHEN age>=80 AND age<90 THEN '[80,90)' \
+                             CASE WHEN piv.age_dx<50 THEN '[0,50)'\
+                             WHEN piv.age_dx>=50 AND piv.age_dx<60 THEN '[50,60)' \
+                             WHEN piv.age_dx>=60 AND piv.age_dx<70 THEN '[60,70)' \
+                             WHEN piv.age_dx>=70 AND piv.age_dx<80 THEN '[70,80)' \
+                             WHEN piv.age_dx>=80 AND piv.age_dx<90 THEN '[80,90)' \
                              ELSE '[90,+)' END AS age_,\
                              piv.sex,piv.copayment,piv.charlson \
                              FROM period2fitness_",cond," p2f \
@@ -3899,7 +3921,42 @@ df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 
+summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
 
+```
+
+::: {.justify}
+Once traces are clusterized, with a boxplot is easy to show that each cluster's behavior with respect to the treatment guides is different. Comparing traces with @fig-petrinet_else, calculating the fitness (1 being perfect match with the petri net and 0 being the lowest possible fitness) of each trace and grouping by cluster results in\_ @fig-fitness_by_cluster_else.
+::: 
+```{python}
+#| label: fitness boxplot (else)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Analyze conformance checking by clusters of %s patients", cond)
+con = duckdb.connect(db_path)
+treatments_clusters_boxplot(con,cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
+con.close()
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_else.png){#fig-fitness_by_cluster_else fig-align="center" width="80%"}
+
+#### 6.1.4. Prediction of clinical outcomes
+
+##### 6.1.4.1. Time Dependent Cox Model
+::: {.justify}
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+::: 
+
+```{r}
+#| label: Time dependent COX (else)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+log_info("Create time dependent Cox {cond} model")
 time_dep_else <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
                data=df)
 
@@ -3916,7 +3973,7 @@ Using same predictive variables a joint latent class model of two classes is mad
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-
+log_info("Create JLCM {cond} model")
 tryCatch(
 {### 1 latent class
 
@@ -3978,11 +4035,12 @@ error = function(cond_) {
 Moreover a Cox survival model with two time windows is implemented below:
 
 ```{r}
-#| label: 2 window cox (else)
+#| label: 2 windows cox (else)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
+log_info("Create two windows cox {cond} model")
 df <- df %>% 
   filter(t_max > 270) %>% 
   filter(t_0==270) %>% 
@@ -4198,28 +4256,6 @@ Cluster 0
 #### 6.2.3. Adherence to therapeutic guidelines
 
 ```{python}
-#| label: fitness boxplot (ob)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make conformance checking analysis of %s patients", cond)
-con = duckdb.connect(db_path)
-treatments_clusters_boxplot(con,cond,
-            pn_file='./PN_%s.pnml' % cond,
-            pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
-```
-
-![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ob.png){#fig-fitness_by_cluster_ob fig-align="center" width="80%"}
-
-#### 6.2.4. Prediction of clinical outcomes
-
-##### 6.2.4.1. Time Dependent Cox Model
-::: {.justify}
-In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
-::: 
-```{python}
 #| label: create fitness by period table (ob)
 #| eval: TRUE
 #| echo: FALSE
@@ -4229,27 +4265,48 @@ logging.info("Create  %s patients prediction models", cond)
 con = duckdb.connect(db_path)
 id2treat_fitness_by_interval(con, cond,
             pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
             ini_place='place100',fin_place='place111',
             fixed_period_time=90)
 con.close()
 ```
 
 ```{r}
-#| label: Time dependent COX (ob)
+#| label: tbl-fitness_ob
+#| tbl-cap: "Adherence to therapeutic guidelines of patients with obesity"
+#| tbl-colwidths: [60,40]
+log_info("Fitness performance {cond} patients")
+con <- dbConnect(duckdb(), dbdir = db_path)
+tbl_else_fitness <- dbGetQuery(con, paste0("SELECT  AVG(fitness) AS mean, \
+        STDDEV(fitness) AS SD, \
+        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY fitness) AS first_quartile, \
+        MEDIAN(fitness) AS median, \
+        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY fitness) AS third_quartile, \
+        COUNT(*) AS n \
+          FROM  (SELECT *,ROW_NUMBER() OVER (\
+                PARTITION BY ID ORDER BY t_0 DESC) AS rn FROM period2fitness_",cond,") \
+        WHERE rn=1"))
+dbDisconnect(con, shutdown = TRUE)
+kable(tbl_else_fitness, row.names=FALSE, align=c("l", "l", rep("r",5)))
+```
+
+```{r}
+#| label: treatment conformance analysis by different variables (ob)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-con <- dbConnect(duckdb(), dbdir = db_path)
 
+log_info("Create  {cond} patients fitness regressions")
+con <- dbConnect(duckdb(), dbdir = db_path)
 df <- dbGetQuery(con, paste0("SELECT p2f.ID,p2f.t_0,p2f.t_1,p2f.fitness,\
                              p2f.status,p2f.status2,\
                              piv.age_dx as age,\
-                             CASE WHEN age<50 THEN '[0,50)'\
-                             WHEN age>=50 AND age<60 THEN '[50,60)' \
-                             WHEN age>=60 AND age<70 THEN '[60,70)' \
-                             WHEN age>=70 AND age<80 THEN '[70,80)' \
-                             WHEN age>=80 AND age<90 THEN '[80,90)' \
+                             CASE WHEN piv.age_dx<50 THEN '[0,50)'\
+                             WHEN piv.age_dx>=50 AND piv.age_dx<60 THEN '[50,60)' \
+                             WHEN piv.age_dx>=60 AND piv.age_dx<70 THEN '[60,70)' \
+                             WHEN piv.age_dx>=70 AND piv.age_dx<80 THEN '[70,80)' \
+                             WHEN piv.age_dx>=80 AND piv.age_dx<90 THEN '[80,90)' \
                              ELSE '[90,+)' END AS age_,\
                              piv.sex,piv.copayment,piv.charlson \
                              FROM period2fitness_",cond," p2f \
@@ -4263,7 +4320,40 @@ df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 
+summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
 
+```
+
+
+```{python}
+#| label: fitness boxplot (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Analyze conformance checking by clusters of %s patients", cond)
+con = duckdb.connect(db_path)
+treatments_clusters_boxplot(con,cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
+con.close()
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ob.png){#fig-fitness_by_cluster_ob fig-align="center" width="80%"}
+
+#### 6.2.4. Prediction of clinical outcomes
+
+##### 6.2.4.1. Time Dependent Cox Model
+::: {.justify}
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+::: 
+
+```{r}
+#| label: Time dependent COX (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+log_info("Create time dependent Cox {cond} model")
 time_dep_ob <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
                data=df)
 
@@ -4280,9 +4370,7 @@ Using same predictive variables a joint latent class model of two classes is mad
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-
-### 1 latent class
-
+log_info("Create JLCM {cond} model")
 tryCatch(
 {mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
                  survival = Surv(t_min,t_max,status2) ~ age+sex+charlson, hazard="Weibull",
@@ -4342,11 +4430,12 @@ error = function(cond_) {
 Moreover a Cox survival model with two time windows is implemented below:
 
 ```{r}
-#| label: 2 window cox (ob)
+#| label: 2 windows cox (ob)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
+log_info("Create two windows cox {cond} model")
 df <- df %>% 
   filter(t_max > 270) %>% 
   filter(t_0==270) %>% 
@@ -4561,28 +4650,6 @@ Cluster 0
 #### 6.3.3. Adherence to therapeutic guidelines
 
 ```{python}
-#| label: fitness boxplot (f)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make conformance checking analysis of %s patients", cond)
-con = duckdb.connect(db_path)
-treatments_clusters_boxplot(con,cond,
-            pn_file='./PN_%s.pnml' % cond,
-            pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
-```
-
-![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_f.png){#fig-fitness_by_cluster_f fig-align="center" width="80%"}
-
-#### 6.3.4. Prediction of clinical outcomes
-
-##### 6.3.4.1 Time Dependent Cox Model
-::: {.justify}
-In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
-::: 
-```{python}
 #| label: create fitness by period table (f)
 #| eval: TRUE
 #| echo: FALSE
@@ -4592,27 +4659,48 @@ logging.info("Create  %s patients prediction models", cond)
 con = duckdb.connect(db_path)
 id2treat_fitness_by_interval(con, cond,
             pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
             ini_place='place100',fin_place='place111',
             fixed_period_time=90)
 con.close()
 ```
 
 ```{r}
-#| label: Time dependent COX (f)
+#| label: tbl-fitness_f
+#| tbl-cap: "Adherence to therapeutic guidelines of patients with frailty"
+#| tbl-colwidths: [60,40]
+log_info("Fitness performance {cond} patients ")
+con <- dbConnect(duckdb(), dbdir = db_path)
+tbl_else_fitness <- dbGetQuery(con, paste0("SELECT  AVG(fitness) AS mean, \
+        STDDEV(fitness) AS SD, \
+        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY fitness) AS first_quartile, \
+        MEDIAN(fitness) AS median, \
+        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY fitness) AS third_quartile, \
+        COUNT(*) AS n \
+          FROM  (SELECT *,ROW_NUMBER() OVER (\
+                PARTITION BY ID ORDER BY t_0 DESC) AS rn FROM period2fitness_",cond,") \
+        WHERE rn=1"))
+dbDisconnect(con, shutdown = TRUE)
+kable(tbl_else_fitness, row.names=FALSE, align=c("l", "l", rep("r",5)))
+```
+
+```{r}
+#| label: treatment conformance analysis by different variables (f)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-con <- dbConnect(duckdb(), dbdir = db_path)
 
+log_info("Create  {cond} patients fitness regressions")
+con <- dbConnect(duckdb(), dbdir = db_path)
 df <- dbGetQuery(con, paste0("SELECT p2f.ID,p2f.t_0,p2f.t_1,p2f.fitness,\
                              p2f.status,p2f.status2,\
                              piv.age_dx as age,\
-                             CASE WHEN age<50 THEN '[0,50)'\
-                             WHEN age>=50 AND age<60 THEN '[50,60)' \
-                             WHEN age>=60 AND age<70 THEN '[60,70)' \
-                             WHEN age>=70 AND age<80 THEN '[70,80)' \
-                             WHEN age>=80 AND age<90 THEN '[80,90)' \
+                             CASE WHEN piv.age_dx<50 THEN '[0,50)'\
+                             WHEN piv.age_dx>=50 AND piv.age_dx<60 THEN '[50,60)' \
+                             WHEN piv.age_dx>=60 AND piv.age_dx<70 THEN '[60,70)' \
+                             WHEN piv.age_dx>=70 AND piv.age_dx<80 THEN '[70,80)' \
+                             WHEN piv.age_dx>=80 AND piv.age_dx<90 THEN '[80,90)' \
                              ELSE '[90,+)' END AS age_,\
                              piv.sex,piv.copayment,piv.charlson \
                              FROM period2fitness_",cond," p2f \
@@ -4626,7 +4714,40 @@ df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 
+summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
 
+```
+
+
+```{python}
+#| label: fitness boxplot (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Analyze conformance checking by clusters of %s patients", cond)
+con = duckdb.connect(db_path)
+treatments_clusters_boxplot(con,cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
+con.close()
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_f.png){#fig-fitness_by_cluster_f fig-align="center" width="80%"}
+
+#### 6.3.4. Prediction of clinical outcomes
+
+##### 6.3.4.1 Time Dependent Cox Model
+::: {.justify}
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+::: 
+
+```{r}
+#| label: Time dependent COX (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+log_info("Create time dependent Cox {cond} model")
 time_dep_f <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
                data=df)
 
@@ -4643,7 +4764,7 @@ Using same predictive variables a joint latent class model of two classes is mad
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-
+log_info("Create JLCM {cond} model")
 tryCatch(
 {### 1 latent class
 
@@ -4705,11 +4826,12 @@ error = function(cond_) {
 Moreover a Cox survival model with two time windows is implemented below:
 
 ```{r}
-#| label: 2 window cox (f)
+#| label: 2 windows cox (f)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
+log_info("Create two windows cox {cond} model")
 df <- df %>% 
   filter(t_max > 270) %>% 
   filter(t_0==270) %>% 
@@ -4924,28 +5046,6 @@ Cluster 0
 #### 6.4.3. Adherence to therapeutic guidelines
 
 ```{python}
-#| label: fitness boxplot (ckd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make conformance checking analysis of %s patients", cond)
-con = duckdb.connect(db_path)
-treatments_clusters_boxplot(con,cond,
-            pn_file='./PN_%s.pnml' % cond,
-            pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
-```
-
-![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ckd.png){#fig-fitness_by_cluster_ckd fig-align="center" width="80%"}
-
-#### 6.4.4. Prediction of clinical outcomes
-
-##### 6.4.4.1. Time Dependent Cox Model
-::: {.justify}
-In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
-::: 
-```{python}
 #| label: create fitness by period table (ckd)
 #| eval: TRUE
 #| echo: FALSE
@@ -4955,27 +5055,48 @@ logging.info("Create  %s patients prediction models", cond)
 con = duckdb.connect(db_path)
 id2treat_fitness_by_interval(con, cond,
             pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
             ini_place='place100',fin_place='place111',
             fixed_period_time=90)
 con.close()
 ```
 
 ```{r}
-#| label: Time dependent COX (ckd)
+#| label: tbl-fitness_ckd
+#| tbl-cap: "Adherence to therapeutic guidelines of patients witho chronic kidney disease."
+#| tbl-colwidths: [60,40]
+log_info("Fitness performance {cond} patients ")
+con <- dbConnect(duckdb(), dbdir = db_path)
+tbl_else_fitness <- dbGetQuery(con, paste0("SELECT  AVG(fitness) AS mean, \
+        STDDEV(fitness) AS SD, \
+        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY fitness) AS first_quartile, \
+        MEDIAN(fitness) AS median, \
+        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY fitness) AS third_quartile, \
+        COUNT(*) AS n \
+          FROM  (SELECT *,ROW_NUMBER() OVER (\
+                PARTITION BY ID ORDER BY t_0 DESC) AS rn FROM period2fitness_",cond,") \
+        WHERE rn=1"))
+dbDisconnect(con, shutdown = TRUE)
+kable(tbl_else_fitness, row.names=FALSE, align=c("l", "l", rep("r",5)))
+```
+
+```{r}
+#| label: treatment conformance analysis by different variables (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-con <- dbConnect(duckdb(), dbdir = db_path)
 
+log_info("Create  {cond} patients fitness regressions")
+con <- dbConnect(duckdb(), dbdir = db_path)
 df <- dbGetQuery(con, paste0("SELECT p2f.ID,p2f.t_0,p2f.t_1,p2f.fitness,\
                              p2f.status,p2f.status2,\
                              piv.age_dx as age,\
-                             CASE WHEN age<50 THEN '[0,50)'\
-                             WHEN age>=50 AND age<60 THEN '[50,60)' \
-                             WHEN age>=60 AND age<70 THEN '[60,70)' \
-                             WHEN age>=70 AND age<80 THEN '[70,80)' \
-                             WHEN age>=80 AND age<90 THEN '[80,90)' \
+                             CASE WHEN piv.age_dx<50 THEN '[0,50)'\
+                             WHEN piv.age_dx>=50 AND piv.age_dx<60 THEN '[50,60)' \
+                             WHEN piv.age_dx>=60 AND piv.age_dx<70 THEN '[60,70)' \
+                             WHEN piv.age_dx>=70 AND piv.age_dx<80 THEN '[70,80)' \
+                             WHEN piv.age_dx>=80 AND piv.age_dx<90 THEN '[80,90)' \
                              ELSE '[90,+)' END AS age_,\
                              piv.sex,piv.copayment,piv.charlson \
                              FROM period2fitness_",cond," p2f \
@@ -4989,7 +5110,40 @@ df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 
+summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
 
+```
+
+
+```{python}
+#| label: fitness boxplot (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Analyze conformance checking by clusters of %s patients", cond)
+con = duckdb.connect(db_path)
+treatments_clusters_boxplot(con,cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
+con.close()
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ckd.png){#fig-fitness_by_cluster_ckd fig-align="center" width="80%"}
+
+#### 6.4.4. Prediction of clinical outcomes
+
+##### 6.4.4.1. Time Dependent Cox Model
+::: {.justify}
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+::: 
+
+```{r}
+#| label: Time dependent COX (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+log_info("Create time dependent Cox {cond} model")
 time_dep_ckd <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
                data=df)
 
@@ -5006,7 +5160,7 @@ Using same predictive variables a joint latent class model of two classes is mad
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-
+log_info("Create JLCM {cond} model")
 tryCatch(
 {### 1 latent class
 
@@ -5068,11 +5222,12 @@ error = function(cond_) {
 Moreover a Cox survival model with two time windows is implemented below:
 
 ```{r}
-#| label: 2 window cox (ckd)
+#| label: 2 windows cox (ckd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
+log_info("Create two windows cox {cond} model")
 df <- df %>% 
   filter(t_max > 270) %>% 
   filter(t_0==270) %>% 
@@ -5286,28 +5441,6 @@ Cluster 0
 #### 6.5.3. Adherence to therapeutic guidelines
 
 ```{python}
-#| label: fitness boxplot (hf)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make conformance checking analysis of %s patients", cond)
-con = duckdb.connect(db_path)
-treatments_clusters_boxplot(con,cond,
-            pn_file='./PN_%s.pnml' % cond,
-            pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
-```
-
-![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_hf.png){#fig-fitness_by_cluster_hf fig-align="center" width="80%"}
-
-#### 6.5.4. Prediction of clinical outcomes
-
-##### 6.5.4.1. Time Dependent Cox Model
-::: {.justify}
-In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
-::: 
-```{python}
 #| label: create fitness by period table (hf)
 #| eval: TRUE
 #| echo: FALSE
@@ -5317,27 +5450,48 @@ logging.info("Create  %s patients prediction models", cond)
 con = duckdb.connect(db_path)
 id2treat_fitness_by_interval(con, cond,
             pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
             ini_place='place100',fin_place='place111',
             fixed_period_time=90)
 con.close()
 ```
 
 ```{r}
-#| label: Time dependent COX (hf)
+#| label: tbl-fitness_hf
+#| tbl-cap: "Adherence to therapeutic guidelines of patients with heart failure."
+#| tbl-colwidths: [60,40]
+log_info("Fitness performance {cond} patients ")
+con <- dbConnect(duckdb(), dbdir = db_path)
+tbl_else_fitness <- dbGetQuery(con, paste0("SELECT  AVG(fitness) AS mean, \
+        STDDEV(fitness) AS SD, \
+        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY fitness) AS first_quartile, \
+        MEDIAN(fitness) AS median, \
+        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY fitness) AS third_quartile, \
+        COUNT(*) AS n \
+          FROM  (SELECT *,ROW_NUMBER() OVER (\
+                PARTITION BY ID ORDER BY t_0 DESC) AS rn FROM period2fitness_",cond,") \
+        WHERE rn=1"))
+dbDisconnect(con, shutdown = TRUE)
+kable(tbl_else_fitness, row.names=FALSE, align=c("l", "l", rep("r",5)))
+```
+
+```{r}
+#| label: treatment conformance analysis by different variables (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-con <- dbConnect(duckdb(), dbdir = db_path)
 
+log_info("Create  {cond} patients fitness regressions")
+con <- dbConnect(duckdb(), dbdir = db_path)
 df <- dbGetQuery(con, paste0("SELECT p2f.ID,p2f.t_0,p2f.t_1,p2f.fitness,\
                              p2f.status,p2f.status2,\
                              piv.age_dx as age,\
-                             CASE WHEN age<50 THEN '[0,50)'\
-                             WHEN age>=50 AND age<60 THEN '[50,60)' \
-                             WHEN age>=60 AND age<70 THEN '[60,70)' \
-                             WHEN age>=70 AND age<80 THEN '[70,80)' \
-                             WHEN age>=80 AND age<90 THEN '[80,90)' \
+                             CASE WHEN piv.age_dx<50 THEN '[0,50)'\
+                             WHEN piv.age_dx>=50 AND piv.age_dx<60 THEN '[50,60)' \
+                             WHEN piv.age_dx>=60 AND piv.age_dx<70 THEN '[60,70)' \
+                             WHEN piv.age_dx>=70 AND piv.age_dx<80 THEN '[70,80)' \
+                             WHEN piv.age_dx>=80 AND piv.age_dx<90 THEN '[80,90)' \
                              ELSE '[90,+)' END AS age_,\
                              piv.sex,piv.copayment,piv.charlson \
                              FROM period2fitness_",cond," p2f \
@@ -5351,7 +5505,40 @@ df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 
+summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
 
+```
+
+
+```{python}
+#| label: fitness boxplot (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Analyze conformance checking by clusters of %s patients", cond)
+con = duckdb.connect(db_path)
+treatments_clusters_boxplot(con,cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
+con.close()
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_hf.png){#fig-fitness_by_cluster_hf fig-align="center" width="80%"}
+
+#### 6.5.4. Prediction of clinical outcomes
+
+##### 6.5.4.1. Time Dependent Cox Model
+::: {.justify}
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+::: 
+
+```{r}
+#| label: Time dependent COX (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+log_info("Create time dependent Cox {cond} model")
 time_dep_hf <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
                data=df)
 
@@ -5368,7 +5555,7 @@ Using same predictive variables a joint latent class model of two classes is mad
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-
+log_info("Create JLCM {cond} model")
 tryCatch(
 {### 1 latent class
 
@@ -5430,11 +5617,12 @@ error = function(cond_) {
 Moreover a Cox survival model with two time windows is implemented below:
 
 ```{r}
-#| label: 2 window cox (hf)
+#| label: 2 windows cox (hf)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
+log_info("Create two windows cox {cond} model")
 df <- df %>% 
   filter(t_max > 270) %>% 
   filter(t_0==270) %>% 
@@ -5648,28 +5836,6 @@ Cluster 0
 #### 6.6.3. Adherence to therapeutic guidelines
 
 ```{python}
-#| label: fitness boxplot (cvd)
-#| eval: TRUE
-#| echo: FALSE
-#| warning: FALSE
-#| output: FALSE
-logging.info("Make conformance checking analysis of %s patients", cond)
-con = duckdb.connect(db_path)
-treatments_clusters_boxplot(con,cond,
-            pn_file='./PN_%s.pnml' % cond,
-            pn_png_file='../../outputs/PN_%s.png' % cond,
-            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
-```
-
-![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_cvd.png){#fig-fitness_by_cluster_cvd fig-align="center" width="80%"}
-
-#### 6.6.4. Prediction of clinical outcomes
-
-##### 6.6.4.1. Time Dependent Cox Model
-::: {.justify}
-In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
-::: 
-```{python}
 #| label: create fitness by period table (cvd)
 #| eval: TRUE
 #| echo: FALSE
@@ -5679,27 +5845,48 @@ logging.info("Create  %s patients prediction models", cond)
 con = duckdb.connect(db_path)
 id2treat_fitness_by_interval(con, cond,
             pn_file='./PN_%s.pnml' % cond,
+            pn_png_file='../../outputs/PN_%s.png' % cond,
             ini_place='place100',fin_place='place111',
             fixed_period_time=90)
 con.close()
 ```
 
 ```{r}
-#| label: Time dependent COX (cvd)
+#| label: tbl-fitness_cvd
+#| tbl-cap: "Adherence to therapeutic guidelines of patients with cardiovascular disease."
+#| tbl-colwidths: [60,40]
+log_info("Fitness performance {cond} patients ")
+con <- dbConnect(duckdb(), dbdir = db_path)
+tbl_else_fitness <- dbGetQuery(con, paste0("SELECT  AVG(fitness) AS mean, \
+        STDDEV(fitness) AS SD, \
+        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY fitness) AS first_quartile, \
+        MEDIAN(fitness) AS median, \
+        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY fitness) AS third_quartile, \
+        COUNT(*) AS n \
+          FROM  (SELECT *,ROW_NUMBER() OVER (\
+                PARTITION BY ID ORDER BY t_0 DESC) AS rn FROM period2fitness_",cond,") \
+        WHERE rn=1"))
+dbDisconnect(con, shutdown = TRUE)
+kable(tbl_else_fitness, row.names=FALSE, align=c("l", "l", rep("r",5)))
+```
+
+```{r}
+#| label: treatment conformance analysis by different variables (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-con <- dbConnect(duckdb(), dbdir = db_path)
 
+log_info("Create  {cond} patients fitness regressions")
+con <- dbConnect(duckdb(), dbdir = db_path)
 df <- dbGetQuery(con, paste0("SELECT p2f.ID,p2f.t_0,p2f.t_1,p2f.fitness,\
                              p2f.status,p2f.status2,\
                              piv.age_dx as age,\
-                             CASE WHEN age<50 THEN '[0,50)'\
-                             WHEN age>=50 AND age<60 THEN '[50,60)' \
-                             WHEN age>=60 AND age<70 THEN '[60,70)' \
-                             WHEN age>=70 AND age<80 THEN '[70,80)' \
-                             WHEN age>=80 AND age<90 THEN '[80,90)' \
+                             CASE WHEN piv.age_dx<50 THEN '[0,50)'\
+                             WHEN piv.age_dx>=50 AND piv.age_dx<60 THEN '[50,60)' \
+                             WHEN piv.age_dx>=60 AND piv.age_dx<70 THEN '[60,70)' \
+                             WHEN piv.age_dx>=70 AND piv.age_dx<80 THEN '[70,80)' \
+                             WHEN piv.age_dx>=80 AND piv.age_dx<90 THEN '[80,90)' \
                              ELSE '[90,+)' END AS age_,\
                              piv.sex,piv.copayment,piv.charlson \
                              FROM period2fitness_",cond," p2f \
@@ -5713,7 +5900,40 @@ df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 
+summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
 
+```
+
+
+```{python}
+#| label: fitness boxplot (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: FALSE
+logging.info("Analyze conformance checking by clusters of %s patients", cond)
+con = duckdb.connect(db_path)
+treatments_clusters_boxplot(con,cond,
+            output_png='../../outputs/fitness_by_cluster_%s.png' % cond)
+con.close()
+```
+
+![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_cvd.png){#fig-fitness_by_cluster_cvd fig-align="center" width="80%"}
+
+#### 6.6.4. Prediction of clinical outcomes
+
+##### 6.6.4.1. Time Dependent Cox Model
+::: {.justify}
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominal clinical condition change to 'cvd','hf' or 'ckd') with a time dependet Cox model, and the summary of it is:
+::: 
+
+```{r}
+#| label: Time dependent COX (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+log_info("Create time dependent Cox {cond} model")
 time_dep_cvd <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
                data=df)
 
@@ -5730,7 +5950,7 @@ Using same predictive variables a joint latent class model of two classes is mad
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-
+log_info("Create JLCM {cond} model")
 tryCatch(
 {### 1 latent class
 mj1 <- Jointlcmm(fixed= fitness ~ t_0 ,random =~ t_0, subject="ID2",
@@ -5791,11 +6011,12 @@ error = function(cond_) {
 Moreover a Cox survival model with two time windows is implemented below:
 
 ```{r}
-#| label: 2 window cox (cvd)
+#| label: 2 windows cox (cvd)
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
+log_info("Create two windows cox {cond} model")
 df <- df %>% 
   filter(t_max > 270) %>% 
   filter(t_0==270) %>% 
