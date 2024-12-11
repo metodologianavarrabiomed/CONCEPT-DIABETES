@@ -3453,7 +3453,7 @@ A linear model can be employed to describe fitness by examining the effects of k
 #| output: TRUE
 
 con <- dbConnect(duckdb(), dbdir = db_path)
-df <- dbGetQuery(con,"SELECT a.*, b.param_value FROM (SELECT pp.*, pc.initial_status AS cpc \
+df <- dbGetQuery(con,"SELECT pp.*, pc.initial_status AS cpc \
             FROM (SELECT p2p.ID, p2p.t_0 AS time, p2p.fitness, piv.age_dx as age,piv.education as education,\
                              CASE WHEN piv.age_dx<50 THEN '[0,50)'\
                              WHEN piv.age_dx>=50 AND piv.age_dx<60 THEN '[50,60)' \
@@ -3464,8 +3464,7 @@ df <- dbGetQuery(con,"SELECT a.*, b.param_value FROM (SELECT pp.*, pc.initial_st
             piv.sex, piv.copayment,piv.charlson FROM period2process_fitness p2p \
             LEFT JOIN patient_incidents_view_ch piv ON p2p.ID=piv.patient_id \
             ) pp LEFT JOIN \
-            patient_condition_hosp pc ON pp.ID=pc.patient_id) a LEFT JOIN \
-            hba1c_predx_last_view b ON a.ID = b.patient_id")
+            patient_condition_hosp pc ON pp.ID=pc.patient_id")
 
 dbDisconnect(con, shutdown = TRUE)
 df$sex <- as.factor(ifelse(df$sex == 0, 'Male', 'Female'))
