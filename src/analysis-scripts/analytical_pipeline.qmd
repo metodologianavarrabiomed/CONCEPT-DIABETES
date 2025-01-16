@@ -3468,7 +3468,8 @@ df <- dbGetQuery(con,"SELECT pp.*, pc.initial_status AS cpc \
 
 dbDisconnect(con, shutdown = TRUE)
 df$sex <- as.factor(ifelse(df$sex == 0, 'Male', 'Female'))
-df$copayment <- as.factor(df$copayment)
+df$copayment <- as.factor(ifelse(df$copayment== 0,
+                                 "less than 18000","more or equal than 18000"))
 df$charlson <- as.factor(df$charlson)
 df$cpc <- as.factor(df$cpc)
 df$time <- as.factor(df$time)
@@ -3919,7 +3920,8 @@ df$age_ <- as.factor(df$age_)
 df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
-
+df$copayment <- as.factor(ifelse(df$copayment== 0,
+                                 "less than 18000","more or equal than 18000"))
 summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
 
 ```
@@ -4318,7 +4320,8 @@ df$age_ <- as.factor(df$age_)
 df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
-
+df$copayment <- as.factor(ifelse(df$copayment== 0,
+                                 "less than 18000","more or equal than 18000"))
 summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
 
 ```
@@ -4712,7 +4715,8 @@ df$age_ <- as.factor(df$age_)
 df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
-
+df$copayment <- as.factor(ifelse(df$copayment== 0,
+                                 "less than 18000","more or equal than 18000"))
 summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
 
 ```
@@ -5108,7 +5112,8 @@ df$age_ <- as.factor(df$age_)
 df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
-
+df$copayment <- as.factor(ifelse(df$copayment== 0,
+                                 "less than 18000","more or equal than 18000"))
 summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
 
 ```
@@ -5503,7 +5508,8 @@ df$age_ <- as.factor(df$age_)
 df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
-
+df$copayment <- as.factor(ifelse(df$copayment== 0,
+                                 "less than 18000","more or equal than 18000"))
 summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
 
 ```
@@ -5898,7 +5904,8 @@ df$age_ <- as.factor(df$age_)
 df$ID2 <- as.numeric(as.factor(df$ID))
 df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
-
+df$copayment <- as.factor(ifelse(df$copayment== 0,
+                                 "less than 18000","more or equal than 18000"))
 summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
 
 ```
