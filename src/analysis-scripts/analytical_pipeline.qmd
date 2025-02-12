@@ -524,7 +524,7 @@ def separate_patients_by_condition(con):
     
     https://cienciadedatosysalud.org/wp-content/uploads/Metodologia_Atlas_Prescripcion_enero_2023-1.pdf
     '''
-    cvd_code_list = ['K74','K75','K76','K89','K90','K91']
+    cvd_code_list = ['K74','K75','K76','K89','K90','K91','K92']
     hf = 'K77'
     ckd = 'U99.01'
     ob = "T82"
@@ -542,58 +542,33 @@ def separate_patients_by_condition(con):
     cie10_df['comorb_codif'] = 'ICD10'
     cie2ciap = pd.concat([cie9_df[['comorb_codif','CIE','CIAP']],
                           cie10_df[['comorb_codif','CIE','CIAP']]])
-    
+    con.sql("CREATE OR REPLACE VIEW comorb_incidents_view_all_following \
+            AS SELECT * FROM main.comorb \
+            WHERE patient_id IN (SELECT patient_id FROM main.patient \
+                                 WHERE dx_date >='2017-01-01')")
     con.sql("CREATE OR REPLACE VIEW comorb_incidents_ciap_view AS \
-            SELECT * FROM comorb_incidents_view \
+            SELECT * FROM comorb_incidents_view_all_following \
                 LEFT JOIN cie2ciap \
-                    ON comorb_incidents_view.comorb_codif = cie2ciap.comorb_codif \
-                        AND comorb_incidents_view.comorb_code = cie2ciap.CIAP")
+                    ON comorb_incidents_view_all_following.comorb_codif = cie2ciap.comorb_codif \
+                        AND comorb_incidents_view_all_following.comorb_code = cie2ciap.CIAP")
     con.sql("CREATE OR REPLACE VIEW comorb_incidents_active_view AS SELECT *, \
             CASE WHEN comorb_codif = 'CIAP2' THEN comorb_code ELSE CIAP END AS CIAP2 \
                 FROM comorb_incidents_ciap_view WHERE comorb_date_end IS NULL;")
 
-    # Which is the predominal clinical condition at baseline?
+    # Which is the predominal clinical condition previous to 2017-01-01?
     f_list = set()
-    ob_list = set(con.sql(f"SELECT DISTINCT patient_id \
-                          FROM comorb_incidents_active_view WHERE CIAP2 = '{ob}'"
-                          ).df()['patient_id'])        
-    ckd_list = set(con.sql(f"SELECT DISTINCT patient_id \
-                           FROM comorb_incidents_active_view WHERE CIAP2 = '{ckd}'"
-                           ).df()['patient_id'])        
-    hf_list = set(con.sql(f"SELECT DISTINCT patient_id \
-                          FROM comorb_incidents_active_view WHERE CIAP2 = '{hf}'"
-                          ).df()['patient_id'])        
-    cvd_list = set(con.sql(f"SELECT DISTINCT patient_id \
-                           FROM comorb_incidents_active_view \
-                               WHERE CIAP2 IN {to_list(cvd_code_list)}"
-                               ).df()['patient_id'])        
+    ob_list = set()        
+    ckd_list = set()        
+    hf_list = set()        
+    cvd_list = set()        
 
-    # Which is the predominal clinical condition at dx_date?
-    # ENFERMEDADES ISQUÉMICAS CARDIACAS (I20-I25)
-    # ENFERMEDADES CEREBROVASCULARES (I60-I69)
-    # ISQUEMIA CEREBRAL TRANSITORIA (G45)
-    # ICTUS (G46)
-    to_cvd_change_prelist = ['I2%i' %i for i in range(6)]+[
-                             'I6%i' %i for i in range(10)]+[
-                              'G45','G46']
-    to_cvd_change_list = []
-    for code in to_cvd_change_prelist:
-     for c in cie10_df['CIE']:
-      if code in c:
-                to_cvd_change_list.append(c)
-    # INSUFICIENCIA CARDÍACA (I50)
-    # ENFERMEDAD CARDÍACA Y RENAL CRÓNICA HIPERTENSIVA (I13)
-    to_hf_change_list = ['I09.81', 'I11.0', 'I13.0', 'I13.2', 'I50', 'I50.0',
-                         'I50.1', 'I50.9']
-    # ENFERMEDAD RENAL CRÓNICA (N18)
-    # ENFERMEDAD RENAL CRÓNICA HIPERTENSIVA (I12)
-    to_ckd_change_list = ['N18','N18.1','N18.2','N18.3','N18.30','N18.31',
-                          'N18.32','N18.4','N18.5','N18.6','N18.9','I12',
-                          'I12.0','I12.9','filtglom']
+    to_cvd_change_list = cvd_code_list
+    to_hf_change_list = [hf]
+    to_ckd_change_list = [ckd,'filtglom']
     to_f_change_list = ['f_date']
-    to_ob_change_list = ['bmi>=30','E66.01','E66.09','E66.1','E66.2',
-                         'E66.8','E66.9']
-    # SOBREPESO Y OBESIDAD (E66)
+    to_ob_change_list = [ob,'bmi>=30']
+    
+    
     from_cvd_change_list = ['death']
     from_hf_change_list = from_cvd_change_list+to_cvd_change_list
     from_ckd_change_list = from_hf_change_list+to_hf_change_list
@@ -614,21 +589,17 @@ def separate_patients_by_condition(con):
                          ).df().sort_values(['patient_id','param_date'])
     param_filt['time_diff'] = param_filt.groupby(
         'patient_id')['param_date'].diff()
-    cmbd_filt = param_filt[param_filt['time_diff'] < pd.Timedelta(days=90)
+    df_filt = param_filt[param_filt['time_diff'] < pd.Timedelta(days=90)
                            ].drop_duplicates(subset='patient_id',keep='first')[
                                ['patient_id','param_date','param_name']
                                ].rename(columns={
                                    'param_name':'code',
                                    'param_date':'admission_date'})
-    con.sql("CREATE OR REPLACE VIEW cmbd_incidents_long_view AS SELECT *,\
+    con.sql("CREATE OR REPLACE VIEW comorb_incidents_long_view AS SELECT DISTINCT *,\
             COALESCE(t.order, 404) AS relevance FROM\
-            (SELECT patient_id, admission_date, diagnosis1_code AS code \
-                FROM cmbd_incidents_view WHERE diagnosis1_code IS NOT NULL \
-            UNION ALL SELECT patient_id, admission_date, diagnosis2_code AS code \
-                FROM cmbd_incidents_view WHERE diagnosis2_code IS NOT NULL \
-            UNION ALL SELECT patient_id, admission_date, diagnosis3_code AS code \
-                FROM cmbd_incidents_view WHERE diagnosis3_code IS NOT NULL \
-            UNION ALL SELECT patient_id, admission_date, code FROM cmbd_filt \
+            (SELECT patient_id, comorb_date_ini AS admission_date, CIAP2 AS code \
+                FROM comorb_incidents_active_view \
+            UNION ALL SELECT patient_id, admission_date, code FROM df_filt \
             UNION ALL SELECT patient_id, turn_to_75 AS admission_date, 'f_date' \
                 AS code FROM patient_incidents_view WHERE turn_to_75<'2023-01-01'\
             UNION ALL SELECT patient_id, death_date AS admission_date, 'death' \
@@ -664,21 +635,21 @@ def separate_patients_by_condition(con):
                 ).df()['patient_id']))
                 
     ckd_list.update(set(con.sql(f"SELECT DISTINCT patient_id \
-                           FROM cmbd_incidents_long_view sub \
+                           FROM comorb_incidents_long_view sub \
                                WHERE code IN {to_list(to_ckd_change_list)} \
                                    AND admission_date <= (SELECT dx_date \
                         FROM patient_incidents_view \
                             WHERE patient_incidents_view.patient_id = sub.patient_id);"
                             ).df()['patient_id']))        
     hf_list.update(set(con.sql(f"SELECT DISTINCT patient_id \
-                           FROM cmbd_incidents_long_view sub \
+                           FROM comorb_incidents_long_view sub \
                                WHERE code IN {to_list(to_hf_change_list)} \
                                    AND admission_date <= (SELECT dx_date \
                         FROM patient_incidents_view \
                             WHERE patient_incidents_view.patient_id = sub.patient_id);"
                             ).df()['patient_id']))        
     cvd_list.update(set(con.sql(f"SELECT DISTINCT patient_id \
-                           FROM cmbd_incidents_long_view sub \
+                           FROM comorb_incidents_long_view sub \
                                WHERE code IN {to_list(to_cvd_change_list)} \
                                    AND admission_date <= (SELECT dx_date \
                         FROM patient_incidents_view \
@@ -697,8 +668,8 @@ def separate_patients_by_condition(con):
                          ).difference(cvd_list+hf_list+ckd_list+f_list+ob_list))
                
     # When is a change on predominant clinical condition made?  
-    con.sql(f"CREATE OR REPLACE VIEW cmbd_incidents_long_view_dx AS SELECT * \
-            FROM cmbd_incidents_long_view sub \
+    con.sql(f"CREATE OR REPLACE VIEW comorb_incidents_long_view_dx AS SELECT * \
+            FROM comorb_incidents_long_view sub \
                 WHERE admission_date > (SELECT dx_date \
                     FROM patient_incidents_view \
                         WHERE patient_incidents_view.patient_id = sub.patient_id);")
@@ -706,14 +677,14 @@ def separate_patients_by_condition(con):
     query_function =  lambda cond: "(WITH rankedevents_*** AS (\
         SELECT patient_id,code,admission_date,ROW_NUMBER() \
           OVER(PARTITION BY patient_id ORDER BY admission_date,relevance) AS event_rank \
-              FROM cmbd_incidents_long_view_dx WHERE  patient_id IN {to_list(***_list)} \
+              FROM comorb_incidents_long_view_dx WHERE  patient_id IN {to_list(***_list)} \
                   AND code IN {to_list(from_***_change_list)} ) \
             SELECT patient_id, '***' AS type,code, admission_date AS date \
                 FROM rankedevents_*** WHERE  event_rank=1 AND date<'2023-01-01') \
                                     UNION ALL (WITH rankedevents__*** AS (\
         SELECT patient_id,code,admission_date,ROW_NUMBER() \
           OVER(PARTITION BY patient_id ORDER BY admission_date) AS event_rank \
-              FROM cmbd_incidents_long_view_dx WHERE  patient_id IN {to_list(***_list)} \
+              FROM comorb_incidents_long_view_dx WHERE  patient_id IN {to_list(***_list)} \
                   AND code IN {to_list(['end']+from_***_change_list)} ) \
             SELECT patient_id, '***' AS type,code, admission_date AS date \
                 FROM rankedevents__*** WHERE  event_rank=1 AND code='end')\
@@ -745,7 +716,7 @@ def separate_patients_by_condition(con):
         FROM patient_condition_translation p \
             LEFT JOIN cmbd_incidents_postdx_first_view c \
                 ON p.patient_id = c.patient_id")
-    return presc_data_p                
+    return presc_data_p
 
 def evlog_creation_by_prescriptions(con,
                                  cond,
