@@ -524,7 +524,7 @@ def separate_patients_by_condition(con):
     
     https://cienciadedatosysalud.org/wp-content/uploads/Metodologia_Atlas_Prescripcion_enero_2023-1.pdf
     '''
-    cvd_code_list = ['K74','K75','K76','K89','K90','K91']
+    cvd_code_list = ['K74','K75','K76','K89','K90','K91','K92']
     hf = 'K77'
     ckd = 'U99.01'
     ob = "T82"
