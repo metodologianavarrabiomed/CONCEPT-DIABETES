@@ -2184,7 +2184,7 @@ dbExecute(con,
 patient_inc <- dbGetQuery(con,
                        "SELECT *,
                        CASE WHEN sex = 0 THEN 'Male' 
-                       ELSE 'Female' END AS sexo FROM patient_incidents_view") 
+                       ELSE 'Female' END AS sexo FROM patient_incidents_view_ch") 
 patient_inc <- patient_inc %>%
   left_join( country2cont %>% select(country, CC), by = "country") %>%
   mutate(education=factor(education, levels=c(0,1,2,3),
@@ -2194,7 +2194,7 @@ patient_inc <- patient_inc %>%
                        labels=c("less than 18000","more or equal than 18000")))
 patient_inc$CC[patient_inc$country == 724] <- 'Spain'
 dependent="sexo"
-explanatory=c("age_dx","CC","copayment","education", "avg_income")  
+explanatory=c("age_dx","CC","copayment","education", "avg_income","charlson")  
 
 patient_inc%>%summary_factorlist(dependent,
                               explanatory,
