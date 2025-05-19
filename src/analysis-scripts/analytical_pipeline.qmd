@@ -164,6 +164,7 @@ library(finalfit)
 library(flextable)
 library(knitr)
 library(Comorbilidades)
+library(lme4)
 ```
 
 ### 2.2. Data preprocessing
@@ -2193,6 +2194,7 @@ patient_inc <- patient_inc %>%
       copayment=factor(copayment,levels=c(0,1),
                        labels=c("less than 18000","more or equal than 18000")))
 patient_inc$CC[patient_inc$country == 724] <- 'Spain'
+patient_inc$charlson <- as.factor(patient_inc$charlson)
 dependent="sexo"
 explanatory=c("age_dx","CC","copayment","education", "avg_income","charlson")  
 
@@ -2456,6 +2458,7 @@ patient_pre <- patient_pre %>%
       copayment=factor(copayment,levels=c(0,1),
                        labels=c("less than 18000","more or equal than 18000")))
 patient_pre$CC[patient_pre$country == 724] <- 'Spain'
+patient_pre$charlson <- as.factor(patient_pre$charlson)
 dependent="sexo"
 explanatory=c("age","age_dx","CC","copayment","education", "avg_income")  
 
@@ -3448,7 +3451,7 @@ df$age_ <- as.factor(df$age_)
 df$education <- as.factor(df$education)
 
 df <- within(df, cpc <- relevel(cpc, ref = 'else'))
-fitness_pi_lm <- lm(fitness ~ sex  +time+age_+copayment+cpc, data=df)
+fitness_pi_lm <- lmer(fitness ~ sex  +time+age_+copayment+cpc + (1 | ID), data=df)
 rm(df)
 summary(fitness_pi_lm)
 ```
@@ -3893,7 +3896,7 @@ df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 df$copayment <- as.factor(ifelse(df$copayment== 0,
                                  "less than 18000","more or equal than 18000"))
-summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
+summary(lmer(fitness ~ sex +t_0+age_+copayment+(1 | ID), data=df))
 
 ```
 
@@ -4293,7 +4296,7 @@ df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 df$copayment <- as.factor(ifelse(df$copayment== 0,
                                  "less than 18000","more or equal than 18000"))
-summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
+summary(lmer(fitness ~ sex +t_0+age_+copayment+(1 | ID), data=df))
 
 ```
 
@@ -4688,7 +4691,7 @@ df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 df$copayment <- as.factor(ifelse(df$copayment== 0,
                                  "less than 18000","more or equal than 18000"))
-summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
+summary(lmer(fitness ~ sex +t_0+age_+copayment+(1 | ID), data=df))
 
 ```
 
@@ -5085,7 +5088,7 @@ df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 df$copayment <- as.factor(ifelse(df$copayment== 0,
                                  "less than 18000","more or equal than 18000"))
-summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
+summary(lmer(fitness ~ sex +t_0+age_+copayment+(1 | ID), data=df))
 
 ```
 
@@ -5481,7 +5484,7 @@ df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 df$copayment <- as.factor(ifelse(df$copayment== 0,
                                  "less than 18000","more or equal than 18000"))
-summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
+summary(lmer(fitness ~ sex +t_0+age_+copayment+(1 | ID), data=df))
 
 ```
 
@@ -5877,7 +5880,7 @@ df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 df$copayment <- as.factor(ifelse(df$copayment== 0,
                                  "less than 18000","more or equal than 18000"))
-summary(lm(fitness ~ sex +t_0+age_+copayment, data=df))
+summary(lmer(fitness ~ sex +t_0+age_+copayment+(1 | ID), data=df))
 
 ```
 
