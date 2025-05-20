@@ -2458,7 +2458,6 @@ patient_pre <- patient_pre %>%
       copayment=factor(copayment,levels=c(0,1),
                        labels=c("less than 18000","more or equal than 18000")))
 patient_pre$CC[patient_pre$country == 724] <- 'Spain'
-patient_pre$charlson <- as.factor(patient_pre$charlson)
 dependent="sexo"
 explanatory=c("age","age_dx","CC","copayment","education", "avg_income")  
 
