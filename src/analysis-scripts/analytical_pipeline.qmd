@@ -551,7 +551,7 @@ def separate_patients_by_condition(con):
             SELECT * FROM comorb_incidents_view_all_following \
                 LEFT JOIN cie2ciap \
                     ON comorb_incidents_view_all_following.comorb_codif = cie2ciap.comorb_codif \
-                        AND comorb_incidents_view_all_following.comorb_code = cie2ciap.CIAP")
+                        AND comorb_incidents_view_all_following.comorb_code = cie2ciap.CIE")
     con.sql("CREATE OR REPLACE VIEW comorb_incidents_active_view AS SELECT *, \
             CASE WHEN comorb_codif = 'CIAP2' THEN comorb_code ELSE CIAP END AS CIAP2 \
                 FROM comorb_incidents_ciap_view WHERE comorb_date_end IS NULL;")
