@@ -2440,7 +2440,7 @@ ggsave(gsub("src/analysis-scripts/","",here("outputs/predominant_condition_matri
 ![Predominant clinical condition's first change in incident patients.](../../outputs/predominant_condition_matrix.png){#fig-predominant_cond_m fig-align="center" width="80%"}
 
 ```{r}
-#| label: tbl-patient_inc_by_condition
+#| label: tbl-patient_inc_by_condition_0
 #| tbl-cap: "Demographic and socioeconomic characteristics of incident patients by different predominant clinical conditions"
 #| tbl-colwidths: [60,40]
 
@@ -2495,6 +2495,14 @@ patient_inc[, treatments][is.na(patient_inc[,treatments])] <- as.numeric(0.0)
 explanatory=append(c("age_dx","CC","copayment","education", "avg_income","charlson","hba1c_per_personyear"),treatments)
 dependent <- 'PCC' 
 patient_inc$PCC <- factor(patient_inc$PCC,levels=c("else", "ob", "f",  "ckd",  "hf", "cvd"))
+
+```
+
+```{r}
+#| label: tbl-patient_inc_by_condition_1
+#| tbl-cap: "Demographic and socioeconomic characteristics of incident patients by different predominant clinical conditions"
+#| tbl-colwidths: [60,40]
+
 patient_inc%>%summary_factorlist(dependent,
                               explanatory,
                               total_col = TRUE,
@@ -2506,7 +2514,6 @@ patient_inc%>%summary_factorlist(dependent,
                               add_col_totals = TRUE)-> patient_inc_tab
 patient_inc_tab$label <- gsub("and", "+", patient_inc_tab$label)
 kable(patient_inc_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
-
 ```
 
 
@@ -2734,7 +2741,7 @@ kable(use_pre_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 #| warning: FALSE
 #| output: FALSE
 dbDisconnect(con, shutdown = TRUE)
-rm(param_cat_inc,param_cat_inc2unnest,param_cat_pre,param_cat_pre2unnest,param_inc,param_inc_tab,param_inc2unnest,param_pre,param_pre_tab,param_pre2unnest,patient_inc,patient_inc_tab,patient_pre,patient_pre_tab,ss_use_inc,ss_use_inc1,ss_use_inc2,ss_use_inc3,ss_use_pre,ss_use_pre1,ss_use_pre2,ss_use_pre3,use_inc_freq1,use_inc_freq1_time,use_inc_freq2,use_inc_freq2_time,use_inc_freq3,use_inc_freq3_time,use_inc_tab,use_pre_freq1,use_pre_freq1_time,use_pre_freq2,use_pre_freq2_time,use_pre_freq3,use_pre_freq3_time,use_pre_tab,transition_sum)
+rm(param_cat_inc,param_cat_inc2unnest,param_cat_pre,param_cat_pre2unnest,param_inc,param_inc_tab,param_inc2unnest,param_pre,param_pre_tab,param_pre2unnest,patient_inc,patient_inc_tab,patient_pre,patient_pre_tab,ss_use_inc,ss_use_inc1,ss_use_inc2,ss_use_inc3,ss_use_pre,ss_use_pre1,ss_use_pre2,ss_use_pre3,use_inc_freq1,use_inc_freq1_time,use_inc_freq2,use_inc_freq2_time,use_inc_freq3,use_inc_freq3_time,use_inc_tab,use_pre_freq1,use_pre_freq1_time,use_pre_freq2,use_pre_freq2_time,use_pre_freq3,use_pre_freq3_time,use_pre_tab,transition_sum,hba1c_per_personyear_by_pcc,atc_per_personyear)
 ```
 
 ## 4. Healthcare pathways
