@@ -2470,7 +2470,7 @@ atc_per_personyear <- dbGetQuery(con,
           FROM patient_condition_hosp pc LEFT JOIN patient_incidents_view piv \
           ON pc.patient_id=piv.patient_id) followup ON t.patient_id=followup.patient_id WHERE t.dispensing_date>=followup.dx_date \
           AND t.dispensing_date<followup.followup_end) GROUP BY patient_id, atc_code") 
-code2drug <- read.csv("C:/Users/D463112/Desktop/pruebas/CONCEPT-DIABETES/src/analysis-scripts/diabetes_drugs.csv")
+code2drug <- read.csv("./diabetes_drugs.csv")
 n <- code2drug$X
 code2drug <- as.data.frame(t(code2drug[,-1]))
 colnames(code2drug) <- n
