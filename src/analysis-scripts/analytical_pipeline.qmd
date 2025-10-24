@@ -2178,14 +2178,18 @@ dbExecute(con,
 
 ```{r}
 #| label: tbl-patient_inc
-#| tbl-cap: "Demographic and socioeconomic characteristics of incidents patients "
+#| tbl-cap: "Demographic and socioeconomic characteristics of incident patients "
 #| tbl-colwidths: [60,40]
 
 ###INCIDENTS
 patient_inc <- dbGetQuery(con,
-                       "SELECT *,
-                       CASE WHEN sex = 0 THEN 'Male' 
-                       ELSE 'Female' END AS sexo FROM patient_incidents_view_ch") 
+                       "SELECT p.*,c.initial_status AS PCC,
+                        CASE WHEN p.sex = 0 THEN 'Male' 
+                        ELSE 'Female' END AS sexo 
+                        FROM patient_incidents_view_ch p 
+                        LEFT JOIN patient_condition_translation c 
+                        ON p.patient_id=c.patient_id") 
+
 patient_inc <- patient_inc %>%
   left_join( country2cont %>% select(country, CC), by = "country") %>%
   mutate(education=factor(education, levels=c(0,1,2,3),
@@ -2214,7 +2218,7 @@ kable(patient_inc_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 
 ```{r}
 #| label: tbl-param_inc
-#| tbl-cap: "Demographic and socioeconomic characteristics of incidents patients "
+#| tbl-cap: "Demographic and socioeconomic characteristics of incident patients "
 #| tbl-colwidths: [60,40]
 param_inc <- dbGetQuery(con,"SELECT * FROM param_incidents_predx_last_view")
 param_list <- sort(unique(param_inc$param_name))
@@ -2435,11 +2439,82 @@ ggsave(gsub("src/analysis-scripts/","",here("outputs/predominant_condition_matri
 
 ![Predominant clinical condition's first change in incident patients.](../../outputs/predominant_condition_matrix.png){#fig-predominant_cond_m fig-align="center" width="80%"}
 
+```{r}
+#| label: tbl-patient_inc_by_condition
+#| tbl-cap: "Demographic and socioeconomic characteristics of incident patients by different predominant clinical conditions"
+#| tbl-colwidths: [60,40]
+
+hba1c_per_personyear_by_pcc <- dbGetQuery(con,
+          "SELECT patient_condition_hosp.patient_id AS patient_id,\
+          coalesce(n,0) AS hba1c_per_personyear FROM patient_condition_hosp \
+          LEFT JOIN (SELECT COUNT(*)/ANY_VALUE(followup_days)*365.25 AS n,patient_id \
+          FROM (SELECT *,DATEDIFF('day',dx_date, followup_end) as followup_days \
+          FROM param_incidents_view param LEFT JOIN (SELECT \ 
+          pc.patient_id,pc.initial_status,pc.date as followup_end, piv.dx_date \
+          FROM patient_condition_hosp pc LEFT JOIN patient_incidents_view piv \
+          ON pc.patient_id=piv.patient_id) followup \
+          ON param.patient_id=followup.patient_id \
+          WHERE param.param_name='hba1c' \
+          AND param.param_date>=followup.dx_date \
+          AND param.param_date<followup.followup_end) GROUP BY patient_id) t \
+          ON patient_condition_hosp.patient_id=t.patient_id")
+
+atc_per_personyear <- dbGetQuery(con,
+                "SELECT patient_id, atc_code, \
+                COUNT(*)/ANY_VALUE(followup_days)*365.25 AS prescriptions_per_year,ANY_VALUE(PCC) AS PCC \
+                FROM (SELECT DISTINCT t.patient_id, t.atc_code,\
+                DATEDIFF('day',followup.dx_date, followup.followup_end) as followup_days, \
+                prescription_date_ini, followup.initial_status AS PCC \
+                FROM treat_incidents_view t LEFT JOIN (SELECT \ 
+          pc.patient_id,pc.initial_status,pc.date as followup_end, piv.dx_date \
+          FROM patient_condition_hosp pc LEFT JOIN patient_incidents_view piv \
+          ON pc.patient_id=piv.patient_id) followup ON t.patient_id=followup.patient_id WHERE t.dispensing_date>=followup.dx_date \
+          AND t.dispensing_date<followup.followup_end) GROUP BY patient_id, atc_code") 
+code2drug <- read.csv("C:/Users/D463112/Desktop/pruebas/CONCEPT-DIABETES/src/analysis-scripts/diabetes_drugs.csv")
+n <- code2drug$X
+code2drug <- as.data.frame(t(code2drug[,-1]))
+colnames(code2drug) <- n
+code2drug$atc_code <- factor(row.names(code2drug))
+atc_per_personyear <- atc_per_personyear %>%
+    left_join( code2drug[c('atc_code','class')], by = "atc_code") %>%
+    drop_na() %>%
+    group_by(patient_id, class) %>%
+    summarise(total_value = sum(prescriptions_per_year, na.rm = TRUE), .groups = "drop") %>%
+    complete(patient_id, class, fill = list(total_value = 0)) %>%
+    pivot_wider(
+        names_from = class,
+        values_from = total_value,
+    )
+names(atc_per_personyear) <- gsub("\\+", "and", names(atc_per_personyear))
+treatments <- names(atc_per_personyear[,2:dim(atc_per_personyear)[2]])
+patient_inc <- patient_inc %>%
+  left_join( hba1c_per_personyear_by_pcc, by = "patient_id") %>%
+  left_join(atc_per_personyear, by = "patient_id")
+patient_inc[, treatments][is.na(patient_inc[,treatments])] <- as.numeric(0.0)
+
+explanatory=append(c("age_dx","CC","copayment","education", "avg_income","charlson","hba1c_per_personyear"),treatments)
+dependent <- 'PCC' 
+patient_inc$PCC <- factor(patient_inc$PCC,levels=c("else", "ob", "f",  "ckd",  "hf", "cvd"))
+patient_inc%>%summary_factorlist(dependent,
+                              explanatory,
+                              total_col = TRUE,
+                              cont="mean",
+                              cont_cut=1,
+                              na_include = TRUE,
+                              na_to_prop =  FALSE, 
+                              include_col_totals_percent	=FALSE,
+                              add_col_totals = TRUE)-> patient_inc_tab
+patient_inc_tab$label <- gsub("and", "+", patient_inc_tab$label)
+kable(patient_inc_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
+
+```
+
+
 ### 3.2. Prevalent patients description
 
 ```{r}
 #| label: tbl-patient_pre
-#| tbl-cap: "Demographic and socioeconomic characteristics of prevalents patients"
+#| tbl-cap: "Demographic and socioeconomic characteristics of prevalent patients"
 #| tbl-colwidths: [60,40]
 patient_pre <- dbGetQuery(con,
                           "SELECT *,
@@ -3181,15 +3256,15 @@ dev.off()
 dbDisconnect(con, shutdown = TRUE)
 ```
 
-![Percentage of patients traces an activity is present during the first year](../../outputs/activity_presence_process_indicators_year1.png){#fig-activity_presence_year1 fig-align="center" width="80%"}
+![Percentage of patient traces an activity is present during the first year](../../outputs/activity_presence_process_indicators_year1.png){#fig-activity_presence_year1 fig-align="center" width="80%"}
 
-![Percentage of patients traces an activity is present during the second year](../../outputs/activity_presence_process_indicators_year2.png){#fig-activity_presence_year2 fig-align="center" width="80%"}
+![Percentage of patient traces an activity is present during the second year](../../outputs/activity_presence_process_indicators_year2.png){#fig-activity_presence_year2 fig-align="center" width="80%"}
 
-![Percentage of patients traces an activity is present during the third year](../../outputs/activity_presence_process_indicators_year3.png){#fig-activity_presence_year3 fig-align="center" width="80%"}
+![Percentage of patient traces an activity is present during the third year](../../outputs/activity_presence_process_indicators_year3.png){#fig-activity_presence_year3 fig-align="center" width="80%"}
 
-![Percentage of patients traces an activity is present during the fourth year](../../outputs/activity_presence_process_indicators_year4.png){#fig-activity_presence_year4 fig-align="center" width="80%"}
+![Percentage of patient traces an activity is present during the fourth year](../../outputs/activity_presence_process_indicators_year4.png){#fig-activity_presence_year4 fig-align="center" width="80%"}
 
-![Percentage of patients traces an activity is present during the fifth year](../../outputs/activity_presence_process_indicators_year5.png){#fig-activity_presence_year5 fig-align="center" width="80%"}
+![Percentage of patient traces an activity is present during the fifth year](../../outputs/activity_presence_process_indicators_year5.png){#fig-activity_presence_year5 fig-align="center" width="80%"}
 
 ### 5.2. Adherence to guidelines for process indicators
 ::: {.justify}
@@ -3717,7 +3792,7 @@ dev.off()
 
 ![Event log's process map with most frequent traces covering 20%](../../outputs/evlog_pm_02_else.png){#fig-pm02_else fig-align="center" width="80%"}
 
-![Percentage of patients traces an activity is present](../../outputs/activity_presence_else.png){#fig-activity_presence_else fig-align="center" width="80%"}
+![Percentage of patient traces an activity is present](../../outputs/activity_presence_else.png){#fig-activity_presence_else fig-align="center" width="80%"}
 
 #### 6.1.2. Clustering traces
 ::: {.justify}
@@ -3918,6 +3993,27 @@ con.close()
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_else.png){#fig-fitness_by_cluster_else fig-align="center" width="80%"}
 
 #### 6.1.4. Prediction of clinical outcomes
+
+```{r}
+#| label: KM curve (else)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+
+con <- dbConnect(duckdb(), dbdir = db_path)
+survfit(Surv(y, status) ~ 1, data=dbGetQuery(con, paste0("SELECT *, t_1/365.25 as y FROM (SELECT piv.*,p2f.*,
+                ROW_NUMBER() OVER (PARTITION BY p2f.ID ORDER BY p2f.t_1 DESC) AS rn
+         FROM period2fitness_",cond," p2f \
+                              LEFT JOIN patient_incidents_view_ch piv \
+                              ON p2f.ID=piv.patient_id) WHERE rn=1"))) %>%
+    autoplot(xlab = "Years", ylab = "Survival probability")
+ggsave(filename=gsub("src/analysis-scripts/","",
+                     here("outputs",sprintf("KM_%s.png",
+                                            cond))),
+       plot=last_plot(),width = 800, height = 700, units = "px",dpi=150)
+dbDisconnect(con, shutdown = TRUE)
+```
 
 ##### 6.1.4.1. Time Dependent Cox Model
 ::: {.justify}
@@ -4130,7 +4226,7 @@ dev.off()
 
 ![Event log's process map with most frequent traces covering 20%](../../outputs/evlog_pm_02_ob.png){#fig-pm02_ob fig-align="center" width="80%"}
 
-![Percentage of patients traces an activity is present](../../outputs/activity_presence_ob.png){#fig-activity_presence_ob fig-align="center" width="80%"}
+![Percentage of patient traces an activity is present](../../outputs/activity_presence_ob.png){#fig-activity_presence_ob fig-align="center" width="80%"}
 
 #### 6.2.2. Clustering traces
 
@@ -4316,6 +4412,27 @@ con.close()
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ob.png){#fig-fitness_by_cluster_ob fig-align="center" width="80%"}
 
 #### 6.2.4. Prediction of clinical outcomes
+
+```{r}
+#| label: KM curve (ob)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+
+con <- dbConnect(duckdb(), dbdir = db_path)
+survfit(Surv(y, status) ~ 1, data=dbGetQuery(con, paste0("SELECT *, t_1/365.25 as y FROM (SELECT piv.*,p2f.*,
+                ROW_NUMBER() OVER (PARTITION BY p2f.ID ORDER BY p2f.t_1 DESC) AS rn
+         FROM period2fitness_",cond," p2f \
+                              LEFT JOIN patient_incidents_view_ch piv \
+                              ON p2f.ID=piv.patient_id) WHERE rn=1"))) %>%
+    autoplot(xlab = "Years", ylab = "Survival probability")
+ggsave(filename=gsub("src/analysis-scripts/","",
+                     here("outputs",sprintf("KM_%s.png",
+                                            cond))),
+       plot=last_plot(),width = 800, height = 700, units = "px",dpi=150)
+dbDisconnect(con, shutdown = TRUE)
+```
 
 ##### 6.2.4.1. Time Dependent Cox Model
 ::: {.justify}
@@ -4525,7 +4642,7 @@ dev.off()
 
 ![Event log's process map with most frequent traces covering 20%](../../outputs/evlog_pm_02_f.png){#fig-pm02_f fig-align="center" width="80%"}
 
-![Percentage of patients traces an activity is present](../../outputs/activity_presence_f.png){#fig-activity_presence_f fig-align="center" width="80%"}
+![Percentage of patient traces an activity is present](../../outputs/activity_presence_f.png){#fig-activity_presence_f fig-align="center" width="80%"}
 
 #### 6.3.2. Clustering traces
 
@@ -4711,6 +4828,27 @@ con.close()
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_f.png){#fig-fitness_by_cluster_f fig-align="center" width="80%"}
 
 #### 6.3.4. Prediction of clinical outcomes
+
+```{r}
+#| label: KM curve (f)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+
+con <- dbConnect(duckdb(), dbdir = db_path)
+survfit(Surv(y, status) ~ 1, data=dbGetQuery(con, paste0("SELECT *, t_1/365.25 as y FROM (SELECT piv.*,p2f.*,
+                ROW_NUMBER() OVER (PARTITION BY p2f.ID ORDER BY p2f.t_1 DESC) AS rn
+         FROM period2fitness_",cond," p2f \
+                              LEFT JOIN patient_incidents_view_ch piv \
+                              ON p2f.ID=piv.patient_id) WHERE rn=1"))) %>%
+    autoplot(xlab = "Years", ylab = "Survival probability")
+ggsave(filename=gsub("src/analysis-scripts/","",
+                     here("outputs",sprintf("KM_%s.png",
+                                            cond))),
+       plot=last_plot(),width = 800, height = 700, units = "px",dpi=150)
+dbDisconnect(con, shutdown = TRUE)
+```
 
 ##### 6.3.4.1 Time Dependent Cox Model
 ::: {.justify}
@@ -4922,7 +5060,7 @@ dev.off()
 
 ![Event log's process map with most frequent traces covering 20%](../../outputs/evlog_pm_02_ckd.png){#fig-pm02_ckd fig-align="center" width="80%"}
 
-![Percentage of patients traces an activity is present](../../outputs/activity_presence_ckd.png){#fig-activity_presence_ckd fig-align="center" width="80%"}
+![Percentage of patient traces an activity is present](../../outputs/activity_presence_ckd.png){#fig-activity_presence_ckd fig-align="center" width="80%"}
 
 #### 6.4.2. Clustering traces
 
@@ -5108,6 +5246,27 @@ con.close()
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_ckd.png){#fig-fitness_by_cluster_ckd fig-align="center" width="80%"}
 
 #### 6.4.4. Prediction of clinical outcomes
+
+```{r}
+#| label: KM curve (ckd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+
+con <- dbConnect(duckdb(), dbdir = db_path)
+survfit(Surv(y, status) ~ 1, data=dbGetQuery(con, paste0("SELECT *, t_1/365.25 as y FROM (SELECT piv.*,p2f.*,
+                ROW_NUMBER() OVER (PARTITION BY p2f.ID ORDER BY p2f.t_1 DESC) AS rn
+         FROM period2fitness_",cond," p2f \
+                              LEFT JOIN patient_incidents_view_ch piv \
+                              ON p2f.ID=piv.patient_id) WHERE rn=1"))) %>%
+    autoplot(xlab = "Years", ylab = "Survival probability")
+ggsave(filename=gsub("src/analysis-scripts/","",
+                     here("outputs",sprintf("KM_%s.png",
+                                            cond))),
+       plot=last_plot(),width = 800, height = 700, units = "px",dpi=150)
+dbDisconnect(con, shutdown = TRUE)
+```
 
 ##### 6.4.4.1. Time Dependent Cox Model
 ::: {.justify}
@@ -5318,7 +5477,7 @@ dev.off()
 
 ![Event log's process map with most frequent traces covering 20%](../../outputs/evlog_pm_02_hf.png){#fig-pm02_hf fig-align="center" width="80%"}
 
-![Percentage of patients traces an activity is present](../../outputs/activity_presence_hf.png){#fig-activity_presence_hf fig-align="center" width="80%"}
+![Percentage of patient traces an activity is present](../../outputs/activity_presence_hf.png){#fig-activity_presence_hf fig-align="center" width="80%"}
 
 #### 6.5.2. Clustering traces
 
@@ -5504,6 +5663,27 @@ con.close()
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_hf.png){#fig-fitness_by_cluster_hf fig-align="center" width="80%"}
 
 #### 6.5.4. Prediction of clinical outcomes
+
+```{r}
+#| label: KM curve (hf)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+
+con <- dbConnect(duckdb(), dbdir = db_path)
+survfit(Surv(y, status) ~ 1, data=dbGetQuery(con, paste0("SELECT *, t_1/365.25 as y FROM (SELECT piv.*,p2f.*,
+                ROW_NUMBER() OVER (PARTITION BY p2f.ID ORDER BY p2f.t_1 DESC) AS rn
+         FROM period2fitness_",cond," p2f \
+                              LEFT JOIN patient_incidents_view_ch piv \
+                              ON p2f.ID=piv.patient_id) WHERE rn=1"))) %>%
+    autoplot(xlab = "Years", ylab = "Survival probability")
+ggsave(filename=gsub("src/analysis-scripts/","",
+                     here("outputs",sprintf("KM_%s.png",
+                                            cond))),
+       plot=last_plot(),width = 800, height = 700, units = "px",dpi=150)
+dbDisconnect(con, shutdown = TRUE)
+```
 
 ##### 6.5.4.1. Time Dependent Cox Model
 ::: {.justify}
@@ -5714,7 +5894,7 @@ dev.off()
 
 ![Event log's process map with most frequent traces covering 20%](../../outputs/evlog_pm_02_cvd.png){#fig-pm02_cvd fig-align="center" width="80%"}
 
-![Percentage of patients traces an activity is present](../../outputs/activity_presence_cvd.png){#fig-activity_presence_cvd fig-align="center" width="80%"}
+![Percentage of patient traces an activity is present](../../outputs/activity_presence_cvd.png){#fig-activity_presence_cvd fig-align="center" width="80%"}
 
 #### 6.6.2. Clustering traces
 
@@ -5900,6 +6080,27 @@ con.close()
 ![Traces fitness distribution by cluster](../../outputs/fitness_by_cluster_cvd.png){#fig-fitness_by_cluster_cvd fig-align="center" width="80%"}
 
 #### 6.6.4. Prediction of clinical outcomes
+
+```{r}
+#| label: KM curve (cvd)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+
+con <- dbConnect(duckdb(), dbdir = db_path)
+survfit(Surv(y, status) ~ 1, data=dbGetQuery(con, paste0("SELECT *, t_1/365.25 as y FROM (SELECT piv.*,p2f.*,
+                ROW_NUMBER() OVER (PARTITION BY p2f.ID ORDER BY p2f.t_1 DESC) AS rn
+         FROM period2fitness_",cond," p2f \
+                              LEFT JOIN patient_incidents_view_ch piv \
+                              ON p2f.ID=piv.patient_id) WHERE rn=1"))) %>%
+    autoplot(xlab = "Years", ylab = "Survival probability")
+ggsave(filename=gsub("src/analysis-scripts/","",
+                     here("outputs",sprintf("KM_%s.png",
+                                            cond))),
+       plot=last_plot(),width = 800, height = 700, units = "px",dpi=150)
+dbDisconnect(con, shutdown = TRUE)
+```
 
 ##### 6.6.4.1. Time Dependent Cox Model
 ::: {.justify}
