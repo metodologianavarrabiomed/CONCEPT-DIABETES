@@ -2820,7 +2820,7 @@ kable(use_pre_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 #| warning: FALSE
 #| output: FALSE
 dbDisconnect(con, shutdown = TRUE)
-rm(param_cat_inc,param_cat_inc2unnest,param_cat_pre,param_cat_pre2unnest,param_inc,param_inc_tab,param_inc2unnest,param_pre,param_pre_tab,param_pre2unnest,patient_inc,patient_inc_tab,patient_pre,patient_pre_tab,ss_use_inc,ss_use_inc1,ss_use_inc2,ss_use_inc3,ss_use_pre,ss_use_pre1,ss_use_pre2,ss_use_pre3,use_inc_freq1,use_inc_freq1_time,use_inc_freq2,use_inc_freq2_time,use_inc_freq3,use_inc_freq3_time,use_inc_tab,use_pre_freq1,use_pre_freq1_time,use_pre_freq2,use_pre_freq2_time,use_pre_freq3,use_pre_freq3_time,use_pre_tab,transition_sum,hba1c_per_personyear_by_pcc,atc_per_personyear,per_year,hba1c_per_year,country2cont,followup_years,hba1c_by_pcc,code2drug,atc_by_pcc,hba1c_per_year_upper_ci,hba1c_per_year_lower_ci,treat_per_year,treat_per_year_upper_ci,treat_per_year_lower_ci)
+rm(param_cat_inc,param_cat_inc2unnest,param_cat_pre,param_cat_pre2unnest,param_inc,param_inc_tab,param_inc2unnest,param_pre,param_pre_tab,param_pre2unnest,patient_inc,patient_inc_tab,patient_pre,patient_pre_tab,ss_use_inc,ss_use_inc1,ss_use_inc2,ss_use_inc3,ss_use_pre,ss_use_pre1,ss_use_pre2,ss_use_pre3,use_inc_freq1,use_inc_freq1_time,use_inc_freq2,use_inc_freq2_time,use_inc_freq3,use_inc_freq3_time,use_inc_tab,use_pre_freq1,use_pre_freq1_time,use_pre_freq2,use_pre_freq2_time,use_pre_freq3,use_pre_freq3_time,use_pre_tab,transition_sum,hba1c_per_personyear_by_pcc,atc_per_personyear,per_year,hba1c_per_year,followup_years,hba1c_by_pcc,code2drug,atc_by_pcc,hba1c_per_year_upper_ci,hba1c_per_year_lower_ci,treat_per_year,treat_per_year_upper_ci,treat_per_year_lower_ci)
 ```
 
 ## 4. Healthcare pathways
