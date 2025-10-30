@@ -205,7 +205,8 @@ def general_preprocess(con):
             DATE_ADD(month_nac, INTERVAL 75 YEAR) AS 'turn_to_75', \
             DATE_ADD(month_nac, INTERVAL 65 YEAR) AS 'turn_to_65' \
                 FROM main.patient WHERE patient_id IN (SELECT patient_id \
-                        FROM main.patient WHERE dx_date >='2017-01-01')")
+                        FROM main.patient WHERE dx_date >='2017-01-01' \
+                         AND (death_date IS NULL OR death_date>dx_date))")
     con.sql("CREATE OR REPLACE VIEW comorb_incidents_view AS SELECT * FROM main.comorb \
             WHERE patient_id IN (SELECT patient_id FROM main.patient \
                                  WHERE dx_date >='2017-01-01') AND \
@@ -2538,7 +2539,9 @@ treat_per_year_upper_ci <- treat_per_year+1.96*sqrt(
 treat_per_year_lower_ci <- treat_per_year-1.96*sqrt(
   mapply('/',(1-treat_per_year)*treat_per_year,followup_years[1,]))
 
+patient_inc <- patient_inc %>% mutate(sex=sexo)
 dependent <- 'PCC' 
+explanatory=c("sex","age_dx","CC","copayment","education", "avg_income","charlson")
 patient_inc$PCC <- factor(patient_inc$PCC,levels=c("else", "ob", "f",  "ckd",  "hf", "cvd"))
 
 ```
