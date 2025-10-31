@@ -3621,17 +3621,13 @@ summary(fitness_pi_lm)
 
 ### 5.3. Prediction of clincal outcomes
 
-#### 5.3.1. Time Dependent Cox Model
-::: {.justify}
-In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominat clinical condition change to 'cvd','hf' or 'ckd') with a time dependent Cox model, and the summary of it is:
-::: 
 ```{r}
-#| label: Time dependent COX (process indicators)
+#| label: KM curve PI
 #| eval: TRUE
 #| echo: FALSE
 #| warning: FALSE
 #| output: TRUE
-log_info("Create time dependent Cox model for PI")
+log_info("Create KM plot for PI")
 con <- dbConnect(duckdb(), dbdir = db_path)
 df <- dbGetQuery(con, "SELECT pp.*, pc.initial_status, pc.final_status FROM (SELECT p2p.ID, p2p.t_0, p2p.t_1, p2p.fitness, p2p.status,p2p.status2, piv.age_dx as age, piv.sex, piv.copayment,piv.charlson,piv.country FROM period2process_fitness p2p LEFT JOIN patient_incidents_view_ch piv ON p2p.ID=piv.patient_id) pp LEFT JOIN patient_condition_hosp pc ON pp.ID=pc.patient_id") %>%
   left_join( country2cont %>% select(country, a.3), by = "country")
@@ -3643,6 +3639,27 @@ df$t_max <- ave(df$t_1, df$ID2, FUN = max)
 df$t_min <- ave(df$t_0, df$ID2, FUN = min)
 df$country <- df$a.3
 
+survfit(Surv(y, status) ~ 1, data=df %>% mutate(y=t_1/365.25) %>% 
+             group_by(ID) %>%
+             slice_max(order_by = t_1, n = 1)) %>%
+     autoplot(xlab = "Years", ylab = "Survival probability")
+
+ggsave(filename=gsub("src/analysis-scripts/","",
+                      here("outputs","KM_PI.png")),
+        plot=last_plot(),width = 800, height = 700, units = "px",dpi=150)
+```
+
+#### 5.3.1. Time Dependent Cox Model
+::: {.justify}
+In the next example, we choose fitness, age, sex and charlson's index to try to predict a complication in diabetes (understood a complication as death, a potentially avoidable hospitalization or a predominat clinical condition change to 'cvd','hf' or 'ckd') with a time dependent Cox model, and the summary of it is:
+::: 
+```{r}
+#| label: Time dependent COX (process indicators)
+#| eval: TRUE
+#| echo: FALSE
+#| warning: FALSE
+#| output: TRUE
+log_info("Create time dependent Cox model for PI")
 time_dep_PI <- coxph(Surv(t_0, t_1, status) ~ age + sex + fitness + charlson,
                data=df)
 
