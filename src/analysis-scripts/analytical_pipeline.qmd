@@ -2511,38 +2511,43 @@ repeat_rows <- function(df) {
   result_df <- do.call(rbind, repeated_rows)
   return(result_df)
 }
-code2drug <- repeat_rows(code2drug)
-atc_by_pcc <- atc_by_pcc %>%
-    left_join(code2drug[c('atc_code','class')], by = "atc_code") %>%
-    drop_na() %>%
-    group_by(PCC, class) %>%
-    summarise(treatment_years = sum(treatment_years, na.rm = TRUE), .groups = "drop") %>%
-    complete(PCC,class,fill=list(treatment_years=0)) %>%
-    pivot_wider(
-        names_from = PCC,
-        values_from = treatment_years,
-    ) %>%
-    mutate(Total = rowSums(select_if(., is.numeric)))
-row_names <- atc_by_pcc$class
-atc_by_pcc <- atc_by_pcc[c("else", "ob", "f",  "ckd",  "hf", "cvd", "Total")]
-
-hba1c_per_year <- hba1c_by_pcc/followup_years
-hba1c_per_year_upper_ci <- hba1c_per_year+1.96*sqrt(
-  hba1c_per_year/followup_years
+tryCatch({
+  code2drug <- repeat_rows(code2drug)
+  atc_by_pcc <- atc_by_pcc %>%
+      left_join(code2drug[c('atc_code','class')], by = "atc_code") %>%
+      drop_na() %>%
+      group_by(PCC, class) %>%
+      summarise(treatment_years = sum(treatment_years, na.rm = TRUE), .groups = "drop") %>%
+      complete(PCC,class,fill=list(treatment_years=0)) %>%
+      pivot_wider(
+          names_from = PCC,
+          values_from = treatment_years,
+      ) %>%
+      mutate(Total = rowSums(select_if(., is.numeric)))
+  row_names <- atc_by_pcc$class
+  atc_by_pcc <- atc_by_pcc[c("else", "ob", "f",  "ckd",  "hf", "cvd", "Total")]
+  
+  hba1c_per_year <- hba1c_by_pcc/followup_years
+  hba1c_per_year_upper_ci <- hba1c_per_year+1.96*sqrt(
+    hba1c_per_year/followup_years
+  )
+  hba1c_per_year_lower_ci <- hba1c_per_year-1.96*sqrt(
+    hba1c_per_year/followup_years
+  )
+  treat_per_year <- mapply('/', atc_by_pcc, followup_years[1,])
+  treat_per_year_upper_ci <- treat_per_year+1.96*sqrt(
+    mapply('/',(1-treat_per_year)*treat_per_year,followup_years[1,]))
+  treat_per_year_lower_ci <- treat_per_year-1.96*sqrt(
+    mapply('/',(1-treat_per_year)*treat_per_year,followup_years[1,]))
+  
+  patient_inc <- patient_inc %>% mutate(sex=sexo)
+  dependent <- 'PCC' 
+  explanatory=c("sex","age_dx","CC","copayment","education", "avg_income","charlson")
+  patient_inc$PCC <- factor(patient_inc$PCC,levels=c("else", "ob", "f",  "ckd",  "hf", "cvd"))},
+error = function(e) {
+            message("error in patient_inc_by_condition_0")
+        }
 )
-hba1c_per_year_lower_ci <- hba1c_per_year-1.96*sqrt(
-  hba1c_per_year/followup_years
-)
-treat_per_year <- mapply('/', atc_by_pcc, followup_years[1,])
-treat_per_year_upper_ci <- treat_per_year+1.96*sqrt(
-  mapply('/',(1-treat_per_year)*treat_per_year,followup_years[1,]))
-treat_per_year_lower_ci <- treat_per_year-1.96*sqrt(
-  mapply('/',(1-treat_per_year)*treat_per_year,followup_years[1,]))
-
-patient_inc <- patient_inc %>% mutate(sex=sexo)
-dependent <- 'PCC' 
-explanatory=c("sex","age_dx","CC","copayment","education", "avg_income","charlson")
-patient_inc$PCC <- factor(patient_inc$PCC,levels=c("else", "ob", "f",  "ckd",  "hf", "cvd"))
 
 ```
 
@@ -2561,7 +2566,7 @@ patient_inc%>%summary_factorlist(dependent,
                               include_col_totals_percent	=FALSE,
                               add_col_totals = TRUE)-> patient_inc_tab
 
-combine_matrices <- function(mat1, mat2, mat3) {
+combine_matrices <- function(mat1, mat2, mat3, mat4) {
   # Get the dimensions of the matrices
   nrow <- nrow(mat1)
   ncol <- ncol(mat1)
@@ -2574,28 +2579,37 @@ combine_matrices <- function(mat1, mat2, mat3) {
     for (j in 1:ncol) {
       # Combine the values as required
       result[i, j] <- paste(
-        mat1[i, j], " (", max(mat2[i, j],0.00), ",", mat3[i, j], ")", sep = "")
+        mat1[i, j], " (", max(mat2[i, j],0.00), ",", mat3[i, j], "); ", mat4[i, j], sep = "")
     }
   }
   
   return(result)
 }
 
-hba1c_per_year <- combine_matrices(
-  round(hba1c_per_year,2),round(hba1c_per_year_lower_ci,2),round(hba1c_per_year_upper_ci,2))
-treat_per_year <- combine_matrices(
-  round(100*treat_per_year,1),round(100*treat_per_year_lower_ci,1),round(100*treat_per_year_upper_ci,1))
-
-per_year <- as.data.frame(cbind(
-    matrix(c("HbA1c patient-year rate", paste("Percentage of time covered by ",row_names, " prescription"),
-             "Rate (95% CI)",rep("% (95% CI)",length(row_names))),
-    nrow = length(row_names)+1, ncol = 2),
-    rbind(hba1c_per_year,treat_per_year))
+tryCatch({
+  hba1c_per_year <- combine_matrices(
+    round(hba1c_per_year,2),round(hba1c_per_year_lower_ci,2),round(hba1c_per_year_upper_ci,2),
+    matrix(hba1c_by_pcc,nrow=nrow(hba1c_by_pcc),ncol=ncol(hba1c_by_pcc)))
+  treat_per_year <- combine_matrices(
+    round(100*treat_per_year,1),round(100*treat_per_year_lower_ci,1),round(100*treat_per_year_upper_ci,1),
+    round(atc_by_pcc,2))
+  
+  per_year <- as.data.frame(cbind(
+      matrix(c("Followup total years","HbA1c patient-year rate", paste("Percentage of time covered by ",row_names, " prescription"),
+               "Number of years", "Rate (95% CI); n",rep("% (95% CI); years",length(row_names))),
+      nrow = length(row_names)+2, ncol = 2),
+      rbind(
+        matrix(round(followup_years,2),nrow=nrow(followup_years),ncol=ncol(followup_years)),
+        hba1c_per_year,treat_per_year))
+  )
+  colnames(per_year) <- colnames(patient_inc_tab)
+  
+  patient_inc_tab <- rbind(patient_inc_tab, per_year)
+  kable(patient_inc_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))},
+error = function(e) {
+            message("error in patient_inc_by_condition_1")
+        }
 )
-colnames(per_year) <- colnames(patient_inc_tab)
-
-patient_inc_tab <- rbind(patient_inc_tab, per_year)
-kable(patient_inc_tab, row.names=FALSE, align=c("l", "l", rep("r",5)))
 ```
 
 
@@ -3207,9 +3221,9 @@ An activity presence analysis is done to see the percentage of presence of each 
 ```{r}
 #| label: activity presence of process indicators
 #| eval: TRUE
-#| echo: FALSE
+#| echo: TRUE
 #| warning: FALSE
-#| output: FALSE
+#| output: TRUE
 con <- dbConnect(duckdb(), dbdir = db_path)
 
 log_info('Make activity presence of process_indicators')
@@ -3236,7 +3250,7 @@ activity_presence_df <- eventlog %>%
 plot(activity_presence_df[activity_presence_df$event != "yFIN",]
      )+scale_y_continuous(limits = c(0, 1))
 dev.off()
-
+print(activity_presence_df)
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs/activity_presence_process_indicators_year2.png")),
     width = 600, height = 750, units = "px")
@@ -3262,7 +3276,7 @@ activity_presence_df <- eventlog %>%
 plot(activity_presence_df[activity_presence_df$event != "yFIN",]
      )+scale_y_continuous(limits = c(0, 1))
 dev.off()
-
+print(activity_presence_df)
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs/activity_presence_process_indicators_year3.png")),
     width = 600, height = 750, units = "px")
@@ -3288,7 +3302,7 @@ activity_presence_df <- eventlog %>%
 plot(activity_presence_df[activity_presence_df$event != "yFIN",]
      )+scale_y_continuous(limits = c(0, 1))
 dev.off()
-
+print(activity_presence_df)
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs/activity_presence_process_indicators_year4.png")),
     width = 600, height = 750, units = "px")
@@ -3314,7 +3328,7 @@ activity_presence_df <- eventlog %>%
 plot(activity_presence_df[activity_presence_df$event != "yFIN",]
      )+scale_y_continuous(limits = c(0, 1))
 dev.off()
-
+print(activity_presence_df)
 png(filename=gsub("src/analysis-scripts/","",
                   here("outputs/activity_presence_process_indicators_year5.png")),
     width = 600, height = 750, units = "px")
@@ -3340,7 +3354,7 @@ activity_presence_df <- eventlog %>%
 plot(activity_presence_df[activity_presence_df$event != "yFIN",]
      )+scale_y_continuous(limits = c(0, 1))
 dev.off()
-
+print(activity_presence_df)
 
 dbDisconnect(con, shutdown = TRUE)
 ```
